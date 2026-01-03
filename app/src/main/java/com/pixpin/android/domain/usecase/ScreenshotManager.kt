@@ -58,12 +58,17 @@ class ScreenshotManager(private val context: Context) {
     }
 
     /**
-     * 执行截图
+     * 执行截图（建议在授权弹窗消失后调用）
      *
-     * 说明：ImageReader 可能不会在固定 100ms 内就绪，尤其在高版本系统或性能一般的机器上。
-     * 这里用 onImageAvailable + 超时兜底，提升成功率。
+     * 为了解决“授权弹窗还没完全消失就被截进来”的问题：
+     * - 在开始监听后，丢弃第一帧（通常仍包含过渡 UI）
+     * - 并允许配置一个启动延迟 startDelayMs（给系统 UI 动画留时间）
      */
-    suspend fun captureScreen(): Bitmap = suspendCancellableCoroutine { continuation ->
+    suspend fun captureScreen(
+        startDelayMs: Long = 350,
+        dropFirstFrame: Boolean = true,
+        timeoutMs: Long = 2500
+    ): Bitmap = suspendCancellableCoroutine { continuation ->
         val projection = mediaProjection
         if (projection == null) {
             continuation.resumeWithException(IllegalStateException("MediaProjection is not initialized"))
@@ -93,13 +98,21 @@ class ScreenshotManager(private val context: Context) {
             else continuation.resumeWithException(Exception(message))
         }
 
+        var dropped = false
+
         val listener = ImageReader.OnImageAvailableListener {
             if (!continuation.isActive) return@OnImageAvailableListener
 
             var image: Image? = null
             try {
-                image = reader.acquireLatestImage()
-                if (image == null) return@OnImageAvailableListener
+                image = reader.acquireLatestImage() ?: return@OnImageAvailableListener
+
+                if (dropFirstFrame && !dropped) {
+                    // 丢弃第一帧，避免截到授权弹窗/过渡动画
+                    dropped = true
+                    image.close()
+                    return@OnImageAvailableListener
+                }
 
                 val planes = image.planes
                 val buffer = planes[0].buffer
@@ -131,30 +144,35 @@ class ScreenshotManager(private val context: Context) {
 
         reader.setOnImageAvailableListener(listener, mainHandler)
 
-        try {
-            virtualDisplay = projection.createVirtualDisplay(
-                "PixPinScreenCapture",
-                width,
-                height,
-                density,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                reader.surface,
-                null,
-                null
-            )
-        } catch (e: Exception) {
-            failOnce("createVirtualDisplay failed", e)
-            return@suspendCancellableCoroutine
+        val startCaptureRunnable = Runnable {
+            try {
+                virtualDisplay = projection.createVirtualDisplay(
+                    "PixPinScreenCapture",
+                    width,
+                    height,
+                    density,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    reader.surface,
+                    null,
+                    null
+                )
+            } catch (e: Exception) {
+                failOnce("createVirtualDisplay failed", e)
+            }
         }
 
-        // 超时兜底：2 秒内没收到图像就失败（避免一直挂起）
+        // 超时兜底
         val timeoutRunnable = Runnable {
             failOnce("Failed to capture image (timeout)")
         }
-        mainHandler.postDelayed(timeoutRunnable, 2000)
+
+        // 关键：延迟启动 capture，给授权弹窗/系统动画留时间
+        mainHandler.postDelayed(startCaptureRunnable, startDelayMs.coerceAtLeast(0))
+        mainHandler.postDelayed(timeoutRunnable, timeoutMs.coerceAtLeast(500))
 
         continuation.invokeOnCancellation {
             try {
+                mainHandler.removeCallbacks(startCaptureRunnable)
                 mainHandler.removeCallbacks(timeoutRunnable)
             } catch (_: Exception) {
             }
@@ -186,7 +204,7 @@ class ScreenshotManager(private val context: Context) {
     }
 
     /**
-     * 释放 MediaProjection
+     * 释放 MediaProjection（用于结束“分享屏幕”状态）
      */
     fun release() {
         cleanUpCapturePipeline()
