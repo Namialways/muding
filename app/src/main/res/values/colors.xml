@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- Primary colors -->
+    <color name="primary_light">#6750A4</color>
+    <color name="primary_dark">#D0BCFF</color>
+    
+    <!-- Background colors -->
+    <color name="background_light">#FFFBFE</color>
+    <color name="background_dark">#141218</color>
+    
+    <!-- Surface colors -->
+    <color name="surface_light">#FFFBFE</color>
+    <color name="surface_dark">#1C1B1F</color>
+</resources>

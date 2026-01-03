@@ -1,0 +1,43 @@
+<resources>
+    <string name="app_name">PixPin</string>
+    
+    <!-- Permission related -->
+    <string name="permission_overlay_title">需要悬浮窗权限</string>
+    <string name="permission_overlay_message">PixPin 需要悬浮窗权限来显示快捷截图按钮</string>
+    <string name="permission_screenshot_title">需要截图权限</string>
+    <string name="permission_screenshot_message">允许 PixPin 捕获屏幕内容</string>
+    <string name="permission_storage_title">需要存储权限</string>
+    <string name="permission_storage_message">PixPin 需要存储权限来保存截图</string>
+    <string name="btn_grant_permission">授予权限</string>
+    <string name="btn_settings">去设置</string>
+    
+    <!-- Floating ball -->
+    <string name="floating_ball_notification_title">PixPin 正在运行</string>
+    <string name="floating_ball_notification_message">点击悬浮球快速截图</string>
+    <string name="action_screenshot">截图</string>
+    <string name="action_settings">设置</string>
+    <string name="action_exit">退出</string>
+    
+    <!-- Annotation tools -->
+    <string name="tool_pen">画笔</string>
+    <string name="tool_arrow">箭头</string>
+    <string name="tool_rectangle">矩形</string>
+    <string name="tool_circle">圆形</string>
+    <string name="tool_text">文字</string>
+    <string name="tool_mosaic">马赛克</string>
+    
+    <!-- Editor actions -->
+    <string name="action_undo">撤销</string>
+    <string name="action_redo">重做</string>
+    <string name="action_save">保存</string>
+    <string name="action_pin">贴图</string>
+    <string name="action_share">分享</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_done">完成</string>
+    
+    <!-- Messages -->
+    <string name="screenshot_saved">截图已保存</string>
+    <string name="screenshot_failed">截图失败</string>
+    <string name="image_pinned">图片已贴到屏幕</string>
+    <string name="please_draw_something">请标注后再保存</string>
+</resources>

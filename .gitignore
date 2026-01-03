@@ -1,0 +1,53 @@
+# ===== Android / Gradle =====
+.gradle/
+**/.gradle/
+build/
+**/build/
+
+# ===== Local config =====
+local.properties
+
+# ===== Android Studio / IntelliJ =====
+.idea/
+*.iml
+*.ipr
+*.iws
+/out/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Logs =====
+*.log
+
+# ===== Keystore (avoid committing secrets) =====
+*.jks
+*.keystore
+
+# ===== APK/AAB outputs =====
+*.apk
+*.aab
+
+# ===== Kotlin/Java compilation caches =====
+.kotlin/
+
+# ===== NDK (if ever used) =====
+.externalNativeBuild/
+.cxx/
+
+# ===== Lint / reports (optional) =====
+**/lint-results*.xml
+**/lint-results*.html
+**/reports/
+
+# ===== Compose / tooling temp =====
+**/.compose-settings/
+
+# ===== Crashlytics / Firebase (if added later) =====
+com_crashlytics_export_strings.xml
+
+# ===== Cursor / Editor =====
+.cursor/
+.vscode/
+

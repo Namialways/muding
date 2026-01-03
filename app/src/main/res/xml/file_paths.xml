@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 用于分享图片（ImageSaver.shareImage） -->
+    <cache-path name="images" path="images/" />
+
+    <!-- 用于截图缓存（FloatingBallService.writeBitmapToCache） -->
+    <cache-path name="screenshots" path="screenshots/" />
+
+    <!-- 兜底：允许访问整个 cacheDir 下的文件，避免后续新增子目录又忘了配 path -->
+    <cache-path name="cache" path="." />
+</paths>
