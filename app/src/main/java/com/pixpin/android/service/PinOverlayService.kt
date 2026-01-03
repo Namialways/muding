@@ -31,7 +31,12 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.pixpin.android.domain.usecase.CacheImageStore
 import com.pixpin.android.presentation.theme.PixPinTheme
+import android.graphics.BitmapFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * 贴图服务 - 在屏幕上显示固定的图片
@@ -42,6 +47,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var overlayView: ComposeView? = null
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val lifecycleRegistry = LifecycleRegistry(this)
+    private lateinit var cacheImageStore: CacheImageStore
+    private val serviceScope = CoroutineScope(Dispatchers.Main)
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -53,15 +60,28 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        cacheImageStore = CacheImageStore(this)
         
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val bitmap = intent?.getParcelableExtra<Bitmap>("bitmap")
-        if (bitmap != null) {
-            showPinOverlay(bitmap)
+        val imageUriString = intent?.getStringExtra(EXTRA_IMAGE_URI)
+        if (!imageUriString.isNullOrBlank()) {
+            val imageUri = android.net.Uri.parse(imageUriString)
+            serviceScope.launch {
+                try {
+                    val bitmap = contentResolver.openInputStream(imageUri)?.use { input ->
+                        BitmapFactory.decodeStream(input)
+                    }
+                    if (bitmap != null) {
+                        showPinOverlay(bitmap)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
         return START_NOT_STICKY
     }
@@ -117,6 +137,10 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
         overlayView = null
+    }
+
+    companion object {
+        const val EXTRA_IMAGE_URI = "extra_image_uri"
     }
 }
 

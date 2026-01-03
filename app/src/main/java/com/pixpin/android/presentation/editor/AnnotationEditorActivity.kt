@@ -3,14 +3,7 @@ package com.pixpin.android.presentation.editor
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Paint
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.asAndroidPath
-import com.pixpin.android.domain.model.DrawingPath
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
+import com.pixpin.android.domain.usecase.AnnotationRenderer
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -42,6 +35,7 @@ import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.R
 import com.pixpin.android.domain.model.DrawingTool
 import com.pixpin.android.domain.usecase.ImageSaver
+import com.pixpin.android.domain.usecase.CacheImageStore
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.PinOverlayService
 import kotlinx.coroutines.launch
@@ -50,12 +44,15 @@ class AnnotationEditorActivity : ComponentActivity() {
 
     private val viewModel: AnnotationViewModel by viewModels()
     private lateinit var imageSaver: ImageSaver
+    private lateinit var cacheImageStore: CacheImageStore
     private var capturedBitmap: Bitmap? = null
+    private val annotationRenderer = AnnotationRenderer()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         imageSaver = ImageSaver(this)
+        cacheImageStore = CacheImageStore(this)
 
         val uriString = intent.getStringExtra(EXTRA_IMAGE_URI)
         if (uriString.isNullOrBlank()) {
@@ -150,13 +147,20 @@ class AnnotationEditorActivity : ComponentActivity() {
     }
 
     private fun pinImage(originalBitmap: Bitmap) {
-        val bitmap = createAnnotatedBitmap(originalBitmap)
-        val intent = Intent(this, PinOverlayService::class.java).apply {
-            putExtra("bitmap", bitmap)
+        lifecycleScope.launch {
+            try {
+                val bitmap = createAnnotatedBitmap(originalBitmap)
+                val uri = cacheImageStore.writePngToCache(bitmap, "pinned", "pinned_image")
+                val intent = Intent(this@AnnotationEditorActivity, PinOverlayService::class.java).apply {
+                    putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
+                }
+                startService(intent)
+                Toast.makeText(this@AnnotationEditorActivity, R.string.image_pinned, Toast.LENGTH_SHORT).show()
+                finish()
+            } catch (e: Exception) {
+                Toast.makeText(this@AnnotationEditorActivity, "贴图失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
-        startService(intent)
-        Toast.makeText(this, R.string.image_pinned, Toast.LENGTH_SHORT).show()
-        finish()
     }
 
     private fun shareImage(originalBitmap: Bitmap) {
@@ -171,100 +175,7 @@ class AnnotationEditorActivity : ComponentActivity() {
     }
 
     private fun createAnnotatedBitmap(originalBitmap: Bitmap): Bitmap {
-        val resultBitmap = Bitmap.createBitmap(
-            originalBitmap.width,
-            originalBitmap.height,
-            Bitmap.Config.ARGB_8888
-        )
-        val canvas = Canvas(resultBitmap)
-        
-        // 1. 先绘制原始图片
-        canvas.drawBitmap(originalBitmap, 0f, 0f, null)
-        
-        // 2. 绘制所有标注
-        val paint = Paint().apply {
-            isAntiAlias = true
-            strokeCap = Paint.Cap.ROUND
-            strokeJoin = Paint.Join.ROUND
-        }
-        
-        viewModel.paths.forEach { path ->
-            when (path) {
-                is DrawingPath.PenPath -> {
-                    paint.color = path.color.toArgb()
-                    paint.strokeWidth = path.strokeWidth
-                    paint.style = Paint.Style.STROKE
-                    canvas.drawPath(path.path.asAndroidPath(), paint)
-                }
-                is DrawingPath.ArrowPath -> {
-                    paint.color = path.color.toArgb()
-                    paint.strokeWidth = path.strokeWidth
-                    paint.style = Paint.Style.STROKE
-                    
-                    // 绘制线段
-                    canvas.drawLine(
-                        path.start.x, path.start.y,
-                        path.end.x, path.end.y,
-                        paint
-                    )
-                    
-                    // 绘制箭头
-                    val angle = atan2(
-                        path.end.y - path.start.y,
-                        path.end.x - path.start.x
-                    )
-                    val arrowLength = 30f
-                    val arrowAngle = Math.PI / 6 // 30度
-                    
-                    val arrowX1 = path.end.x - arrowLength * cos(angle + arrowAngle).toFloat()
-                    val arrowY1 = path.end.y - arrowLength * sin(angle + arrowAngle).toFloat()
-                    val arrowX2 = path.end.x - arrowLength * cos(angle - arrowAngle).toFloat()
-                    val arrowY2 = path.end.y - arrowLength * sin(angle - arrowAngle).toFloat()
-                    
-                    canvas.drawLine(path.end.x, path.end.y, arrowX1, arrowY1, paint)
-                    canvas.drawLine(path.end.x, path.end.y, arrowX2, arrowY2, paint)
-                }
-                is DrawingPath.RectanglePath -> {
-                    paint.color = path.color.toArgb()
-                    paint.strokeWidth = path.strokeWidth
-                    paint.style = if (path.filled) Paint.Style.FILL else Paint.Style.STROKE
-                    
-                    canvas.drawRect(
-                        path.topLeft.x,
-                        path.topLeft.y,
-                        path.bottomRight.x,
-                        path.bottomRight.y,
-                        paint
-                    )
-                }
-                is DrawingPath.CirclePath -> {
-                    paint.color = path.color.toArgb()
-                    paint.strokeWidth = path.strokeWidth
-                    paint.style = if (path.filled) Paint.Style.FILL else Paint.Style.STROKE
-                    
-                    canvas.drawCircle(
-                        path.center.x,
-                        path.center.y,
-                        path.radius,
-                        paint
-                    )
-                }
-                is DrawingPath.TextPath -> {
-                    paint.color = path.color.toArgb()
-                    paint.textSize = path.fontSize
-                    paint.style = Paint.Style.FILL
-                    
-                    canvas.drawText(
-                        path.text,
-                        path.position.x,
-                        path.position.y,
-                        paint
-                    )
-                }
-            }
-        }
-        
-        return resultBitmap
+        return annotationRenderer.render(originalBitmap, viewModel.paths)
     }
 
     override fun onDestroy() {

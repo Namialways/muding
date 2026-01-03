@@ -39,7 +39,5 @@ class PermissionHandler(private val context: Context) {
 
     companion object {
         const val REQUEST_CODE_OVERLAY_PERMISSION = 1001
-        const val REQUEST_CODE_MEDIA_PROJECTION = 1002
-        const val REQUEST_CODE_STORAGE_PERMISSION = 1003
     }
 }

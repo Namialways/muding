@@ -28,9 +28,9 @@ class ScreenshotManager(private val context: Context) {
 
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
-
+    
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private val mediaProjectionManager =
+    private val mediaProjectionManager = 
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
     /**
@@ -78,7 +78,7 @@ class ScreenshotManager(private val context: Context) {
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         windowManager.defaultDisplay.getMetrics(metrics)
-
+        
         val width = metrics.widthPixels
         val height = metrics.heightPixels
         val density = metrics.densityDpi

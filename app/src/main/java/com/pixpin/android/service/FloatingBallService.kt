@@ -42,11 +42,10 @@ import com.pixpin.android.R
 import android.app.Activity
 import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.domain.usecase.ScreenshotManager
+import com.pixpin.android.domain.usecase.CacheImageStore
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.*
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.FileOutputStream
 import kotlin.math.roundToInt
 
 class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
@@ -57,6 +56,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val lifecycleRegistry = LifecycleRegistry(this)
 
     private lateinit var screenshotManager: ScreenshotManager
+    private lateinit var cacheImageStore: CacheImageStore
 
     private var snapAnimator: ValueAnimator? = null
     private var snapRunnable: Runnable? = null
@@ -74,6 +74,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenshotManager = ScreenshotManager(this)
+        cacheImageStore = CacheImageStore(this)
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
@@ -92,7 +93,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 lifecycleScope.launch {
                     try {
                         val bitmap = screenshotManager.captureScreen()
-                        val uri = writeBitmapToCache(bitmap)
+                        val uri = cacheImageStore.writePngToCache(bitmap, "screenshots", "capture")
 
                         val editorIntent = Intent(this@FloatingBallService, AnnotationEditorActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -222,21 +223,6 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-    }
-
-    private fun writeBitmapToCache(bitmap: android.graphics.Bitmap): android.net.Uri {
-        val cacheDir = File(cacheDir, "screenshots")
-        if (!cacheDir.exists()) cacheDir.mkdirs()
-        val file = File(cacheDir, "capture_${System.currentTimeMillis()}.png")
-        FileOutputStream(file).use { out ->
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-        }
-        // 复用你现有的 FileProvider
-        return androidx.core.content.FileProvider.getUriForFile(
-            this,
-            "${packageName}.fileprovider",
-            file
-        )
     }
 
     private fun scheduleSnapToEdge(params: WindowManager.LayoutParams) {
