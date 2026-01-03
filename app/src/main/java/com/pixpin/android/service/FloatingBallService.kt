@@ -22,6 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import android.animation.ValueAnimator
+import android.graphics.Point
+import android.view.animation.DecelerateInterpolator
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.IntOffset
@@ -54,6 +57,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val lifecycleRegistry = LifecycleRegistry(this)
 
     private lateinit var screenshotManager: ScreenshotManager
+
+    private var snapAnimator: ValueAnimator? = null
+    private var snapRunnable: Runnable? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -95,6 +102,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     } catch (e: Exception) {
                         e.printStackTrace()
                     } finally {
+                        // 截图流程结束，恢复悬浮窗
+                        mainHandler.post { floatingView?.visibility = View.VISIBLE }
                         // 无论成功与否，都释放 MediaProjection，以结束“分享屏幕”状态
                         screenshotManager.release()
                     }
@@ -133,14 +142,26 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         onScreenshot = { handleScreenshot() },
                         onSettings = { openSettings() },
                         onExit = { stopSelf() },
-                        onPositionChange = { offsetX, offsetY ->
-                            params.x = offsetX.roundToInt()
-                            params.y = offsetY.roundToInt()
+                        onPositionChange = { dx, dy ->
+                            cancelSnap() // 正在拖动，取消贴边计划
+
+                            params.x += dx.roundToInt()
+                            params.y += dy.roundToInt()
+
+                            // clamp 到屏幕范围
+                            val display = windowManager.defaultDisplay
+                            val size = Point()
+                            display.getRealSize(size)
+
+                            params.x = params.x.coerceIn(0, size.x - 200) // 200: 悬浮球最大宽度
+                            params.y = params.y.coerceIn(0, size.y - 200)
+
                             try {
                                 windowManager.updateViewLayout(this, params)
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
+                            } catch (_: Exception) { }
+                        },
+                        onDragEnd = {
+                            scheduleSnapToEdge(params)
                         }
                     )
                 }
@@ -155,6 +176,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun handleScreenshot() {
+        // 关键：截图前隐藏悬浮窗，避免把自己也截进去（一定要在 finally 里恢复）
+        floatingView?.visibility = View.GONE
+
         // Android 10+ 要求 MediaProjection 必须在声明了 mediaProjection 类型的前台服务中使用。
         // 这里我们先拉起一个透明 Activity 获取授权结果，然后把 resultCode/data 回传给本 Service。
         val intent = Intent(this, ScreenshotPermissionActivity::class.java).apply {
@@ -215,8 +239,47 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         )
     }
 
+    private fun scheduleSnapToEdge(params: WindowManager.LayoutParams) {
+        cancelSnap()
+        val runnable = Runnable { animateToEdge(params) }
+        snapRunnable = runnable
+        mainHandler.postDelayed(runnable, 2500) // 2.5秒后贴边
+    }
+
+    private fun cancelSnap() {
+        snapRunnable?.let { mainHandler.removeCallbacks(it) }
+        snapRunnable = null
+        snapAnimator?.cancel()
+        snapAnimator = null
+    }
+
+    private fun animateToEdge(params: WindowManager.LayoutParams) {
+        val display = windowManager.defaultDisplay
+        val size = Point()
+        display.getRealSize(size)
+        val screenWidth = size.x
+
+        val viewWidth = floatingView?.width ?: params.width
+        val currentX = params.x
+        val targetX = if (currentX < (screenWidth - viewWidth) / 2) 0 else screenWidth - viewWidth
+
+        snapAnimator = ValueAnimator.ofInt(currentX, targetX).apply {
+            duration = 300
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                params.x = animation.animatedValue as Int
+                try {
+                    windowManager.updateViewLayout(floatingView, params)
+                } catch (_: Exception) {
+                }
+            }
+        }
+        snapAnimator?.start()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        cancelSnap()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         try {
             screenshotManager.release()
@@ -247,7 +310,8 @@ fun FloatingBallContent(
     onScreenshot: () -> Unit,
     onSettings: () -> Unit,
     onExit: () -> Unit,
-    onPositionChange: (Float, Float) -> Unit
+    onPositionChange: (Float, Float) -> Unit,
+    onDragEnd: () -> Unit
 ) {
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
@@ -258,12 +322,19 @@ fun FloatingBallContent(
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { isExpanded = false },
+                    onDragStart = {
+                        isExpanded = false
+                    },
+                    onDragEnd = {
+                        onDragEnd()
+                    },
+                    onDragCancel = {
+                        onDragEnd()
+                    },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        offsetX += dragAmount.x
-                        offsetY += dragAmount.y
-                        onPositionChange(offsetX, offsetY)
+                        // 只把“本次增量”交给 WindowManager 处理，避免 Compose offset 叠加造成范围错乱
+                        onPositionChange(dragAmount.x, dragAmount.y)
                     }
                 )
             }
