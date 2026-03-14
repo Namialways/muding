@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.CaptureResultAction
+import com.pixpin.android.domain.usecase.PinScaleMode
 import com.pixpin.android.domain.usecase.PermissionHandler
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.FloatingBallService
@@ -60,7 +61,9 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         hasOverlayPermission = permissionHandler.hasOverlayPermission(),
                         initialAction = captureFlowSettings.getResultAction(),
+                        initialScaleMode = captureFlowSettings.getPinScaleMode(),
                         onActionChanged = { action -> captureFlowSettings.setResultAction(action) },
+                        onScaleModeChanged = { mode -> captureFlowSettings.setPinScaleMode(mode) },
                         onRequestPermission = {
                             permissionHandler.requestOverlayPermission(this)
                         },
@@ -82,11 +85,7 @@ class MainActivity : ComponentActivity() {
 
     private fun startFloatingBallService() {
         val intent = Intent(this, FloatingBallService::class.java)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            androidx.core.content.ContextCompat.startForegroundService(this, intent)
-        } else {
-            startService(intent)
-        }
+        startService(intent)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -104,12 +103,15 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     hasOverlayPermission: Boolean,
     initialAction: CaptureResultAction,
+    initialScaleMode: PinScaleMode,
     onActionChanged: (CaptureResultAction) -> Unit,
+    onScaleModeChanged: (PinScaleMode) -> Unit,
     onRequestPermission: () -> Unit,
     onStartService: () -> Unit
 ) {
     var permissionGranted by remember { mutableStateOf(hasOverlayPermission) }
     var selectedAction by remember { mutableStateOf(initialAction) }
+    var selectedScaleMode by remember { mutableStateOf(initialScaleMode) }
 
     LaunchedEffect(hasOverlayPermission) {
         permissionGranted = hasOverlayPermission
@@ -175,6 +177,28 @@ fun MainScreen(
                     onSelect = {
                         selectedAction = CaptureResultAction.OPEN_EDITOR
                         onActionChanged(CaptureResultAction.OPEN_EDITOR)
+                    }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Pinned image scaling",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                CaptureOptionRow(
+                    title = "Keep aspect ratio",
+                    selected = selectedScaleMode == PinScaleMode.LOCK_ASPECT,
+                    onSelect = {
+                        selectedScaleMode = PinScaleMode.LOCK_ASPECT
+                        onScaleModeChanged(PinScaleMode.LOCK_ASPECT)
+                    }
+                )
+                CaptureOptionRow(
+                    title = "Free scale (width/height)",
+                    selected = selectedScaleMode == PinScaleMode.FREE_SCALE,
+                    onSelect = {
+                        selectedScaleMode = PinScaleMode.FREE_SCALE
+                        onScaleModeChanged(PinScaleMode.FREE_SCALE)
                     }
                 )
             }
