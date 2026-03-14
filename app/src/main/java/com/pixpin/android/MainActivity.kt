@@ -58,7 +58,11 @@ class MainActivity : ComponentActivity() {
 
     private fun startFloatingBallService() {
         val intent = Intent(this, FloatingBallService::class.java)
-        startService(intent)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            androidx.core.content.ContextCompat.startForegroundService(this, intent)
+        } else {
+            startService(intent)
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import android.animation.ValueAnimator
 import android.graphics.Point
 import android.view.animation.DecelerateInterpolator
+import android.content.pm.ServiceInfo
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.IntOffset
@@ -76,8 +77,6 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         screenshotManager = ScreenshotManager(this)
         cacheImageStore = CacheImageStore(this)
 
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification())
         showFloatingBall()
         
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
@@ -89,6 +88,18 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
             val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
             if (resultCode == Activity.RESULT_OK && resultData != null) {
+                // 用户已授权屏幕捕获，此时再提升为 mediaProjection 类型的前台服务
+                createNotificationChannel()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        createNotification(),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, createNotification())
+                }
+
                 screenshotManager.initMediaProjection(resultCode, resultData)
                 lifecycleScope.launch {
                     try {
