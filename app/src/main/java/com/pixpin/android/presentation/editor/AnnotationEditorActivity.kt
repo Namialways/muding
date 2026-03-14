@@ -1,4 +1,4 @@
-package com.pixpin.android.presentation.editor
+﻿package com.pixpin.android.presentation.editor
 
 import android.content.Intent
 import android.graphics.Bitmap
@@ -36,9 +36,12 @@ import com.pixpin.android.R
 import com.pixpin.android.domain.model.DrawingTool
 import com.pixpin.android.domain.usecase.ImageSaver
 import com.pixpin.android.domain.usecase.CacheImageStore
+import com.pixpin.android.presentation.crop.RegionCropActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.PinOverlayService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AnnotationEditorActivity : ComponentActivity() {
 
@@ -92,10 +95,11 @@ class AnnotationEditorActivity : ComponentActivity() {
         Scaffold(
             topBar = {
                 EditorTopBar(
-                    onClose = { finish() },
+                    onClose = { closeScreenshotFlow() },
                     onSave = { saveImage(bitmap) },
                     onPin = { pinImage(bitmap) },
                     onShare = { shareImage(bitmap) },
+                    onRecrop = { recropImage(bitmap) },
                     canUndo = viewModel.canUndo(),
                     canRedo = viewModel.canRedo(),
                     onUndo = { viewModel.undo() },
@@ -139,7 +143,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                 val bitmap = createAnnotatedBitmap(originalBitmap)
                 imageSaver.saveToGallery(bitmap)
                 Toast.makeText(this@AnnotationEditorActivity, R.string.screenshot_saved, Toast.LENGTH_SHORT).show()
-                finish()
+                closeScreenshotFlow()
             } catch (e: Exception) {
                 Toast.makeText(this@AnnotationEditorActivity, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -156,7 +160,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                 }
                 startService(intent)
                 Toast.makeText(this@AnnotationEditorActivity, R.string.image_pinned, Toast.LENGTH_SHORT).show()
-                finish()
+                closeScreenshotFlow()
             } catch (e: Exception) {
                 Toast.makeText(this@AnnotationEditorActivity, "贴图失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -174,8 +178,39 @@ class AnnotationEditorActivity : ComponentActivity() {
         }
     }
 
+    private fun recropImage(originalBitmap: Bitmap) {
+        lifecycleScope.launch {
+            try {
+                val current = withContext(Dispatchers.Default) {
+                    createAnnotatedBitmap(originalBitmap)
+                }
+                val uri = withContext(Dispatchers.IO) {
+                    cacheImageStore.writePngToCache(current, "screenshots", "recrop")
+                }
+                current.recycle()
+
+                val intent = Intent(this@AnnotationEditorActivity, RegionCropActivity::class.java).apply {
+                    putExtra(RegionCropActivity.EXTRA_IMAGE_URI, uri.toString())
+                }
+                startActivity(intent)
+                finish()
+            } catch (e: Exception) {
+                Toast.makeText(this@AnnotationEditorActivity, "重新选区失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun createAnnotatedBitmap(originalBitmap: Bitmap): Bitmap {
         return annotationRenderer.render(originalBitmap, viewModel.paths)
+    }
+
+    private fun closeScreenshotFlow() {
+        moveTaskToBack(true)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            finishAndRemoveTask()
+        } else {
+            finish()
+        }
     }
 
     override fun onDestroy() {
@@ -195,6 +230,7 @@ fun EditorTopBar(
     onSave: () -> Unit,
     onPin: () -> Unit,
     onShare: () -> Unit,
+    onRecrop: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
     onUndo: () -> Unit,
@@ -213,6 +249,9 @@ fun EditorTopBar(
             }
             IconButton(onClick = onRedo, enabled = canRedo) {
                 Icon(Icons.Default.Redo, contentDescription = stringResource(R.string.action_redo))
+            }
+            IconButton(onClick = onRecrop) {
+                Icon(Icons.Default.Crop, contentDescription = "重新选区")
             }
             IconButton(onClick = onPin) {
                 Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.action_pin))
@@ -302,9 +341,9 @@ fun ToolButton(
     ) {
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = if (isSelected) 
-                MaterialTheme.colorScheme.primaryContainer 
-            else 
+            color = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer
+            else
                 MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier.size(56.dp)
         ) {
@@ -312,9 +351,9 @@ fun ToolButton(
                 Icon(
                     icon,
                     contentDescription = text,
-                    tint = if (isSelected) 
-                        MaterialTheme.colorScheme.onPrimaryContainer 
-                    else 
+                    tint = if (isSelected)
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    else
                         MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -323,9 +362,9 @@ fun ToolButton(
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isSelected) 
-                MaterialTheme.colorScheme.primary 
-            else 
+            color = if (isSelected)
+                MaterialTheme.colorScheme.primary
+            else
                 MaterialTheme.colorScheme.onSurface
         )
     }

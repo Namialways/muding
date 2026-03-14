@@ -1,4 +1,4 @@
-package com.pixpin.android.domain.usecase
+﻿package com.pixpin.android.domain.usecase
 
 import android.content.Context
 import android.content.Intent
@@ -18,173 +18,175 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/**
- * 截图管理器 - 负责屏幕截图功能
- */
 class ScreenshotManager(private val context: Context) {
 
     private var mediaProjection: MediaProjection? = null
     private var mediaProjectionCallback: MediaProjection.Callback? = null
+    private var projectionActive: Boolean = false
 
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
-    
-    private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private val mediaProjectionManager = 
-        context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
-    /**
-     * 获取截图权限的 Intent
-     */
+    private var captureWidth: Int = 0
+    private var captureHeight: Int = 0
+    private var captureDensity: Int = 0
+
+    private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val mediaProjectionManager =
+        context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     fun createScreenCaptureIntent(): Intent = mediaProjectionManager.createScreenCaptureIntent()
 
-    /**
-     * 初始化 MediaProjection
-     */
     fun initMediaProjection(resultCode: Int, data: Intent) {
-        // 先释放旧的 projection，避免重复注册/资源泄露
         release()
 
         mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
 
-        // Android 14+（部分 ROM）要求在开始捕获前必须注册 callback
         val callback = object : MediaProjection.Callback() {
             override fun onStop() {
-                cleanUpCapturePipeline()
+                releaseCapturePipeline()
+                projectionActive = false
+                mediaProjection = null
+                mediaProjectionCallback = null
             }
         }
         mediaProjectionCallback = callback
-        mediaProjection?.registerCallback(callback, Handler(Looper.getMainLooper()))
+        mediaProjection?.registerCallback(callback, mainHandler)
+        projectionActive = mediaProjection != null
+
+        if (projectionActive) {
+            setupCapturePipelineOnce()
+        }
     }
 
-    /**
-     * 执行截图（建议在授权弹窗消失后调用）
-     *
-     * 为了解决“授权弹窗还没完全消失就被截进来”的问题：
-     * - 在开始监听后，丢弃第一帧（通常仍包含过渡 UI）
-     * - 并允许配置一个启动延迟 startDelayMs（给系统 UI 动画留时间）
-     */
+    fun hasActiveProjection(): Boolean = mediaProjection != null && projectionActive
+
     suspend fun captureScreen(
-        startDelayMs: Long = 350,
-        dropFirstFrame: Boolean = true,
+        startDelayMs: Long = 150,
+        dropFirstFrame: Boolean = false,
         timeoutMs: Long = 2500
     ): Bitmap = suspendCancellableCoroutine { continuation ->
-        val projection = mediaProjection
-        if (projection == null) {
-            continuation.resumeWithException(IllegalStateException("MediaProjection is not initialized"))
+        val reader = imageReader
+        if (!hasActiveProjection() || reader == null || captureWidth <= 0 || captureHeight <= 0) {
+            continuation.resumeWithException(IllegalStateException("Capture pipeline is not ready"))
             return@suspendCancellableCoroutine
         }
 
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getMetrics(metrics)
-        
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val density = metrics.densityDpi
-
-        // 重新创建 pipeline（避免上次残留导致 BufferQueue abandoned）
-        cleanUpCapturePipeline()
-
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-        val reader = imageReader!!
-
-        val mainHandler = Handler(Looper.getMainLooper())
-
         fun failOnce(message: String, cause: Throwable? = null) {
             if (!continuation.isActive) return
-            cleanUpCapturePipeline()
             if (cause != null) continuation.resumeWithException(Exception(message, cause))
             else continuation.resumeWithException(Exception(message))
         }
 
+        val timeoutAt = System.currentTimeMillis() + timeoutMs.coerceAtLeast(500)
         var dropped = false
 
-        val listener = ImageReader.OnImageAvailableListener {
-            if (!continuation.isActive) return@OnImageAvailableListener
+        val pollRunnable = object : Runnable {
+            override fun run() {
+                if (!continuation.isActive) return
 
-            var image: Image? = null
-            try {
-                image = reader.acquireLatestImage() ?: return@OnImageAvailableListener
-
-                if (dropFirstFrame && !dropped) {
-                    // 丢弃第一帧，避免截到授权弹窗/过渡动画
-                    dropped = true
-                    image.close()
-                    return@OnImageAvailableListener
-                }
-
-                val planes = image.planes
-                val buffer = planes[0].buffer
-                val pixelStride = planes[0].pixelStride
-                val rowStride = planes[0].rowStride
-                val rowPadding = rowStride - pixelStride * width
-
-                val tmpBitmap = Bitmap.createBitmap(
-                    width + rowPadding / pixelStride,
-                    height,
-                    Bitmap.Config.ARGB_8888
-                )
-                tmpBitmap.copyPixelsFromBuffer(buffer)
-
-                val cropped = Bitmap.createBitmap(tmpBitmap, 0, 0, width, height)
-                tmpBitmap.recycle()
-
-                cleanUpCapturePipeline()
-                continuation.resume(cropped)
-            } catch (e: Exception) {
-                failOnce("Failed to capture image", e)
-            } finally {
+                var image: Image? = null
                 try {
-                    image?.close()
-                } catch (_: Exception) {
+                    image = reader.acquireLatestImage()
+                    if (image != null) {
+                        if (dropFirstFrame && !dropped) {
+                            dropped = true
+                            image.close()
+                            image = null
+                        } else {
+                            val bitmap = imageToBitmap(image)
+                            continuation.resume(bitmap)
+                            return
+                        }
+                    }
+                } catch (e: Exception) {
+                    failOnce("Failed to capture image", e)
+                    return
+                } finally {
+                    try {
+                        image?.close()
+                    } catch (_: Exception) {
+                    }
                 }
+
+                if (System.currentTimeMillis() >= timeoutAt) {
+                    failOnce("Failed to capture image (timeout)")
+                    return
+                }
+
+                mainHandler.postDelayed(this, 33)
             }
         }
 
-        reader.setOnImageAvailableListener(listener, mainHandler)
-
-        val startCaptureRunnable = Runnable {
-            try {
-                virtualDisplay = projection.createVirtualDisplay(
-                    "PixPinScreenCapture",
-                    width,
-                    height,
-                    density,
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                    reader.surface,
-                    null,
-                    null
-                )
-            } catch (e: Exception) {
-                failOnce("createVirtualDisplay failed", e)
-            }
-        }
-
-        // 超时兜底
-        val timeoutRunnable = Runnable {
-            failOnce("Failed to capture image (timeout)")
-        }
-
-        // 关键：延迟启动 capture，给授权弹窗/系统动画留时间
-        mainHandler.postDelayed(startCaptureRunnable, startDelayMs.coerceAtLeast(0))
-        mainHandler.postDelayed(timeoutRunnable, timeoutMs.coerceAtLeast(500))
+        mainHandler.postDelayed(pollRunnable, startDelayMs.coerceAtLeast(0))
 
         continuation.invokeOnCancellation {
-            try {
-                mainHandler.removeCallbacks(startCaptureRunnable)
-                mainHandler.removeCallbacks(timeoutRunnable)
-            } catch (_: Exception) {
-            }
-            cleanUpCapturePipeline()
+            mainHandler.removeCallbacks(pollRunnable)
         }
     }
 
-    /**
-     * 只清理一次截图的管线资源（virtualDisplay / imageReader）。
-     * 注意：不要在这里 stop MediaProjection，否则下次截图需要重新授权。
-     */
-    private fun cleanUpCapturePipeline() {
+    private fun setupCapturePipelineOnce() {
+        if (virtualDisplay != null && imageReader != null) return
+
+        val projection = mediaProjection ?: throw IllegalStateException("MediaProjection not initialized")
+
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getRealMetrics(metrics)
+        captureWidth = metrics.widthPixels
+        captureHeight = metrics.heightPixels
+        captureDensity = metrics.densityDpi
+
+        imageReader = ImageReader.newInstance(captureWidth, captureHeight, PixelFormat.RGBA_8888, 3)
+        val reader = imageReader ?: throw IllegalStateException("ImageReader init failed")
+
+        try {
+            virtualDisplay = projection.createVirtualDisplay(
+                "PixPinScreenCapture",
+                captureWidth,
+                captureHeight,
+                captureDensity,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                reader.surface,
+                null,
+                null
+            )
+        } catch (e: Exception) {
+            releaseCapturePipeline()
+            throw Exception("createVirtualDisplay failed", e)
+        }
+    }
+
+    private fun imageToBitmap(image: Image): Bitmap {
+        val planes = image.planes
+        val buffer = planes[0].buffer
+        val pixelStride = planes[0].pixelStride
+        val rowStride = planes[0].rowStride
+        val rowPadding = rowStride - pixelStride * captureWidth
+
+        val tmpBitmap = Bitmap.createBitmap(
+            captureWidth + rowPadding / pixelStride,
+            captureHeight,
+            Bitmap.Config.ARGB_8888
+        )
+        tmpBitmap.copyPixelsFromBuffer(buffer)
+
+        val cropped = Bitmap.createBitmap(tmpBitmap, 0, 0, captureWidth, captureHeight)
+        tmpBitmap.recycle()
+        return cropped
+    }
+
+    private fun clearImageListener() {
+        try {
+            imageReader?.setOnImageAvailableListener(null, null)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun releaseCapturePipeline() {
+        clearImageListener()
+
         try {
             virtualDisplay?.release()
         } catch (_: Exception) {
@@ -192,22 +194,18 @@ class ScreenshotManager(private val context: Context) {
         virtualDisplay = null
 
         try {
-            imageReader?.setOnImageAvailableListener(null, null)
-        } catch (_: Exception) {
-        }
-
-        try {
             imageReader?.close()
         } catch (_: Exception) {
         }
         imageReader = null
+
+        captureWidth = 0
+        captureHeight = 0
+        captureDensity = 0
     }
 
-    /**
-     * 释放 MediaProjection（用于结束“分享屏幕”状态）
-     */
     fun release() {
-        cleanUpCapturePipeline()
+        releaseCapturePipeline()
 
         val projection = mediaProjection
         val callback = mediaProjectionCallback
@@ -224,5 +222,6 @@ class ScreenshotManager(private val context: Context) {
         } catch (_: Exception) {
         }
         mediaProjection = null
+        projectionActive = false
     }
 }

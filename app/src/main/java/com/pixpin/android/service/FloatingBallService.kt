@@ -44,7 +44,7 @@ import android.app.Activity
 import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.domain.usecase.ScreenshotManager
 import com.pixpin.android.domain.usecase.CacheImageStore
-import com.pixpin.android.presentation.editor.AnnotationEditorActivity
+import com.pixpin.android.presentation.crop.RegionCropActivity
 import com.pixpin.android.presentation.theme.*
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -101,25 +101,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
 
                 screenshotManager.initMediaProjection(resultCode, resultData)
-                lifecycleScope.launch {
-                    try {
-                        val bitmap = screenshotManager.captureScreen()
-                        val uri = cacheImageStore.writePngToCache(bitmap, "screenshots", "capture")
-
-                        val editorIntent = Intent(this@FloatingBallService, AnnotationEditorActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, uri.toString())
-                        }
-                        startActivity(editorIntent)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    } finally {
-                        // 截图流程结束，恢复悬浮窗
-                        mainHandler.post { floatingView?.visibility = View.VISIBLE }
-                        // 无论成功与否，都释放 MediaProjection，以结束“分享屏幕”状态
-                        screenshotManager.release()
-                    }
-                }
+                captureAndOpenEditor()
             }
         }
         return START_STICKY
@@ -191,12 +173,39 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         // 关键：截图前隐藏悬浮窗，避免把自己也截进去（一定要在 finally 里恢复）
         floatingView?.visibility = View.GONE
 
+        if (screenshotManager.hasActiveProjection()) {
+            captureAndOpenEditor()
+            return
+        }
+
         // Android 10+ 要求 MediaProjection 必须在声明了 mediaProjection 类型的前台服务中使用。
         // 这里我们先拉起一个透明 Activity 获取授权结果，然后把 resultCode/data 回传给本 Service。
         val intent = Intent(this, ScreenshotPermissionActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
+    }
+
+    private fun captureAndOpenEditor() {
+        lifecycleScope.launch {
+            try {
+                val bitmap = screenshotManager.captureScreen()
+                val uri = cacheImageStore.writePngToCache(bitmap, "screenshots", "capture")
+
+                val editorIntent = Intent(this@FloatingBallService, RegionCropActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra(RegionCropActivity.EXTRA_IMAGE_URI, uri.toString())
+                }
+                startActivity(editorIntent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Session may be invalidated by system; next capture will re-request permission.
+                screenshotManager.release()
+            } finally {
+                // Capture ends (success or fail), always restore the floating ball.
+                mainHandler.post { floatingView?.visibility = View.VISIBLE }
+            }
+        }
     }
 
     private fun openSettings() {
