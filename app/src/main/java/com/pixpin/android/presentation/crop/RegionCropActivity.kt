@@ -39,8 +39,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.domain.usecase.CacheImageStore
+import com.pixpin.android.domain.usecase.CaptureFlowSettings
+import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
+import com.pixpin.android.service.PinOverlayService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,11 +54,21 @@ import kotlin.math.roundToInt
 class RegionCropActivity : ComponentActivity() {
 
     private lateinit var cacheImageStore: CacheImageStore
+    private lateinit var captureFlowSettings: CaptureFlowSettings
     private var sourceBitmap: Bitmap? = null
+    private var forcedResultAction: CaptureResultAction? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         cacheImageStore = CacheImageStore(this)
+        captureFlowSettings = CaptureFlowSettings(this)
+        forcedResultAction = intent.getStringExtra(EXTRA_FORCE_RESULT_ACTION)?.let {
+            when (it) {
+                CaptureResultAction.PIN_DIRECTLY.value -> CaptureResultAction.PIN_DIRECTLY
+                CaptureResultAction.OPEN_EDITOR.value -> CaptureResultAction.OPEN_EDITOR
+                else -> null
+            }
+        }
 
         val uriString = intent.getStringExtra(EXTRA_IMAGE_URI)
         if (uriString.isNullOrBlank()) {
@@ -82,14 +95,14 @@ class RegionCropActivity : ComponentActivity() {
                     bitmap = sourceBitmap!!,
                     onCancel = { finish() },
                     onConfirm = { cropRect ->
-                        cropAndOpenEditor(cropRect)
+                        cropAndContinue(cropRect)
                     }
                 )
             }
         }
     }
 
-    private fun cropAndOpenEditor(cropRectInBitmap: Rect) {
+    private fun cropAndContinue(cropRectInBitmap: Rect) {
         val bitmap = sourceBitmap ?: return
         lifecycleScope.launch {
             try {
@@ -106,6 +119,16 @@ class RegionCropActivity : ComponentActivity() {
                 }
                 cropped.recycle()
 
+                val resultAction = forcedResultAction ?: captureFlowSettings.getResultAction()
+                if (resultAction == CaptureResultAction.PIN_DIRECTLY) {
+                    val pinIntent = Intent(this@RegionCropActivity, PinOverlayService::class.java).apply {
+                        putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
+                    }
+                    startService(pinIntent)
+                    closeScreenshotFlow()
+                    return@launch
+                }
+
                 val editorIntent = Intent(this@RegionCropActivity, AnnotationEditorActivity::class.java).apply {
                     putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, uri.toString())
                 }
@@ -117,6 +140,15 @@ class RegionCropActivity : ComponentActivity() {
         }
     }
 
+    private fun closeScreenshotFlow() {
+        moveTaskToBack(true)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            finishAndRemoveTask()
+        } else {
+            finish()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         sourceBitmap?.recycle()
@@ -124,6 +156,7 @@ class RegionCropActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_IMAGE_URI = "extra_image_uri"
+        const val EXTRA_FORCE_RESULT_ACTION = "extra_force_result_action"
     }
 }
 
@@ -295,3 +328,5 @@ private fun toBitmapRect(selection: Rect, imageRectOnScreen: Rect, bitmapWidth: 
         bottom = bottom.coerceIn(0f, bitmapHeight.toFloat())
     )
 }
+
+

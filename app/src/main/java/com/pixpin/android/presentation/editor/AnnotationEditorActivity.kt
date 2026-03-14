@@ -36,6 +36,7 @@ import com.pixpin.android.R
 import com.pixpin.android.domain.model.DrawingTool
 import com.pixpin.android.domain.usecase.ImageSaver
 import com.pixpin.android.domain.usecase.CacheImageStore
+import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.presentation.crop.RegionCropActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.PinOverlayService
@@ -191,6 +192,7 @@ class AnnotationEditorActivity : ComponentActivity() {
 
                 val intent = Intent(this@AnnotationEditorActivity, RegionCropActivity::class.java).apply {
                     putExtra(RegionCropActivity.EXTRA_IMAGE_URI, uri.toString())
+                    putExtra(RegionCropActivity.EXTRA_FORCE_RESULT_ACTION, CaptureResultAction.OPEN_EDITOR.value)
                 }
                 startActivity(intent)
                 finish()
@@ -253,11 +255,11 @@ fun EditorTopBar(
             IconButton(onClick = onRecrop) {
                 Icon(Icons.Default.Crop, contentDescription = "重新选区")
             }
-            IconButton(onClick = onPin) {
-                Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.action_pin))
-            }
             IconButton(onClick = onShare) {
                 Icon(Icons.Default.Share, contentDescription = stringResource(R.string.action_share))
+            }
+            IconButton(onClick = onPin) {
+                Icon(Icons.Default.PushPin, contentDescription = stringResource(R.string.action_pin))
             }
             IconButton(onClick = onSave) {
                 Icon(Icons.Default.Save, contentDescription = stringResource(R.string.action_save))
