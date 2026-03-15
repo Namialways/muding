@@ -7,11 +7,18 @@ import androidx.lifecycle.ViewModel
 import com.pixpin.android.domain.model.DrawingPath
 import com.pixpin.android.domain.model.DrawingTool
 
+enum class EraserMode {
+    OBJECT,
+    PARTIAL
+}
+
 class AnnotationViewModel : ViewModel() {
 
     val currentTool = mutableStateOf(DrawingTool.PEN)
     val currentColor = mutableStateOf(Color.Red)
     val strokeWidth = mutableStateOf(5f)
+    val eraserSize = mutableStateOf(28f)
+    val eraserMode = mutableStateOf(EraserMode.OBJECT)
     val textSize = mutableStateOf(28f)
     val textOutlineEnabled = mutableStateOf(false)
     val selectedTextIndex = mutableStateOf<Int?>(null)
@@ -47,6 +54,13 @@ class AnnotationViewModel : ViewModel() {
     fun updatePath(index: Int, path: DrawingPath) {
         if (index !in paths.indices) return
         paths[index] = path
+        undoPaths.clear()
+    }
+
+    fun replacePath(index: Int, replacements: List<DrawingPath>) {
+        if (index !in paths.indices) return
+        paths.removeAt(index)
+        paths.addAll(index, replacements)
         undoPaths.clear()
     }
 
@@ -93,6 +107,14 @@ class AnnotationViewModel : ViewModel() {
     fun selectTextSize(size: Float) {
         textSize.value = size.coerceIn(14f, 72f)
         applyCurrentStyleToSelectedText()
+    }
+
+    fun selectEraserSize(size: Float) {
+        eraserSize.value = size.coerceIn(12f, 96f)
+    }
+
+    fun selectEraserMode(mode: EraserMode) {
+        eraserMode.value = mode
     }
 
     fun selectTextOutlineEnabled(enabled: Boolean) {

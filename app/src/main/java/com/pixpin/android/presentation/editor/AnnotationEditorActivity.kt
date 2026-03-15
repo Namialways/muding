@@ -64,7 +64,7 @@ class AnnotationEditorActivity : ComponentActivity() {
         cacheImageStore = CacheImageStore(this)
 
         val sessionId = intent.getStringExtra(EXTRA_ANNOTATION_SESSION_ID)
-        val restoredSession = sessionId?.let { AnnotationSessionStore.get(it) }
+        val restoredSession = sessionId?.let { AnnotationSessionStore.get(this, it) }
         val uriString = restoredSession?.sourceImageUri ?: intent.getStringExtra(EXTRA_IMAGE_URI)
         if (uriString.isNullOrBlank()) {
             Toast.makeText(this, "无法加载截图", Toast.LENGTH_SHORT).show()
@@ -158,6 +158,8 @@ class AnnotationEditorActivity : ComponentActivity() {
                         currentTool = viewModel.currentTool.value,
                         currentColor = viewModel.currentColor.value,
                         strokeWidth = viewModel.strokeWidth.value,
+                        eraserSize = viewModel.eraserSize.value,
+                        eraserMode = viewModel.eraserMode.value,
                         textSize = viewModel.textSize.value,
                         textOutlineEnabled = viewModel.textOutlineEnabled.value,
                         selectedTextIndex = viewModel.selectedTextIndex.value,
@@ -168,6 +170,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                             }
                         },
                         onPathUpdated = { index, path -> viewModel.updatePath(index, path) },
+                        onPathReplaced = { index, replacements -> viewModel.replacePath(index, replacements) },
                         onPathRemoved = { index -> viewModel.removePath(index) },
                         onTextSelectionChanged = { index, path ->
                             viewModel.selectTextPath(index, path)
@@ -202,6 +205,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                 val uri = cacheImageStore.writePngToCache(bitmap, "pinned", "pinned_image")
                 val sessionId = sourceImageUriString?.let { imageUri ->
                     AnnotationSessionStore.put(
+                        this@AnnotationEditorActivity,
                         AnnotationSession(
                             sourceImageUri = imageUri,
                             canvasSize = editorCanvasSize,
@@ -331,10 +335,12 @@ fun EditorTopBar(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorBottomBar(viewModel: AnnotationViewModel) {
     val showTextControls =
         viewModel.currentTool.value == DrawingTool.TEXT || viewModel.selectedTextIndex.value != null
+    val showEraserControls = viewModel.currentTool.value == DrawingTool.ERASER
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -353,6 +359,12 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
                     text = "画笔",
                     isSelected = viewModel.currentTool.value == DrawingTool.PEN,
                     onClick = { viewModel.selectTool(DrawingTool.PEN) }
+                )
+                ToolButton(
+                    icon = Icons.Default.AutoFixOff,
+                    text = "橡皮擦",
+                    isSelected = viewModel.currentTool.value == DrawingTool.ERASER,
+                    onClick = { viewModel.selectTool(DrawingTool.ERASER) }
                 )
                 ToolButton(
                     icon = Icons.Default.TrendingUp,
@@ -406,6 +418,35 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
                     Switch(
                         checked = viewModel.textOutlineEnabled.value,
                         onCheckedChange = { viewModel.selectTextOutlineEnabled(it) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            if (showEraserControls) {
+                Text(
+                    text = "橡皮大小: ${viewModel.eraserSize.value.toInt()}",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Slider(
+                    value = viewModel.eraserSize.value,
+                    onValueChange = { viewModel.selectEraserSize(it) },
+                    valueRange = 12f..96f
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = viewModel.eraserMode.value == EraserMode.OBJECT,
+                        onClick = { viewModel.selectEraserMode(EraserMode.OBJECT) },
+                        label = { Text("整笔擦除") }
+                    )
+                    FilterChip(
+                        selected = viewModel.eraserMode.value == EraserMode.PARTIAL,
+                        onClick = { viewModel.selectEraserMode(EraserMode.PARTIAL) },
+                        label = { Text("局部擦除") }
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))

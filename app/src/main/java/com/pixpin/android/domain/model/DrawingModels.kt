@@ -1,28 +1,24 @@
-package com.pixpin.android.domain.model
+﻿package com.pixpin.android.domain.model
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 
-/**
- * 绘制工具类型
- */
 enum class DrawingTool {
-    PEN,        // 画笔
-    ARROW,      // 箭头
-    RECTANGLE,  // 矩形
-    CIRCLE,     // 圆形
-    TEXT        // 文字
+    PEN,
+    ERASER,
+    ARROW,
+    RECTANGLE,
+    CIRCLE,
+    TEXT
 }
 
-/**
- * 绘制路径数据
- */
 sealed class DrawingPath {
     data class PenPath(
         val path: Path,
         val color: Color,
-        val strokeWidth: Float
+        val strokeWidth: Float,
+        val points: List<Offset> = emptyList()
     ) : DrawingPath()
 
     data class ArrowPath(

@@ -1,5 +1,6 @@
 package com.pixpin.android.presentation.editor
 
+import android.view.MotionEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -12,6 +13,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,11 +29,13 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import com.pixpin.android.domain.model.DrawingPath
@@ -42,6 +46,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DrawingCanvas(
     modifier: Modifier = Modifier,
@@ -49,16 +54,20 @@ fun DrawingCanvas(
     currentTool: DrawingTool,
     currentColor: Color,
     strokeWidth: Float,
+    eraserSize: Float,
+    eraserMode: EraserMode,
     textSize: Float,
     textOutlineEnabled: Boolean,
     selectedTextIndex: Int?,
     onPathAdded: (DrawingPath) -> Unit,
     onPathUpdated: (Int, DrawingPath) -> Unit,
+    onPathReplaced: (Int, List<DrawingPath>) -> Unit,
     onPathRemoved: (Int) -> Unit,
     onTextSelectionChanged: (Int?, DrawingPath.TextPath?) -> Unit,
     onCanvasSizeChanged: (Size) -> Unit
 ) {
     var currentPath by remember { mutableStateOf<Path?>(null) }
+    val currentPenPoints = remember { mutableStateListOf<Offset>() }
     var pathVersion by remember { mutableIntStateOf(0) }
     var startPoint by remember { mutableStateOf<Offset?>(null) }
     var endPoint by remember { mutableStateOf<Offset?>(null) }
@@ -67,6 +76,7 @@ fun DrawingCanvas(
     var textTargetIndex by remember { mutableStateOf<Int?>(null) }
     var textTargetPosition by remember { mutableStateOf(Offset.Zero) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    var eraserPreviewCenter by remember { mutableStateOf<Offset?>(null) }
 
     val textMeasurer = rememberTextMeasurer()
 
@@ -106,6 +116,31 @@ fun DrawingCanvas(
                 canvasSize = it
                 onCanvasSizeChanged(Size(it.width.toFloat(), it.height.toFloat()))
             }
+            .pointerInteropFilter { event ->
+                if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                        val touch = Offset(event.x, event.y)
+                        eraserPreviewCenter = touch
+                        erasePathAt(
+                            touch = touch,
+                            paths = paths,
+                            eraserMode = eraserMode,
+                            eraserSize = eraserSize,
+                            onPathReplaced = onPathReplaced,
+                            onPathRemoved = onPathRemoved
+                        )
+                        true
+                    }
+
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        eraserPreviewCenter = null
+                        true
+                    }
+
+                    else -> false
+                }
+            }
             .pointerInput(currentTool, paths.size, selectedTextIndex) {
                 when (currentTool) {
                     DrawingTool.PEN -> {
@@ -113,10 +148,13 @@ fun DrawingCanvas(
                             onDragStart = { offset ->
                                 onTextSelectionChanged(null, null)
                                 currentPath = Path().apply { moveTo(offset.x, offset.y) }
+                                currentPenPoints.clear()
+                                currentPenPoints.add(offset)
                                 startPoint = offset
                             },
                             onDrag = { change, _ ->
                                 currentPath?.lineTo(change.position.x, change.position.y)
+                                currentPenPoints.add(change.position)
                                 pathVersion++
                                 change.consume()
                             },
@@ -126,15 +164,19 @@ fun DrawingCanvas(
                                         DrawingPath.PenPath(
                                             path = Path().apply { addPath(path) },
                                             color = currentColor,
-                                            strokeWidth = strokeWidth
+                                            strokeWidth = strokeWidth,
+                                            points = currentPenPoints.toList()
                                         )
                                     )
                                 }
                                 currentPath = null
+                                currentPenPoints.clear()
                                 startPoint = null
                             }
                         )
                     }
+
+                    DrawingTool.ERASER -> Unit
 
                     DrawingTool.ARROW, DrawingTool.RECTANGLE, DrawingTool.CIRCLE -> {
                         detectDragGestures(
@@ -358,6 +400,23 @@ fun DrawingCanvas(
                 else -> Unit
             }
         }
+
+        if (currentTool == DrawingTool.ERASER) {
+            eraserPreviewCenter?.let { center ->
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.16f),
+                    radius = eraserSize / 2f,
+                    center = center,
+                    style = Fill
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = eraserSize / 2f,
+                    center = center,
+                    style = Stroke(width = 2f)
+                )
+            }
+        }
     }
 
     if (showTextDialog) {
@@ -460,6 +519,128 @@ private fun normalizeRotation(rotationDegrees: Float): Float {
     while (normalized <= -180f) normalized += 360f
     while (normalized > 180f) normalized -= 360f
     return normalized
+}
+
+private fun erasePathAt(
+    touch: Offset,
+    paths: List<DrawingPath>,
+    eraserMode: EraserMode,
+    eraserSize: Float,
+    onPathReplaced: (Int, List<DrawingPath>) -> Unit,
+    onPathRemoved: (Int) -> Unit
+) {
+    for (index in paths.indices.reversed()) {
+        val path = paths[index]
+        if (eraserMode == EraserMode.PARTIAL && path is DrawingPath.PenPath) {
+            val replacement = erasePenPathPartially(path, touch, eraserSize / 2f)
+            if (replacement != null) {
+                onPathReplaced(index, replacement)
+                return
+            }
+        } else if (isPathHit(path, touch, eraserSize / 2f)) {
+            onPathRemoved(index)
+            return
+        }
+    }
+}
+
+private fun erasePenPathPartially(
+    path: DrawingPath.PenPath,
+    touch: Offset,
+    radius: Float
+): List<DrawingPath.PenPath>? {
+    if (path.points.none { (it - touch).getDistance() <= radius }) return null
+
+    val keptSegments = mutableListOf<List<Offset>>()
+    var currentSegment = mutableListOf<Offset>()
+    path.points.forEach { point ->
+        if ((point - touch).getDistance() <= radius) {
+            if (currentSegment.size >= 2) {
+                keptSegments += currentSegment.toList()
+            }
+            currentSegment = mutableListOf()
+        } else {
+            currentSegment.add(point)
+        }
+    }
+    if (currentSegment.size >= 2) {
+        keptSegments += currentSegment.toList()
+    }
+
+    return keptSegments.map { segment ->
+        DrawingPath.PenPath(
+            path = buildComposePath(segment),
+            color = path.color,
+            strokeWidth = path.strokeWidth,
+            points = segment
+        )
+    }
+}
+
+private fun isPathHit(
+    path: DrawingPath,
+    touch: Offset,
+    radius: Float
+): Boolean {
+    return when (path) {
+        is DrawingPath.PenPath -> {
+            path.points.any { point ->
+                (point - touch).getDistance() <= maxOf(radius, path.strokeWidth * 2f)
+            }
+        }
+
+        is DrawingPath.ArrowPath -> {
+            distanceToSegment(touch, path.start, path.end) <= maxOf(radius, path.strokeWidth * 2f)
+        }
+
+        is DrawingPath.RectanglePath -> {
+            val rect = androidx.compose.ui.geometry.Rect(path.topLeft, path.bottomRight)
+            rect.inflate(radius).contains(touch)
+        }
+
+        is DrawingPath.CirclePath -> {
+            kotlin.math.abs((touch - path.center).getDistance() - path.radius) <= maxOf(radius, path.strokeWidth * 2f) ||
+                (touch - path.center).getDistance() <= path.radius
+        }
+
+        is DrawingPath.TextPath -> {
+            estimateTextBounds(path).inflate(radius).contains(touch)
+        }
+    }
+}
+
+private fun buildComposePath(points: List<Offset>): Path {
+    return Path().apply {
+        val first = points.firstOrNull() ?: return@apply
+        moveTo(first.x, first.y)
+        points.drop(1).forEach { point -> lineTo(point.x, point.y) }
+    }
+}
+
+private fun estimateTextBounds(path: DrawingPath.TextPath): androidx.compose.ui.geometry.Rect {
+    val lines = path.text.split('\n')
+    val widestLine = lines.maxOfOrNull { it.length } ?: 1
+    val width = widestLine.coerceAtLeast(1) * path.fontSize * path.scale * 0.62f
+    val height = lines.size.coerceAtLeast(1) * path.fontSize * path.scale * 1.35f
+    return androidx.compose.ui.geometry.Rect(
+        left = path.position.x,
+        top = path.position.y,
+        right = path.position.x + width,
+        bottom = path.position.y + height
+    )
+}
+
+private fun distanceToSegment(point: Offset, start: Offset, end: Offset): Float {
+    val segment = end - start
+    val lengthSquared = (segment.x * segment.x) + (segment.y * segment.y)
+    if (lengthSquared == 0f) return (point - start).getDistance()
+    val t = (((point.x - start.x) * segment.x) + ((point.y - start.y) * segment.y)) / lengthSquared
+    val clamped = t.coerceIn(0f, 1f)
+    val projection = Offset(
+        start.x + (clamped * segment.x),
+        start.y + (clamped * segment.y)
+    )
+    return (point - projection).getDistance()
 }
 
 private fun isPointInsideText(

@@ -12,12 +12,16 @@ import android.os.IBinder
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -41,6 +45,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -57,6 +62,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
@@ -298,6 +304,23 @@ private fun PinnedImageContent(
         freeScaleY = 1f
     }
 
+    fun resizeFreeScale(deltaX: Float, deltaY: Float) {
+        val currentWidth = if (scaleMode == PinScaleMode.LOCK_ASPECT) {
+            baseWidth.value * uniformScale
+        } else {
+            baseWidth.value * freeScaleX
+        }
+        val currentHeight = if (scaleMode == PinScaleMode.LOCK_ASPECT) {
+            baseHeight.value * uniformScale
+        } else {
+            baseHeight.value * freeScaleY
+        }
+        val nextWidth = max(80f, currentWidth + deltaX)
+        val nextHeight = max(48f, currentHeight + deltaY)
+        freeScaleX = (nextWidth / baseWidth.value).coerceIn(0.2f, 6f)
+        freeScaleY = (nextHeight / baseHeight.value).coerceIn(0.2f, 6f)
+    }
+
     val displayWidth: Dp
     val displayHeight: Dp
     if (scaleMode == PinScaleMode.LOCK_ASPECT) {
@@ -409,5 +432,44 @@ private fun PinnedImageContent(
                 .align(Alignment.BottomStart)
                 .padding(6.dp)
         )
+
+        if (scaleMode == PinScaleMode.FREE_SCALE && !locked) {
+            FreeScaleHandle(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .offset { IntOffset(10, 0) },
+                onDragDelta = { dx, _ -> resizeFreeScale(dx, 0f) }
+            )
+            FreeScaleHandle(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset { IntOffset(0, 10) },
+                onDragDelta = { _, dy -> resizeFreeScale(0f, dy) }
+            )
+            FreeScaleHandle(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset { IntOffset(10, 10) },
+                onDragDelta = { dx, dy -> resizeFreeScale(dx, dy) }
+            )
+        }
     }
+}
+
+@Composable
+private fun FreeScaleHandle(
+    modifier: Modifier = Modifier,
+    onDragDelta: (Float, Float) -> Unit
+) {
+    Box(
+        modifier = modifier
+            .size(22.dp)
+            .background(Color.White.copy(alpha = 0.95f), CircleShape)
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    onDragDelta(dragAmount.x, dragAmount.y)
+                    change.consume()
+                }
+            }
+    )
 }
