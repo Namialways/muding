@@ -159,6 +159,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                         currentColor = viewModel.currentColor.value,
                         strokeWidth = viewModel.strokeWidth.value,
                         textSize = viewModel.textSize.value,
+                        textOutlineEnabled = viewModel.textOutlineEnabled.value,
                         selectedTextIndex = viewModel.selectedTextIndex.value,
                         onPathAdded = { path ->
                             val index = viewModel.addPath(path)
@@ -391,6 +392,22 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
                     onValueChange = { viewModel.selectTextSize(it) },
                     valueRange = 14f..72f
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "文字描边",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Switch(
+                        checked = viewModel.textOutlineEnabled.value,
+                        onCheckedChange = { viewModel.selectTextOutlineEnabled(it) }
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
 

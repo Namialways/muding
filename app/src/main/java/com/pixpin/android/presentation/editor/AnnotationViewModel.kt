@@ -13,6 +13,7 @@ class AnnotationViewModel : ViewModel() {
     val currentColor = mutableStateOf(Color.Red)
     val strokeWidth = mutableStateOf(5f)
     val textSize = mutableStateOf(28f)
+    val textOutlineEnabled = mutableStateOf(false)
     val selectedTextIndex = mutableStateOf<Int?>(null)
 
     val paths = mutableStateListOf<DrawingPath>()
@@ -94,11 +95,17 @@ class AnnotationViewModel : ViewModel() {
         applyCurrentStyleToSelectedText()
     }
 
+    fun selectTextOutlineEnabled(enabled: Boolean) {
+        textOutlineEnabled.value = enabled
+        applyCurrentStyleToSelectedText()
+    }
+
     fun selectTextPath(index: Int?, path: DrawingPath.TextPath?) {
         selectedTextIndex.value = index
         if (path != null) {
             currentColor.value = path.color
             textSize.value = path.fontSize
+            textOutlineEnabled.value = path.outlineEnabled
         }
     }
 
@@ -111,7 +118,8 @@ class AnnotationViewModel : ViewModel() {
         val path = paths.getOrNull(index) as? DrawingPath.TextPath ?: return
         paths[index] = path.copy(
             color = currentColor.value,
-            fontSize = textSize.value
+            fontSize = textSize.value,
+            outlineEnabled = textOutlineEnabled.value
         )
     }
 

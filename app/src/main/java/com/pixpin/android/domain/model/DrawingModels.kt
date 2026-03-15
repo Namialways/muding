@@ -54,6 +54,7 @@ sealed class DrawingPath {
         val color: Color,
         val fontSize: Float,
         val scale: Float = 1f,
-        val rotation: Float = 0f
+        val rotation: Float = 0f,
+        val outlineEnabled: Boolean = false
     ) : DrawingPath()
 }

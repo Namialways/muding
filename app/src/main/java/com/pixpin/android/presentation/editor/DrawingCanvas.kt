@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -49,6 +50,7 @@ fun DrawingCanvas(
     currentColor: Color,
     strokeWidth: Float,
     textSize: Float,
+    textOutlineEnabled: Boolean,
     selectedTextIndex: Int?,
     onPathAdded: (DrawingPath) -> Unit,
     onPathUpdated: (Int, DrawingPath) -> Unit,
@@ -287,6 +289,13 @@ fun DrawingCanvas(
                 is DrawingPath.TextPath -> {
                     val textLayout = measureText(drawingPath)
                     rotate(drawingPath.rotation, pivot = drawingPath.position) {
+                        if (drawingPath.outlineEnabled) {
+                            drawOutlinedText(
+                                textLayout = textLayout,
+                                topLeft = drawingPath.position,
+                                outlineColor = outlineColorFor(drawingPath.color)
+                            )
+                        }
                         drawText(
                             textLayoutResult = textLayout,
                             topLeft = drawingPath.position
@@ -378,7 +387,8 @@ fun DrawingCanvas(
                                     val updatedPath = oldPath.copy(
                                         text = text,
                                         color = currentColor,
-                                        fontSize = textSize
+                                        fontSize = textSize,
+                                        outlineEnabled = oldPath.outlineEnabled
                                     )
                                     onPathUpdated(
                                         existingIndex,
@@ -392,7 +402,8 @@ fun DrawingCanvas(
                                 position = textTargetPosition,
                                 text = text,
                                 color = currentColor,
-                                fontSize = textSize
+                                fontSize = textSize,
+                                outlineEnabled = textOutlineEnabled
                             )
                             onPathAdded(newPath)
                         }
@@ -413,6 +424,35 @@ fun DrawingCanvas(
             }
         )
     }
+}
+
+private fun DrawScope.drawOutlinedText(
+    textLayout: TextLayoutResult,
+    topLeft: Offset,
+    outlineColor: Color
+) {
+    val offsets = listOf(
+        Offset(-2f, 0f),
+        Offset(2f, 0f),
+        Offset(0f, -2f),
+        Offset(0f, 2f),
+        Offset(-1.5f, -1.5f),
+        Offset(-1.5f, 1.5f),
+        Offset(1.5f, -1.5f),
+        Offset(1.5f, 1.5f)
+    )
+    offsets.forEach { delta ->
+        drawText(
+            textLayoutResult = textLayout,
+            topLeft = topLeft + delta,
+            color = outlineColor
+        )
+    }
+}
+
+private fun outlineColorFor(color: Color): Color {
+    val luminance = (0.299f * color.red) + (0.587f * color.green) + (0.114f * color.blue)
+    return if (luminance > 0.6f) Color.Black.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.92f)
 }
 
 private fun normalizeRotation(rotationDegrees: Float): Float {

@@ -8,6 +8,7 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import com.pixpin.android.domain.model.DrawingPath
 import kotlin.math.atan2
@@ -102,6 +103,17 @@ class AnnotationRenderer {
                         style = Paint.Style.FILL
                         textSize = path.fontSize * path.scale * scaledDensity * scaleAverage
                     }
+                    val strokePaint = if (path.outlineEnabled) {
+                        TextPaint(textPaint).apply {
+                            color = outlineColorFor(path.color).toArgb()
+                            style = Paint.Style.STROKE
+                            strokeJoin = Paint.Join.ROUND
+                            strokeMiter = 10f
+                            strokeWidth = (textSize / 8f).coerceAtLeast(2f)
+                        }
+                    } else {
+                        null
+                    }
                     val layoutWidth = path.text
                         .split('\n')
                         .maxOfOrNull { line -> textPaint.measureText(line).toInt() }
@@ -111,9 +123,17 @@ class AnnotationRenderer {
                         .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                         .setIncludePad(false)
                         .build()
+                    val outlineLayout = strokePaint?.let {
+                        StaticLayout.Builder
+                            .obtain(path.text, 0, path.text.length, it, layoutWidth)
+                            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                            .setIncludePad(false)
+                            .build()
+                    }
                     canvas.save()
                     canvas.translate(path.position.x * scaleX, path.position.y * scaleY)
                     canvas.rotate(path.rotation)
+                    outlineLayout?.draw(canvas)
                     staticLayout.draw(canvas)
                     canvas.restore()
                 }
@@ -144,5 +164,13 @@ class AnnotationRenderer {
         val x2 = (endX - arrowHeadLength * cos(angle + arrowHeadAngle)).toFloat()
         val y2 = (endY - arrowHeadLength * sin(angle + arrowHeadAngle)).toFloat()
         canvas.drawLine(endX, endY, x2, y2, paint)
+    }
+
+    private fun outlineColorFor(color: androidx.compose.ui.graphics.Color): androidx.compose.ui.graphics.Color {
+        return if (color.luminance() > 0.6f) {
+            androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.92f)
+        } else {
+            androidx.compose.ui.graphics.Color.White.copy(alpha = 0.92f)
+        }
     }
 }
