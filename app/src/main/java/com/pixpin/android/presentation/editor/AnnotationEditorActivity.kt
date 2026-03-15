@@ -159,9 +159,21 @@ class AnnotationEditorActivity : ComponentActivity() {
                         currentColor = viewModel.currentColor.value,
                         strokeWidth = viewModel.strokeWidth.value,
                         textSize = viewModel.textSize.value,
-                        onPathAdded = { path -> viewModel.addPath(path) },
+                        selectedTextIndex = viewModel.selectedTextIndex.value,
+                        onPathAdded = { path ->
+                            val index = viewModel.addPath(path)
+                            if (path is com.pixpin.android.domain.model.DrawingPath.TextPath) {
+                                viewModel.selectTextPath(index, path)
+                            }
+                        },
                         onPathUpdated = { index, path -> viewModel.updatePath(index, path) },
                         onPathRemoved = { index -> viewModel.removePath(index) },
+                        onTextSelectionChanged = { index, path ->
+                            viewModel.selectTextPath(index, path)
+                            if (index != null) {
+                                viewModel.selectTool(DrawingTool.TEXT)
+                            }
+                        },
                         onCanvasSizeChanged = { editorCanvasSize = it }
                     )
                 }
@@ -320,6 +332,9 @@ fun EditorTopBar(
 
 @Composable
 fun EditorBottomBar(viewModel: AnnotationViewModel) {
+    val showTextControls =
+        viewModel.currentTool.value == DrawingTool.TEXT || viewModel.selectedTextIndex.value != null
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
@@ -366,7 +381,7 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (viewModel.currentTool.value == DrawingTool.TEXT) {
+            if (showTextControls) {
                 Text(
                     text = "文字大小: ${viewModel.textSize.value.toInt()}",
                     style = MaterialTheme.typography.labelMedium

@@ -3,6 +3,9 @@ package com.pixpin.android.domain.usecase
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.toArgb
@@ -94,14 +97,24 @@ class AnnotationRenderer {
                 }
 
                 is DrawingPath.TextPath -> {
-                    paint.color = path.color.toArgb()
-                    paint.style = Paint.Style.FILL
-                    paint.textSize = path.fontSize * path.scale * scaledDensity * scaleAverage
-                    val baseline = -paint.fontMetrics.ascent
+                    val textPaint = TextPaint(paint).apply {
+                        color = path.color.toArgb()
+                        style = Paint.Style.FILL
+                        textSize = path.fontSize * path.scale * scaledDensity * scaleAverage
+                    }
+                    val layoutWidth = path.text
+                        .split('\n')
+                        .maxOfOrNull { line -> textPaint.measureText(line).toInt() }
+                        ?.coerceAtLeast(1) ?: 1
+                    val staticLayout = StaticLayout.Builder
+                        .obtain(path.text, 0, path.text.length, textPaint, layoutWidth)
+                        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                        .setIncludePad(false)
+                        .build()
                     canvas.save()
                     canvas.translate(path.position.x * scaleX, path.position.y * scaleY)
                     canvas.rotate(path.rotation)
-                    canvas.drawText(path.text, 0f, baseline, paint)
+                    staticLayout.draw(canvas)
                     canvas.restore()
                 }
             }

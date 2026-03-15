@@ -13,6 +13,7 @@ class AnnotationViewModel : ViewModel() {
     val currentColor = mutableStateOf(Color.Red)
     val strokeWidth = mutableStateOf(5f)
     val textSize = mutableStateOf(28f)
+    val selectedTextIndex = mutableStateOf<Int?>(null)
 
     val paths = mutableStateListOf<DrawingPath>()
     private val undoPaths = mutableStateListOf<DrawingPath>()
@@ -29,15 +30,17 @@ class AnnotationViewModel : ViewModel() {
         Color.White
     )
 
-    fun addPath(path: DrawingPath) {
+    fun addPath(path: DrawingPath): Int {
         paths.add(path)
         undoPaths.clear()
+        return paths.lastIndex
     }
 
     fun replacePaths(newPaths: List<DrawingPath>) {
         paths.clear()
         paths.addAll(newPaths)
         undoPaths.clear()
+        selectedTextIndex.value = null
     }
 
     fun updatePath(index: Int, path: DrawingPath) {
@@ -50,12 +53,20 @@ class AnnotationViewModel : ViewModel() {
         if (index !in paths.indices) return
         paths.removeAt(index)
         undoPaths.clear()
+        if (selectedTextIndex.value == index) {
+            selectedTextIndex.value = null
+        } else if ((selectedTextIndex.value ?: -1) > index) {
+            selectedTextIndex.value = selectedTextIndex.value?.minus(1)
+        }
     }
 
     fun undo() {
         if (paths.isNotEmpty()) {
             val lastPath = paths.removeLast()
             undoPaths.add(lastPath)
+            if (selectedTextIndex.value == paths.size) {
+                selectedTextIndex.value = null
+            }
         }
     }
 
@@ -75,10 +86,33 @@ class AnnotationViewModel : ViewModel() {
 
     fun selectColor(color: Color) {
         currentColor.value = color
+        applyCurrentStyleToSelectedText()
     }
 
     fun selectTextSize(size: Float) {
         textSize.value = size.coerceIn(14f, 72f)
+        applyCurrentStyleToSelectedText()
+    }
+
+    fun selectTextPath(index: Int?, path: DrawingPath.TextPath?) {
+        selectedTextIndex.value = index
+        if (path != null) {
+            currentColor.value = path.color
+            textSize.value = path.fontSize
+        }
+    }
+
+    fun clearTextSelection() {
+        selectedTextIndex.value = null
+    }
+
+    private fun applyCurrentStyleToSelectedText() {
+        val index = selectedTextIndex.value ?: return
+        val path = paths.getOrNull(index) as? DrawingPath.TextPath ?: return
+        paths[index] = path.copy(
+            color = currentColor.value,
+            fontSize = textSize.value
+        )
     }
 
     fun clear() {

@@ -49,16 +49,17 @@ fun DrawingCanvas(
     currentColor: Color,
     strokeWidth: Float,
     textSize: Float,
+    selectedTextIndex: Int?,
     onPathAdded: (DrawingPath) -> Unit,
     onPathUpdated: (Int, DrawingPath) -> Unit,
     onPathRemoved: (Int) -> Unit,
+    onTextSelectionChanged: (Int?, DrawingPath.TextPath?) -> Unit,
     onCanvasSizeChanged: (Size) -> Unit
 ) {
     var currentPath by remember { mutableStateOf<Path?>(null) }
     var pathVersion by remember { mutableIntStateOf(0) }
     var startPoint by remember { mutableStateOf<Offset?>(null) }
     var endPoint by remember { mutableStateOf<Offset?>(null) }
-    var selectedTextIndex by remember { mutableStateOf<Int?>(null) }
     var showTextDialog by remember { mutableStateOf(false) }
     var textDraft by remember { mutableStateOf("") }
     var textTargetIndex by remember { mutableStateOf<Int?>(null) }
@@ -108,7 +109,7 @@ fun DrawingCanvas(
                     DrawingTool.PEN -> {
                         detectDragGestures(
                             onDragStart = { offset ->
-                                selectedTextIndex = null
+                                onTextSelectionChanged(null, null)
                                 currentPath = Path().apply { moveTo(offset.x, offset.y) }
                                 startPoint = offset
                             },
@@ -136,7 +137,7 @@ fun DrawingCanvas(
                     DrawingTool.ARROW, DrawingTool.RECTANGLE, DrawingTool.CIRCLE -> {
                         detectDragGestures(
                             onDragStart = { offset ->
-                                selectedTextIndex = null
+                                onTextSelectionChanged(null, null)
                                 startPoint = offset
                                 endPoint = offset
                             },
@@ -221,9 +222,9 @@ fun DrawingCanvas(
                         onTap = { offset ->
                             val hitIndex = hitTextIndexAt(offset)
                             if (hitIndex != null) {
-                                selectedTextIndex = hitIndex
+                                onTextSelectionChanged(hitIndex, paths.getOrNull(hitIndex) as? DrawingPath.TextPath)
                             } else {
-                                selectedTextIndex = null
+                                onTextSelectionChanged(null, null)
                                 openTextDialog(null, offset, "")
                             }
                         },
@@ -231,7 +232,7 @@ fun DrawingCanvas(
                             val hitIndex = hitTextIndexAt(offset)
                             val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
                             if (path != null) {
-                                selectedTextIndex = hitIndex
+                                onTextSelectionChanged(hitIndex, path)
                                 openTextDialog(hitIndex, path.position, path.text)
                             }
                         }
@@ -370,32 +371,30 @@ fun DrawingCanvas(
                         if (existingIndex != null) {
                             if (text.isEmpty()) {
                                 onPathRemoved(existingIndex)
-                                if (selectedTextIndex == existingIndex) {
-                                    selectedTextIndex = null
-                                }
+                                if (selectedTextIndex == existingIndex) onTextSelectionChanged(null, null)
                             } else {
                                 val oldPath = paths.getOrNull(existingIndex) as? DrawingPath.TextPath
                                 if (oldPath != null) {
+                                    val updatedPath = oldPath.copy(
+                                        text = text,
+                                        color = currentColor,
+                                        fontSize = textSize
+                                    )
                                     onPathUpdated(
                                         existingIndex,
-                                        oldPath.copy(
-                                            text = text,
-                                            color = currentColor
-                                        )
+                                        updatedPath
                                     )
-                                    selectedTextIndex = existingIndex
+                                    onTextSelectionChanged(existingIndex, updatedPath)
                                 }
                             }
                         } else if (text.isNotEmpty()) {
-                            onPathAdded(
-                                DrawingPath.TextPath(
-                                    position = textTargetPosition,
-                                    text = text,
-                                    color = currentColor,
-                                    fontSize = textSize
-                                )
+                            val newPath = DrawingPath.TextPath(
+                                position = textTargetPosition,
+                                text = text,
+                                color = currentColor,
+                                fontSize = textSize
                             )
-                            selectedTextIndex = paths.size
+                            onPathAdded(newPath)
                         }
                         textTargetIndex = null
                         showTextDialog = false
