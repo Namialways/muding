@@ -1,4 +1,4 @@
-﻿package com.pixpin.android.service
+package com.pixpin.android.service
 
 import android.app.Service
 import android.content.Context
@@ -6,18 +6,22 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
+import android.graphics.Rect as AndroidRect
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -50,12 +54,20 @@ import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.UUID
 import kotlin.math.roundToInt
 
 class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
+    private data class OverlayEntry(
+        val id: String,
+        val view: ComposeView,
+        val params: WindowManager.LayoutParams,
+        val bitmap: Bitmap
+    )
+
     private lateinit var windowManager: WindowManager
-    private var overlayView: ComposeView? = null
+    private val overlays = LinkedHashMap<String, OverlayEntry>()
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val serviceScope = CoroutineScope(Dispatchers.Main)
@@ -72,7 +84,6 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         captureFlowSettings = CaptureFlowSettings(this)
-
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
     }
@@ -106,13 +117,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         annotationSessionId: String?,
         scaleMode: PinScaleMode
     ) {
-        overlayView?.let {
-            try {
-                windowManager.removeView(it)
-            } catch (_: Exception) {
-            }
-        }
-
+        val overlayId = UUID.randomUUID().toString()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -126,28 +131,30 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 120
-            y = 220
+            x = 120 + overlays.size * 36
+            y = 220 + overlays.size * 36
         }
 
-        overlayView = ComposeView(this).apply {
+        val composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@PinOverlayService)
             setViewTreeSavedStateRegistryOwner(this@PinOverlayService)
-
             setContent {
                 PixPinTheme {
                     PinnedImageContent(
                         bitmap = bitmap,
                         scaleMode = scaleMode,
                         onMoveWindow = { dx, dy ->
-                            params.x += dx.roundToInt()
-                            params.y += dy.roundToInt()
-                            try {
-                                windowManager.updateViewLayout(this, params)
-                            } catch (_: Exception) {
-                            }
+                            val clamped = clampOverlayPosition(
+                                currentX = params.x + dx.roundToInt(),
+                                currentY = params.y + dy.roundToInt(),
+                                view = this,
+                                minVisiblePx = (resources.displayMetrics.density * 48f).roundToInt()
+                            )
+                            params.x = clamped.first
+                            params.y = clamped.second
+                            updateOverlayLayout(overlayId)
                         },
-                        onClose = { stopSelf() },
+                        onClose = { removeOverlay(overlayId) },
                         onEdit = {
                             val editorIntent = Intent(this@PinOverlayService, AnnotationEditorActivity::class.java).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -158,30 +165,89 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                                 }
                             }
                             startActivity(editorIntent)
-                            stopSelf()
+                            removeOverlay(overlayId)
                         }
                     )
                 }
             }
         }
 
+        val entry = OverlayEntry(
+            id = overlayId,
+            view = composeView,
+            params = params,
+            bitmap = bitmap
+        )
+        overlays[overlayId] = entry
+
         try {
-            windowManager.addView(overlayView, params)
+            windowManager.addView(composeView, params)
         } catch (e: Exception) {
+            overlays.remove(overlayId)
+            bitmap.recycle()
             e.printStackTrace()
+        }
+    }
+
+    private fun updateOverlayLayout(overlayId: String) {
+        val entry = overlays[overlayId] ?: return
+        try {
+            windowManager.updateViewLayout(entry.view, entry.params)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun removeOverlay(overlayId: String) {
+        val entry = overlays.remove(overlayId) ?: return
+        try {
+            windowManager.removeView(entry.view)
+        } catch (_: Exception) {
+        }
+        entry.bitmap.recycle()
+        if (overlays.isEmpty()) {
+            stopSelf()
+        }
+    }
+
+    private fun clampOverlayPosition(
+        currentX: Int,
+        currentY: Int,
+        view: ComposeView,
+        minVisiblePx: Int
+    ): Pair<Int, Int> {
+        val screen = getScreenBounds()
+        val viewWidth = view.width.takeIf { it > 0 } ?: 320
+        val viewHeight = view.height.takeIf { it > 0 } ?: 220
+        val minX = screen.left - viewWidth + minVisiblePx
+        val maxX = screen.right - minVisiblePx
+        val minY = screen.top - viewHeight + minVisiblePx
+        val maxY = screen.bottom - minVisiblePx
+        return currentX.coerceIn(minX, maxX) to currentY.coerceIn(minY, maxY)
+    }
+
+    private fun getScreenBounds(): AndroidRect {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            windowManager.currentWindowMetrics.bounds
+        } else {
+            @Suppress("DEPRECATION")
+            AndroidRect().also { rect ->
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay.getRectSize(rect)
+            }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
-        overlayView?.let {
+        overlays.values.toList().forEach { entry ->
             try {
-                windowManager.removeView(it)
+                windowManager.removeView(entry.view)
             } catch (_: Exception) {
             }
+            entry.bitmap.recycle()
         }
-        overlayView = null
+        overlays.clear()
     }
 
     companion object {
@@ -205,6 +271,13 @@ private fun PinnedImageContent(
     var uniformScale by remember { mutableStateOf(1f) }
     var freeScaleX by remember { mutableStateOf(1f) }
     var freeScaleY by remember { mutableStateOf(1f) }
+    var locked by remember { mutableStateOf(false) }
+
+    fun resetScale() {
+        uniformScale = 1f
+        freeScaleX = 1f
+        freeScaleY = 1f
+    }
 
     Box {
         Image(
@@ -216,23 +289,27 @@ private fun PinnedImageContent(
                     scaleX = if (scaleMode == PinScaleMode.LOCK_ASPECT) uniformScale else freeScaleX,
                     scaleY = if (scaleMode == PinScaleMode.LOCK_ASPECT) uniformScale else freeScaleY
                 )
-                .pointerInput(scaleMode) {
+                .pointerInput(scaleMode, locked) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        // Pan always moves pinned image window.
-                        if (pan.x != 0f || pan.y != 0f) {
+                        if (!locked && (pan.x != 0f || pan.y != 0f)) {
                             onMoveWindow(pan.x, pan.y)
                         }
-
-                        if (zoom != 1f) {
+                        if (!locked && zoom != 1f) {
                             if (scaleMode == PinScaleMode.LOCK_ASPECT) {
                                 uniformScale = (uniformScale * zoom).coerceIn(0.2f, 6f)
                             } else {
-                                // Free mode still supports pinch scaling on both axes.
                                 freeScaleX = (freeScaleX * zoom).coerceIn(0.2f, 6f)
                                 freeScaleY = (freeScaleY * zoom).coerceIn(0.2f, 6f)
                             }
                         }
                     }
+                }
+                .pointerInput(locked) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            if (!locked) resetScale()
+                        }
+                    )
                 }
         )
 
@@ -250,6 +327,24 @@ private fun PinnedImageContent(
                 Icons.Default.Edit,
                 contentDescription = "Edit",
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        FilledIconButton(
+            onClick = { locked = !locked },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 6.dp)
+                .size(30.dp),
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            )
+        ) {
+            Icon(
+                imageVector = if (locked) Icons.Default.Lock else Icons.Default.LockOpen,
+                contentDescription = if (locked) "Unlock" else "Lock",
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -273,7 +368,11 @@ private fun PinnedImageContent(
         }
 
         Text(
-            text = if (scaleMode == PinScaleMode.FREE_SCALE) "FREE" else "LOCK",
+            text = buildString {
+                append(if (scaleMode == PinScaleMode.FREE_SCALE) "FREE" else "LOCK")
+                append(" ? ")
+                append(if (locked) "PINNED" else "MOVE")
+            },
             color = Color.White,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier
