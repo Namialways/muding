@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -167,6 +168,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     FloatingBallContent(
                         onScreenshot = { handleScreenshot() },
                         onRestorePin = { restoreLastClosedPin() },
+                        onManagePins = { openPinManager() },
                         onSettings = { openSettings() },
                         onExit = { stopSelf() },
                         onPositionChange = { dx, dy ->
@@ -220,6 +222,14 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         startService(
             Intent(this, PinOverlayService::class.java).apply {
                 action = PinOverlayService.ACTION_RESTORE_LAST_CLOSED
+            }
+        )
+    }
+
+    private fun openPinManager() {
+        startService(
+            Intent(this, PinOverlayService::class.java).apply {
+                action = PinOverlayService.ACTION_OPEN_MANAGER
             }
         )
     }
@@ -352,6 +362,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 fun FloatingBallContent(
     onScreenshot: () -> Unit,
     onRestorePin: () -> Unit,
+    onManagePins: () -> Unit,
     onSettings: () -> Unit,
     onExit: () -> Unit,
     onPositionChange: (Float, Float) -> Unit,
@@ -401,6 +412,10 @@ fun FloatingBallContent(
                     isExpanded = false
                     onRestorePin()
                 },
+                onManagePins = {
+                    isExpanded = false
+                    onManagePins()
+                },
                 onSettings = {
                     isExpanded = false
                     onSettings()
@@ -447,6 +462,7 @@ fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
 fun FloatingMenu(
     onScreenshot: () -> Unit,
     onRestorePin: () -> Unit,
+    onManagePins: () -> Unit,
     onSettings: () -> Unit,
     onExit: () -> Unit
 ) {
@@ -466,6 +482,11 @@ fun FloatingMenu(
                 icon = Icons.Default.History,
                 text = "恢复已关闭贴图",
                 onClick = onRestorePin
+            )
+            MenuButton(
+                icon = Icons.Default.ViewList,
+                text = "贴图管理",
+                onClick = onManagePins
             )
             MenuButton(
                 icon = Icons.Default.Settings,
