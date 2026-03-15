@@ -79,6 +79,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val imageUriString = intent?.getStringExtra(EXTRA_IMAGE_URI)
+        val annotationSessionId = intent?.getStringExtra(EXTRA_ANNOTATION_SESSION_ID)
         if (!imageUriString.isNullOrBlank()) {
             val imageUri = android.net.Uri.parse(imageUriString)
             serviceScope.launch {
@@ -87,7 +88,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         BitmapFactory.decodeStream(input)
                     }
                     if (bitmap != null) {
-                        showPinOverlay(bitmap, imageUriString, captureFlowSettings.getPinScaleMode())
+                        showPinOverlay(bitmap, imageUriString, annotationSessionId, captureFlowSettings.getPinScaleMode())
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -99,7 +100,12 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun showPinOverlay(bitmap: Bitmap, imageUriString: String, scaleMode: PinScaleMode) {
+    private fun showPinOverlay(
+        bitmap: Bitmap,
+        imageUriString: String,
+        annotationSessionId: String?,
+        scaleMode: PinScaleMode
+    ) {
         overlayView?.let {
             try {
                 windowManager.removeView(it)
@@ -145,7 +151,11 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         onEdit = {
                             val editorIntent = Intent(this@PinOverlayService, AnnotationEditorActivity::class.java).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, imageUriString)
+                                if (!annotationSessionId.isNullOrBlank()) {
+                                    putExtra(AnnotationEditorActivity.EXTRA_ANNOTATION_SESSION_ID, annotationSessionId)
+                                } else {
+                                    putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, imageUriString)
+                                }
                             }
                             startActivity(editorIntent)
                             stopSelf()
@@ -176,6 +186,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     companion object {
         const val EXTRA_IMAGE_URI = "extra_image_uri"
+        const val EXTRA_ANNOTATION_SESSION_ID = "extra_annotation_session_id"
     }
 }
 

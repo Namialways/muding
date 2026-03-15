@@ -2,69 +2,126 @@ package com.pixpin.android.presentation.editor
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import com.pixpin.android.domain.model.DrawingPath
 import com.pixpin.android.domain.model.DrawingTool
+import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/**
- * 绘图画布组件
- */
 @Composable
 fun DrawingCanvas(
     modifier: Modifier = Modifier,
     paths: List<DrawingPath>,
     currentTool: DrawingTool,
-    currentColor: androidx.compose.ui.graphics.Color,
+    currentColor: Color,
     strokeWidth: Float,
-    onPathAdded: (DrawingPath) -> Unit
+    textSize: Float,
+    onPathAdded: (DrawingPath) -> Unit,
+    onPathUpdated: (Int, DrawingPath) -> Unit,
+    onPathRemoved: (Int) -> Unit,
+    onCanvasSizeChanged: (Size) -> Unit
 ) {
     var currentPath by remember { mutableStateOf<Path?>(null) }
-    var pathVersion by remember { mutableStateOf(0) }
+    var pathVersion by remember { mutableIntStateOf(0) }
     var startPoint by remember { mutableStateOf<Offset?>(null) }
     var endPoint by remember { mutableStateOf<Offset?>(null) }
+    var selectedTextIndex by remember { mutableStateOf<Int?>(null) }
+    var showTextDialog by remember { mutableStateOf(false) }
+    var textDraft by remember { mutableStateOf("") }
+    var textTargetIndex by remember { mutableStateOf<Int?>(null) }
+    var textTargetPosition by remember { mutableStateOf(Offset.Zero) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+
     val textMeasurer = rememberTextMeasurer()
+
+    fun measureText(path: DrawingPath.TextPath): TextLayoutResult {
+        return textMeasurer.measure(
+            text = path.text,
+            style = TextStyle(
+                color = path.color,
+                fontSize = (path.fontSize * path.scale).sp
+            )
+        )
+    }
+
+    fun hitTextIndexAt(offset: Offset): Int? {
+        for (i in paths.indices.reversed()) {
+            val path = paths[i]
+            if (path is DrawingPath.TextPath) {
+                if (isPointInsideText(path, measureText(path), offset)) {
+                    return i
+                }
+            }
+        }
+        return null
+    }
+
+    fun openTextDialog(index: Int?, position: Offset, initialText: String) {
+        textTargetIndex = index
+        textTargetPosition = position
+        textDraft = initialText
+        showTextDialog = true
+    }
 
     Canvas(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(currentTool) {
+            .onSizeChanged {
+                canvasSize = it
+                onCanvasSizeChanged(Size(it.width.toFloat(), it.height.toFloat()))
+            }
+            .pointerInput(currentTool, paths.size, selectedTextIndex) {
                 when (currentTool) {
                     DrawingTool.PEN -> {
                         detectDragGestures(
                             onDragStart = { offset ->
+                                selectedTextIndex = null
                                 currentPath = Path().apply { moveTo(offset.x, offset.y) }
                                 startPoint = offset
                             },
                             onDrag = { change, _ ->
                                 currentPath?.lineTo(change.position.x, change.position.y)
-                                // 强制触发重绘，让画笔跟手
                                 pathVersion++
+                                change.consume()
                             },
                             onDragEnd = {
                                 currentPath?.let { path ->
                                     onPathAdded(
                                         DrawingPath.PenPath(
-                                            path = Path().apply {
-                                                addPath(path)
-                                            },
+                                            path = Path().apply { addPath(path) },
                                             color = currentColor,
                                             strokeWidth = strokeWidth
                                         )
@@ -75,14 +132,17 @@ fun DrawingCanvas(
                             }
                         )
                     }
+
                     DrawingTool.ARROW, DrawingTool.RECTANGLE, DrawingTool.CIRCLE -> {
                         detectDragGestures(
                             onDragStart = { offset ->
+                                selectedTextIndex = null
                                 startPoint = offset
                                 endPoint = offset
                             },
                             onDrag = { change, _ ->
                                 endPoint = change.position
+                                change.consume()
                             },
                             onDragEnd = {
                                 val start = startPoint
@@ -99,26 +159,22 @@ fun DrawingCanvas(
                                                 )
                                             )
                                         }
+
                                         DrawingTool.RECTANGLE -> {
                                             onPathAdded(
                                                 DrawingPath.RectanglePath(
-                                                    topLeft = Offset(
-                                                        minOf(start.x, end.x),
-                                                        minOf(start.y, end.y)
-                                                    ),
-                                                    bottomRight = Offset(
-                                                        maxOf(start.x, end.x),
-                                                        maxOf(start.y, end.y)
-                                                    ),
+                                                    topLeft = Offset(minOf(start.x, end.x), minOf(start.y, end.y)),
+                                                    bottomRight = Offset(maxOf(start.x, end.x), maxOf(start.y, end.y)),
                                                     color = currentColor,
                                                     strokeWidth = strokeWidth
                                                 )
                                             )
                                         }
+
                                         DrawingTool.CIRCLE -> {
                                             val radius = sqrt(
                                                 (end.x - start.x) * (end.x - start.x) +
-                                                (end.y - start.y) * (end.y - start.y)
+                                                    (end.y - start.y) * (end.y - start.y)
                                             )
                                             onPathAdded(
                                                 DrawingPath.CirclePath(
@@ -129,7 +185,8 @@ fun DrawingCanvas(
                                                 )
                                             )
                                         }
-                                        else -> {}
+
+                                        else -> Unit
                                     }
                                 }
                                 startPoint = null
@@ -137,12 +194,52 @@ fun DrawingCanvas(
                             }
                         )
                     }
-                    else -> {}
+
+                    DrawingTool.TEXT -> Unit
+                }
+            }
+            .pointerInput(currentTool, selectedTextIndex, paths.size) {
+                if (currentTool == DrawingTool.TEXT) {
+                    detectTransformGestures { _, pan, zoom, rotation ->
+                        val index = selectedTextIndex ?: return@detectTransformGestures
+                        val path = paths.getOrNull(index) as? DrawingPath.TextPath ?: return@detectTransformGestures
+                        if (pan == Offset.Zero && zoom == 1f && rotation == 0f) return@detectTransformGestures
+                        onPathUpdated(
+                            index,
+                            path.copy(
+                                position = path.position + pan,
+                                scale = (path.scale * zoom).coerceIn(0.5f, 6f),
+                                rotation = normalizeRotation(path.rotation + rotation)
+                            )
+                        )
+                    }
+                }
+            }
+            .pointerInput(currentTool, paths.size) {
+                if (currentTool == DrawingTool.TEXT) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            val hitIndex = hitTextIndexAt(offset)
+                            if (hitIndex != null) {
+                                selectedTextIndex = hitIndex
+                            } else {
+                                selectedTextIndex = null
+                                openTextDialog(null, offset, "")
+                            }
+                        },
+                        onDoubleTap = { offset ->
+                            val hitIndex = hitTextIndexAt(offset)
+                            val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
+                            if (path != null) {
+                                selectedTextIndex = hitIndex
+                                openTextDialog(hitIndex, path.position, path.text)
+                            }
+                        }
+                    )
                 }
             }
     ) {
-        // 绘制所有已保存的路径
-        paths.forEach { drawingPath ->
+        paths.forEachIndexed { index, drawingPath ->
             when (drawingPath) {
                 is DrawingPath.PenPath -> {
                     drawPath(
@@ -155,6 +252,7 @@ fun DrawingCanvas(
                         )
                     )
                 }
+
                 is DrawingPath.ArrowPath -> {
                     drawArrow(
                         start = drawingPath.start,
@@ -163,17 +261,19 @@ fun DrawingCanvas(
                         strokeWidth = drawingPath.strokeWidth
                     )
                 }
+
                 is DrawingPath.RectanglePath -> {
                     drawRect(
                         color = drawingPath.color,
                         topLeft = drawingPath.topLeft,
-                        size = androidx.compose.ui.geometry.Size(
+                        size = Size(
                             drawingPath.bottomRight.x - drawingPath.topLeft.x,
                             drawingPath.bottomRight.y - drawingPath.topLeft.y
                         ),
                         style = if (drawingPath.filled) Fill else Stroke(width = drawingPath.strokeWidth)
                     )
                 }
+
                 is DrawingPath.CirclePath -> {
                     drawCircle(
                         color = drawingPath.color,
@@ -182,26 +282,27 @@ fun DrawingCanvas(
                         style = if (drawingPath.filled) Fill else Stroke(width = drawingPath.strokeWidth)
                     )
                 }
+
                 is DrawingPath.TextPath -> {
-                    val textLayoutResult = textMeasurer.measure(
-                        text = drawingPath.text,
-                        style = TextStyle(
-                            color = drawingPath.color,
-                            fontSize = drawingPath.fontSize.sp
+                    val textLayout = measureText(drawingPath)
+                    rotate(drawingPath.rotation, pivot = drawingPath.position) {
+                        drawText(
+                            textLayoutResult = textLayout,
+                            topLeft = drawingPath.position
                         )
-                    )
-                    drawText(
-                        textLayoutResult = textLayoutResult,
-                        topLeft = drawingPath.position
-                    )
+                    }
+
+                    if (selectedTextIndex == index && currentTool == DrawingTool.TEXT) {
+                        drawTextSelection(drawingPath, textLayout)
+                    }
                 }
             }
         }
 
-        // 绘制当前正在绘制的路径（pathVersion 用于触发重绘）
         if (pathVersion >= 0) {
-            // no-op: 仅用于触发重组
+            // Trigger recomposition during free draw.
         }
+
         currentPath?.let { path ->
             drawPath(
                 path = path,
@@ -214,29 +315,27 @@ fun DrawingCanvas(
             )
         }
 
-        // 绘制当前正在绘制的形状预览
         val start = startPoint
         val end = endPoint
         if (start != null && end != null) {
             when (currentTool) {
-                DrawingTool.ARROW -> {
-                    drawArrow(start, end, currentColor, strokeWidth)
-                }
+                DrawingTool.ARROW -> drawArrow(start, end, currentColor, strokeWidth)
                 DrawingTool.RECTANGLE -> {
                     drawRect(
                         color = currentColor,
                         topLeft = Offset(minOf(start.x, end.x), minOf(start.y, end.y)),
-                        size = androidx.compose.ui.geometry.Size(
+                        size = Size(
                             maxOf(start.x, end.x) - minOf(start.x, end.x),
                             maxOf(start.y, end.y) - minOf(start.y, end.y)
                         ),
                         style = Stroke(width = strokeWidth)
                     )
                 }
+
                 DrawingTool.CIRCLE -> {
                     val radius = sqrt(
                         (end.x - start.x) * (end.x - start.x) +
-                        (end.y - start.y) * (end.y - start.y)
+                            (end.y - start.y) * (end.y - start.y)
                     )
                     drawCircle(
                         color = currentColor,
@@ -245,22 +344,143 @@ fun DrawingCanvas(
                         style = Stroke(width = strokeWidth)
                     )
                 }
-                else -> {}
+
+                else -> Unit
             }
+        }
+    }
+
+    if (showTextDialog) {
+        AlertDialog(
+            onDismissRequest = { showTextDialog = false },
+            title = { Text(if (textTargetIndex == null) "Add text" else "Edit text") },
+            text = {
+                OutlinedTextField(
+                    value = textDraft,
+                    onValueChange = { textDraft = it },
+                    label = { Text("Text") },
+                    singleLine = false
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val text = textDraft.trim()
+                        val existingIndex = textTargetIndex
+                        if (existingIndex != null) {
+                            if (text.isEmpty()) {
+                                onPathRemoved(existingIndex)
+                                if (selectedTextIndex == existingIndex) {
+                                    selectedTextIndex = null
+                                }
+                            } else {
+                                val oldPath = paths.getOrNull(existingIndex) as? DrawingPath.TextPath
+                                if (oldPath != null) {
+                                    onPathUpdated(
+                                        existingIndex,
+                                        oldPath.copy(
+                                            text = text,
+                                            color = currentColor
+                                        )
+                                    )
+                                    selectedTextIndex = existingIndex
+                                }
+                            }
+                        } else if (text.isNotEmpty()) {
+                            onPathAdded(
+                                DrawingPath.TextPath(
+                                    position = textTargetPosition,
+                                    text = text,
+                                    color = currentColor,
+                                    fontSize = textSize
+                                )
+                            )
+                            selectedTextIndex = paths.size
+                        }
+                        textTargetIndex = null
+                        showTextDialog = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    textTargetIndex = null
+                    showTextDialog = false
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+private fun normalizeRotation(rotationDegrees: Float): Float {
+    var normalized = rotationDegrees
+    while (normalized <= -180f) normalized += 360f
+    while (normalized > 180f) normalized -= 360f
+    return normalized
+}
+
+private fun isPointInsideText(
+    path: DrawingPath.TextPath,
+    layout: TextLayoutResult,
+    point: Offset
+): Boolean {
+    val local = toLocalTextPoint(path, point)
+    return local.x in 0f..layout.size.width.toFloat() &&
+        local.y in 0f..layout.size.height.toFloat()
+}
+
+private fun toLocalTextPoint(path: DrawingPath.TextPath, point: Offset): Offset {
+    val translated = point - path.position
+    val radians = (-path.rotation * PI / 180f).toFloat()
+    val rotatedX = translated.x * cos(radians) - translated.y * sin(radians)
+    val rotatedY = translated.x * sin(radians) + translated.y * cos(radians)
+    return Offset(rotatedX, rotatedY)
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTextSelection(
+    path: DrawingPath.TextPath,
+    layout: TextLayoutResult
+) {
+    val rectColor = Color.White.copy(alpha = 0.9f)
+    val cornerColor = path.color
+    val width = layout.size.width.toFloat()
+    val height = layout.size.height.toFloat()
+    rotate(path.rotation, pivot = path.position) {
+        drawRect(
+            color = rectColor,
+            topLeft = path.position,
+            size = Size(width, height),
+            style = Stroke(width = 2f)
+        )
+
+        val cornerSize = 8f
+        val corners = listOf(
+            path.position,
+            path.position + Offset(width, 0f),
+            path.position + Offset(0f, height),
+            path.position + Offset(width, height)
+        )
+        corners.forEach { corner ->
+            drawCircle(
+                color = cornerColor,
+                radius = cornerSize,
+                center = corner,
+                style = Fill
+            )
         }
     }
 }
 
-/**
- * 绘制箭头
- */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawArrow(
     start: Offset,
     end: Offset,
-    color: androidx.compose.ui.graphics.Color,
+    color: Color,
     strokeWidth: Float
 ) {
-    // 绘制线段
     drawLine(
         color = color,
         start = start,
@@ -269,9 +489,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawArrow(
         cap = StrokeCap.Round
     )
 
-    // 计算箭头
     val arrowLength = 30f
-    val arrowAngle = Math.PI / 6 // 30度
+    val arrowAngle = Math.PI / 6
     val angle = atan2((end.y - start.y).toDouble(), (end.x - start.x).toDouble())
 
     val arrowPoint1 = Offset(
@@ -284,7 +503,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawArrow(
         (end.y - arrowLength * sin(angle + arrowAngle)).toFloat()
     )
 
-    // 绘制箭头
     drawLine(color = color, start = end, end = arrowPoint1, strokeWidth = strokeWidth, cap = StrokeCap.Round)
     drawLine(color = color, start = end, end = arrowPoint2, strokeWidth = strokeWidth, cap = StrokeCap.Round)
 }

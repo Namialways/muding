@@ -14,6 +14,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -26,14 +27,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.R
 import com.pixpin.android.domain.model.DrawingTool
+import com.pixpin.android.domain.usecase.AnnotationSession
+import com.pixpin.android.domain.usecase.AnnotationSessionStore
 import com.pixpin.android.domain.usecase.ImageSaver
 import com.pixpin.android.domain.usecase.CacheImageStore
 import com.pixpin.android.domain.usecase.CaptureResultAction
@@ -49,7 +52,9 @@ class AnnotationEditorActivity : ComponentActivity() {
     private val viewModel: AnnotationViewModel by viewModels()
     private lateinit var imageSaver: ImageSaver
     private lateinit var cacheImageStore: CacheImageStore
+    private var sourceImageUriString: String? = null
     private var capturedBitmap: Bitmap? = null
+    private var editorCanvasSize: Size = Size.Zero
     private val annotationRenderer = AnnotationRenderer()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,12 +63,15 @@ class AnnotationEditorActivity : ComponentActivity() {
         imageSaver = ImageSaver(this)
         cacheImageStore = CacheImageStore(this)
 
-        val uriString = intent.getStringExtra(EXTRA_IMAGE_URI)
+        val sessionId = intent.getStringExtra(EXTRA_ANNOTATION_SESSION_ID)
+        val restoredSession = sessionId?.let { AnnotationSessionStore.get(it) }
+        val uriString = restoredSession?.sourceImageUri ?: intent.getStringExtra(EXTRA_IMAGE_URI)
         if (uriString.isNullOrBlank()) {
             Toast.makeText(this, "无法加载截图", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
+        sourceImageUriString = uriString
 
         try {
             val uri = Uri.parse(uriString)
@@ -71,6 +79,10 @@ class AnnotationEditorActivity : ComponentActivity() {
                 capturedBitmap = BitmapFactory.decodeStream(input)
             }
             if (capturedBitmap == null) throw Exception("Bitmap could not be decoded.")
+            restoredSession?.let { session ->
+                editorCanvasSize = session.canvasSize
+                viewModel.replacePaths(session.paths)
+            }
         } catch (e: Exception) {
             Toast.makeText(this, "加载截图失败: ${e.message}", Toast.LENGTH_SHORT).show()
             finish()
@@ -113,27 +125,46 @@ class AnnotationEditorActivity : ComponentActivity() {
                 )
             }
         ) { paddingValues ->
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Screenshot",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
+                val imageAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height.toFloat()
+                val containerAspect = maxWidth.value / maxHeight.value
+                val imageModifier = if (containerAspect > imageAspect) {
+                    Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(imageAspect)
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(imageAspect)
+                }
 
-                DrawingCanvas(
-                    paths = viewModel.paths,
-                    currentTool = viewModel.currentTool.value,
-                    currentColor = viewModel.currentColor.value,
-                    strokeWidth = viewModel.strokeWidth.value,
-                    onPathAdded = { path ->
-                        viewModel.addPath(path)
-                    }
-                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .then(imageModifier)
+                ) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Screenshot",
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    DrawingCanvas(
+                        paths = viewModel.paths,
+                        currentTool = viewModel.currentTool.value,
+                        currentColor = viewModel.currentColor.value,
+                        strokeWidth = viewModel.strokeWidth.value,
+                        textSize = viewModel.textSize.value,
+                        onPathAdded = { path -> viewModel.addPath(path) },
+                        onPathUpdated = { index, path -> viewModel.updatePath(index, path) },
+                        onPathRemoved = { index -> viewModel.removePath(index) },
+                        onCanvasSizeChanged = { editorCanvasSize = it }
+                    )
+                }
             }
         }
     }
@@ -156,8 +187,18 @@ class AnnotationEditorActivity : ComponentActivity() {
             try {
                 val bitmap = createAnnotatedBitmap(originalBitmap)
                 val uri = cacheImageStore.writePngToCache(bitmap, "pinned", "pinned_image")
+                val sessionId = sourceImageUriString?.let { imageUri ->
+                    AnnotationSessionStore.put(
+                        AnnotationSession(
+                            sourceImageUri = imageUri,
+                            canvasSize = editorCanvasSize,
+                            paths = viewModel.paths.toList()
+                        )
+                    )
+                }
                 val intent = Intent(this@AnnotationEditorActivity, PinOverlayService::class.java).apply {
                     putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
+                    putExtra(PinOverlayService.EXTRA_ANNOTATION_SESSION_ID, sessionId)
                 }
                 startService(intent)
                 Toast.makeText(this@AnnotationEditorActivity, R.string.image_pinned, Toast.LENGTH_SHORT).show()
@@ -203,7 +244,12 @@ class AnnotationEditorActivity : ComponentActivity() {
     }
 
     private fun createAnnotatedBitmap(originalBitmap: Bitmap): Bitmap {
-        return annotationRenderer.render(originalBitmap, viewModel.paths)
+        return annotationRenderer.render(
+            originalBitmap = originalBitmap,
+            paths = viewModel.paths,
+            sourceCanvasSize = editorCanvasSize,
+            scaledDensity = resources.displayMetrics.scaledDensity
+        )
     }
 
     private fun closeScreenshotFlow() {
@@ -222,6 +268,7 @@ class AnnotationEditorActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_IMAGE_URI = "extra_image_uri"
+        const val EXTRA_ANNOTATION_SESSION_ID = "extra_annotation_session_id"
     }
 }
 
@@ -309,9 +356,28 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
                     isSelected = viewModel.currentTool.value == DrawingTool.CIRCLE,
                     onClick = { viewModel.selectTool(DrawingTool.CIRCLE) }
                 )
+                ToolButton(
+                    icon = Icons.Default.TextFields,
+                    text = "文字",
+                    isSelected = viewModel.currentTool.value == DrawingTool.TEXT,
+                    onClick = { viewModel.selectTool(DrawingTool.TEXT) }
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            if (viewModel.currentTool.value == DrawingTool.TEXT) {
+                Text(
+                    text = "文字大小: ${viewModel.textSize.value.toInt()}",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Slider(
+                    value = viewModel.textSize.value,
+                    onValueChange = { viewModel.selectTextSize(it) },
+                    valueRange = 14f..72f
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
