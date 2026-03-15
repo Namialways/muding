@@ -18,6 +18,12 @@ data class AnnotationSession(
     val paths: List<DrawingPath>
 )
 
+data class AnnotationSessionFile(
+    val id: String,
+    val file: File,
+    val lastModified: Long
+)
+
 object AnnotationSessionStore {
     private const val DIRECTORY_NAME = "annotation_sessions"
     private val memoryCache = ConcurrentHashMap<String, AnnotationSession>()
@@ -27,12 +33,14 @@ object AnnotationSessionStore {
         val copied = session.copy(paths = session.paths.map { it.deepCopy() })
         memoryCache[id] = copied
         sessionFile(context, id).writeText(serializeSession(copied), Charsets.UTF_8)
+        touchFile(context, id)
         return id
     }
 
     fun get(context: Context, sessionId: String): AnnotationSession? {
         val memory = memoryCache[sessionId]
         if (memory != null) {
+            touchFile(context, sessionId)
             return memory.copy(paths = memory.paths.map { it.deepCopy() })
         }
         val file = sessionFile(context, sessionId)
@@ -40,14 +48,66 @@ object AnnotationSessionStore {
         val restored = deserializeSession(file.readText(Charsets.UTF_8))
         if (restored != null) {
             memoryCache[sessionId] = restored
+            touchFile(context, sessionId)
             return restored.copy(paths = restored.paths.map { it.deepCopy() })
         }
         return null
     }
 
+    fun visibleDirectoryPath(context: Context): String {
+        return sessionsDirectory(context).absolutePath
+    }
+
+    fun sessionCount(context: Context): Int {
+        return listSessionFiles(context).size
+    }
+
+    fun clearAll(context: Context) {
+        listSessionFiles(context).forEach { entry ->
+            entry.file.delete()
+            memoryCache.remove(entry.id)
+        }
+    }
+
+    fun prune(context: Context, maxCount: Int, maxDays: Int) {
+        val now = System.currentTimeMillis()
+        val cutoff = now - (maxDays.coerceAtLeast(1).toLong() * 24L * 60L * 60L * 1000L)
+        val all = listSessionFiles(context)
+        all.filter { it.lastModified < cutoff }.forEach { entry ->
+            entry.file.delete()
+            memoryCache.remove(entry.id)
+        }
+        val remaining = listSessionFiles(context)
+        if (remaining.size > maxCount) {
+            remaining.drop(maxCount.coerceAtLeast(1)).forEach { entry ->
+                entry.file.delete()
+                memoryCache.remove(entry.id)
+            }
+        }
+    }
+
+    fun listSessionFiles(context: Context): List<AnnotationSessionFile> {
+        return sessionsDirectory(context)
+            .listFiles { file -> file.extension.equals("json", ignoreCase = true) }
+            ?.mapNotNull { file ->
+                val id = file.nameWithoutExtension.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                AnnotationSessionFile(id = id, file = file, lastModified = file.lastModified())
+            }
+            ?.sortedByDescending { it.lastModified }
+            ?: emptyList()
+    }
+
+    private fun sessionsDirectory(context: Context): File {
+        val externalRoot = context.getExternalFilesDir("records") ?: context.filesDir
+        return File(externalRoot, DIRECTORY_NAME).apply { mkdirs() }
+    }
+
     private fun sessionFile(context: Context, sessionId: String): File {
-        val dir = File(context.filesDir, DIRECTORY_NAME).apply { mkdirs() }
-        return File(dir, "$sessionId.json")
+        return File(sessionsDirectory(context), "$sessionId.json")
+    }
+
+    private fun touchFile(context: Context, sessionId: String) {
+        sessionFile(context, sessionId).setLastModified(System.currentTimeMillis())
     }
 
     private fun serializeSession(session: AnnotationSession): String {

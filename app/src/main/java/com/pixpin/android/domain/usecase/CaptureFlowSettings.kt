@@ -1,4 +1,4 @@
-package com.pixpin.android.domain.usecase
+﻿package com.pixpin.android.domain.usecase
 
 import android.content.Context
 
@@ -38,9 +38,27 @@ class CaptureFlowSettings(context: Context) {
         prefs.edit().putString(KEY_PIN_SCALE_MODE, mode.value).apply()
     }
 
+    fun getMaxSessionCount(): Int {
+        return prefs.getInt(KEY_MAX_SESSION_COUNT, 50).coerceIn(1, 500)
+    }
+
+    fun setMaxSessionCount(count: Int) {
+        prefs.edit().putInt(KEY_MAX_SESSION_COUNT, count.coerceIn(1, 500)).apply()
+    }
+
+    fun getRetainDays(): Int {
+        return prefs.getInt(KEY_RETAIN_DAYS, 7).coerceIn(1, 365)
+    }
+
+    fun setRetainDays(days: Int) {
+        prefs.edit().putInt(KEY_RETAIN_DAYS, days.coerceIn(1, 365)).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "pixpin_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"
         private const val KEY_PIN_SCALE_MODE = "pin_scale_mode"
+        private const val KEY_MAX_SESSION_COUNT = "max_session_count"
+        private const val KEY_RETAIN_DAYS = "retain_days"
     }
 }

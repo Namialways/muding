@@ -1,4 +1,4 @@
-package com.pixpin.android.presentation.crop
+﻿package com.pixpin.android.presentation.crop
 
 import android.content.Intent
 import android.graphics.Bitmap
@@ -75,7 +75,7 @@ class RegionCropActivity : ComponentActivity() {
 
         val uriString = intent.getStringExtra(EXTRA_IMAGE_URI)
         if (uriString.isNullOrBlank()) {
-            Toast.makeText(this, "Unable to load screenshot", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "无法加载截图", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -87,7 +87,7 @@ class RegionCropActivity : ComponentActivity() {
             }
             if (sourceBitmap == null) throw IllegalStateException("Bitmap decode failed")
         } catch (e: Exception) {
-            Toast.makeText(this, "Failed to load screenshot: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "截图加载失败：${e.message}", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -138,7 +138,7 @@ class RegionCropActivity : ComponentActivity() {
                 startActivity(editorIntent)
                 finish()
             } catch (e: Exception) {
-                Toast.makeText(this@RegionCropActivity, "Region crop failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@RegionCropActivity, "区域裁剪失败：${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -183,7 +183,7 @@ private fun CropOverlayScreen(
     ) {
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Crop Source",
+            contentDescription = "裁剪原图",
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(imageRectOnScreen) {
@@ -298,7 +298,7 @@ private fun CropOverlayScreen(
         }
 
         Text(
-            text = "Tap for full screen. Drag to create, move, or resize selection.",
+            text = "点击可全屏截图，拖拽可创建、移动或缩放选区。",
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 16.dp),
@@ -314,7 +314,7 @@ private fun CropOverlayScreen(
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "Close",
+                contentDescription = "关闭",
                 tint = Color.White
             )
         }
@@ -332,7 +332,7 @@ private fun CropOverlayScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Confirm",
+                    contentDescription = "确认",
                     tint = Color.White
                 )
             }
@@ -498,3 +498,4 @@ private fun toBitmapRect(selection: Rect, imageRectOnScreen: Rect, bitmapWidth: 
         bottom = bottom.coerceIn(0f, bitmapHeight.toFloat())
     )
 }
+

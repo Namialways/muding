@@ -56,6 +56,8 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.PinScaleMode
+import com.pixpin.android.domain.usecase.RecentPinStore
+import com.pixpin.android.domain.usecase.ClosedPinRecord
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.CoroutineScope
@@ -97,6 +99,10 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_RESTORE_LAST_CLOSED) {
+            restoreLastClosedOverlay()
+            return START_NOT_STICKY
+        }
         val imageUriString = intent?.getStringExtra(EXTRA_IMAGE_URI)
         val annotationSessionId = intent?.getStringExtra(EXTRA_ANNOTATION_SESSION_ID)
         if (!imageUriString.isNullOrBlank()) {
@@ -118,6 +124,27 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun restoreLastClosedOverlay() {
+        val record = RecentPinStore.popMostRecent(this) ?: return
+        serviceScope.launch {
+            try {
+                val bitmap = contentResolver.openInputStream(android.net.Uri.parse(record.imageUri))?.use { input ->
+                    BitmapFactory.decodeStream(input)
+                }
+                if (bitmap != null) {
+                    showPinOverlay(
+                        bitmap = bitmap,
+                        imageUriString = record.imageUri,
+                        annotationSessionId = record.annotationSessionId,
+                        scaleMode = captureFlowSettings.getPinScaleMode()
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     private fun showPinOverlay(
         bitmap: Bitmap,
@@ -177,7 +204,16 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             params.y = clamped.second
                             updateOverlayLayout(overlayId)
                         },
-                        onClose = { removeOverlay(overlayId) },
+                        onClose = {
+                            RecentPinStore.push(
+                                this@PinOverlayService,
+                                ClosedPinRecord(
+                                    imageUri = imageUriString,
+                                    annotationSessionId = annotationSessionId
+                                )
+                            )
+                            removeOverlay(overlayId)
+                        },
                         onEdit = {
                             val editorIntent = Intent(this@PinOverlayService, AnnotationEditorActivity::class.java).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -275,6 +311,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     companion object {
+        const val ACTION_RESTORE_LAST_CLOSED = "com.pixpin.android.action.RESTORE_LAST_CLOSED"
         const val EXTRA_IMAGE_URI = "extra_image_uri"
         const val EXTRA_ANNOTATION_SESSION_ID = "extra_annotation_session_id"
     }
@@ -362,7 +399,7 @@ private fun PinnedImageContent(
     ) {
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Pinned Image",
+            contentDescription = "贴图",
             modifier = Modifier.requiredSize(displayWidth, displayHeight)
         )
 
@@ -378,7 +415,7 @@ private fun PinnedImageContent(
         ) {
             Icon(
                 Icons.Default.Edit,
-                contentDescription = "Edit",
+                contentDescription = "编辑",
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(18.dp)
             )
@@ -396,7 +433,7 @@ private fun PinnedImageContent(
         ) {
             Icon(
                 imageVector = if (locked) Icons.Default.Lock else Icons.Default.LockOpen,
-                contentDescription = if (locked) "Unlock" else "Lock",
+                contentDescription = if (locked) "解锁" else "锁定",
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(18.dp)
             )
@@ -414,7 +451,7 @@ private fun PinnedImageContent(
         ) {
             Icon(
                 Icons.Default.Close,
-                contentDescription = "Close",
+                contentDescription = "关闭",
                 tint = MaterialTheme.colorScheme.onErrorContainer,
                 modifier = Modifier.size(18.dp)
             )
@@ -422,9 +459,9 @@ private fun PinnedImageContent(
 
         Text(
             text = buildString {
-                append(if (scaleMode == PinScaleMode.FREE_SCALE) "FREE" else "LOCK")
+                append(if (scaleMode == PinScaleMode.FREE_SCALE) "自由缩放" else "等比缩放")
                 append(" | ")
-                append(if (locked) "PINNED" else "MOVE")
+                append(if (locked) "已锁定" else "可移动")
             },
             color = Color.White,
             style = MaterialTheme.typography.labelSmall,

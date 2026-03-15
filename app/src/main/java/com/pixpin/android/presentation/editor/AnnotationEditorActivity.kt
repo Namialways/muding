@@ -40,6 +40,7 @@ import com.pixpin.android.domain.usecase.AnnotationSessionStore
 import com.pixpin.android.domain.usecase.ImageSaver
 import com.pixpin.android.domain.usecase.CacheImageStore
 import com.pixpin.android.domain.usecase.CaptureResultAction
+import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.presentation.crop.RegionCropActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.PinOverlayService
@@ -52,6 +53,7 @@ class AnnotationEditorActivity : ComponentActivity() {
     private val viewModel: AnnotationViewModel by viewModels()
     private lateinit var imageSaver: ImageSaver
     private lateinit var cacheImageStore: CacheImageStore
+    private lateinit var captureFlowSettings: CaptureFlowSettings
     private var sourceImageUriString: String? = null
     private var capturedBitmap: Bitmap? = null
     private var editorCanvasSize: Size = Size.Zero
@@ -62,6 +64,7 @@ class AnnotationEditorActivity : ComponentActivity() {
 
         imageSaver = ImageSaver(this)
         cacheImageStore = CacheImageStore(this)
+        captureFlowSettings = CaptureFlowSettings(this)
 
         val sessionId = intent.getStringExtra(EXTRA_ANNOTATION_SESSION_ID)
         val restoredSession = sessionId?.let { AnnotationSessionStore.get(this, it) }
@@ -149,7 +152,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                 ) {
                     Image(
                         bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "Screenshot",
+                        contentDescription = "截图",
                         modifier = Modifier.fillMaxSize()
                     )
 
@@ -213,6 +216,11 @@ class AnnotationEditorActivity : ComponentActivity() {
                         )
                     )
                 }
+                AnnotationSessionStore.prune(
+                    this@AnnotationEditorActivity,
+                    maxCount = captureFlowSettings.getMaxSessionCount(),
+                    maxDays = captureFlowSettings.getRetainDays()
+                )
                 val intent = Intent(this@AnnotationEditorActivity, PinOverlayService::class.java).apply {
                     putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
                     putExtra(PinOverlayService.EXTRA_ANNOTATION_SESSION_ID, sessionId)
@@ -396,7 +404,7 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
 
             if (showTextControls) {
                 Text(
-                    text = "文字大小: ${viewModel.textSize.value.toInt()}",
+                    text = "文字大小：${viewModel.textSize.value.toInt()}",
                     style = MaterialTheme.typography.labelMedium
                 )
                 Slider(
@@ -425,7 +433,7 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
 
             if (showEraserControls) {
                 Text(
-                    text = "橡皮大小: ${viewModel.eraserSize.value.toInt()}",
+                    text = "橡皮大小：${viewModel.eraserSize.value.toInt()}",
                     style = MaterialTheme.typography.labelMedium
                 )
                 Slider(

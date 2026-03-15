@@ -1,51 +1,85 @@
-package com.pixpin.android.service
+﻿package com.pixpin.android.service
 
-import android.app.*
+import android.animation.ValueAnimator
+import android.app.Activity
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.graphics.Point
 import android.os.Build
 import android.os.IBinder
-import android.view.*
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Camera
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import android.animation.ValueAnimator
-import android.graphics.Point
-import android.view.animation.DecelerateInterpolator
-import android.content.pm.ServiceInfo
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pixpin.android.MainActivity
 import com.pixpin.android.R
-import android.app.Activity
-import androidx.lifecycle.lifecycleScope
-import com.pixpin.android.domain.usecase.ScreenshotManager
 import com.pixpin.android.domain.usecase.CacheImageStore
+import com.pixpin.android.domain.usecase.RecentPinStore
+import com.pixpin.android.domain.usecase.ScreenshotManager
 import com.pixpin.android.presentation.crop.RegionCropActivity
-import com.pixpin.android.presentation.theme.*
+import com.pixpin.android.presentation.theme.FloatingBallGradientEnd
+import com.pixpin.android.presentation.theme.FloatingBallGradientStart
+import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -72,13 +106,13 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         super.onCreate()
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
-        
+
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenshotManager = ScreenshotManager(this)
         cacheImageStore = CacheImageStore(this)
 
         showFloatingBall()
-        
+
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
     }
@@ -88,7 +122,6 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
             val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
             if (resultCode == Activity.RESULT_OK && resultData != null) {
-                // 用户已授权屏幕捕获，此时再提升为 mediaProjection 类型的前台服务
                 createNotificationChannel()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     startForeground(
@@ -99,7 +132,6 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 } else {
                     startForeground(NOTIFICATION_ID, createNotification())
                 }
-
                 screenshotManager.initMediaProjection(resultCode, resultData)
                 captureAndOpenEditor()
             }
@@ -113,11 +145,12 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
+            } else {
                 @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -129,34 +162,31 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         floatingView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@FloatingBallService)
             setViewTreeSavedStateRegistryOwner(this@FloatingBallService)
-            
             setContent {
                 PixPinTheme {
                     FloatingBallContent(
                         onScreenshot = { handleScreenshot() },
+                        onRestorePin = { restoreLastClosedPin() },
                         onSettings = { openSettings() },
                         onExit = { stopSelf() },
                         onPositionChange = { dx, dy ->
-                            cancelSnap() // 正在拖动，取消贴边计划
-
+                            cancelSnap()
                             params.x += dx.roundToInt()
                             params.y += dy.roundToInt()
 
-                            // clamp 到屏幕范围
                             val display = windowManager.defaultDisplay
                             val size = Point()
                             display.getRealSize(size)
 
-                            params.x = params.x.coerceIn(0, size.x - 200) // 200: 悬浮球最大宽度
+                            params.x = params.x.coerceIn(0, size.x - 200)
                             params.y = params.y.coerceIn(0, size.y - 200)
 
                             try {
                                 windowManager.updateViewLayout(this, params)
-                            } catch (_: Exception) { }
+                            } catch (_: Exception) {
+                            }
                         },
-                        onDragEnd = {
-                            scheduleSnapToEdge(params)
-                        }
+                        onDragEnd = { scheduleSnapToEdge(params) }
                     )
                 }
             }
@@ -170,7 +200,6 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun handleScreenshot() {
-        // 关键：截图前隐藏悬浮窗，避免把自己也截进去（一定要在 finally 里恢复）
         floatingView?.visibility = View.GONE
 
         if (screenshotManager.hasActiveProjection()) {
@@ -178,12 +207,21 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             return
         }
 
-        // Android 10+ 要求 MediaProjection 必须在声明了 mediaProjection 类型的前台服务中使用。
-        // 这里我们先拉起一个透明 Activity 获取授权结果，然后把 resultCode/data 回传给本 Service。
         val intent = Intent(this, ScreenshotPermissionActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
+    }
+
+    private fun restoreLastClosedPin() {
+        if (!RecentPinStore.hasRecent(this)) {
+            return
+        }
+        startService(
+            Intent(this, PinOverlayService::class.java).apply {
+                action = PinOverlayService.ACTION_RESTORE_LAST_CLOSED
+            }
+        )
     }
 
     private fun captureAndOpenEditor() {
@@ -191,7 +229,6 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             try {
                 val bitmap = screenshotManager.captureScreen()
                 val uri = cacheImageStore.writePngToCache(bitmap, "screenshots", "capture")
-
                 val editorIntent = Intent(this@FloatingBallService, RegionCropActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     putExtra(RegionCropActivity.EXTRA_IMAGE_URI, uri.toString())
@@ -199,10 +236,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 startActivity(editorIntent)
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Session may be invalidated by system; next capture will re-request permission.
                 screenshotManager.release()
             } finally {
-                // Capture ends (success or fail), always restore the floating ball.
                 mainHandler.post { floatingView?.visibility = View.VISIBLE }
             }
         }
@@ -219,10 +254,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "PixPin 服务",
+                "PixPin Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "PixPin 悬浮球服务通知"
+                description = "PixPin floating capture service"
             }
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager.createNotificationChannel(channel)
@@ -232,7 +267,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun createNotification(): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
+            this,
+            0,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -249,7 +286,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         cancelSnap()
         val runnable = Runnable { animateToEdge(params) }
         snapRunnable = runnable
-        mainHandler.postDelayed(runnable, 2500) // 2.5秒后贴边
+        mainHandler.postDelayed(runnable, 2500)
     }
 
     private fun cancelSnap() {
@@ -314,6 +351,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 @Composable
 fun FloatingBallContent(
     onScreenshot: () -> Unit,
+    onRestorePin: () -> Unit,
     onSettings: () -> Unit,
     onExit: () -> Unit,
     onPositionChange: (Float, Float) -> Unit,
@@ -328,24 +366,16 @@ fun FloatingBallContent(
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = {
-                        isExpanded = false
-                    },
-                    onDragEnd = {
-                        onDragEnd()
-                    },
-                    onDragCancel = {
-                        onDragEnd()
-                    },
+                    onDragStart = { isExpanded = false },
+                    onDragEnd = { onDragEnd() },
+                    onDragCancel = { onDragEnd() },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        // 只把“本次增量”交给 WindowManager 处理，避免 Compose offset 叠加造成范围错乱
                         onPositionChange(dragAmount.x, dragAmount.y)
                     }
                 )
             }
     ) {
-        // 悬浮球主按钮
         FloatingBall(
             isExpanded = isExpanded,
             onClick = {
@@ -357,7 +387,6 @@ fun FloatingBallContent(
             }
         )
 
-        // 展开的菜单
         AnimatedVisibility(
             visible = isExpanded,
             enter = fadeIn() + scaleIn(),
@@ -368,6 +397,10 @@ fun FloatingBallContent(
                     isExpanded = false
                     onScreenshot()
                 },
+                onRestorePin = {
+                    isExpanded = false
+                    onRestorePin()
+                },
                 onSettings = {
                     isExpanded = false
                     onSettings()
@@ -375,26 +408,14 @@ fun FloatingBallContent(
                 onExit = {
                     isExpanded = false
                     onExit()
-                },
-                onDismiss = { isExpanded = false }
-           )
+                }
+            )
         }
     }
 }
 
 @Composable
 fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
-    val infiniteTransition = rememberInfiniteTransition(label = "floating")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = EaseInOut),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
     Surface(
         modifier = Modifier
             .size(if (isExpanded) 200.dp else 60.dp)
@@ -407,17 +428,14 @@ fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
                 .fillMaxSize()
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(
-                            FloatingBallGradientStart,
-                            FloatingBallGradientEnd
-                        )
+                        colors = listOf(FloatingBallGradientStart, FloatingBallGradientEnd)
                     )
                 ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Camera,
-                contentDescription = "Screenshot",
+                contentDescription = "截图",
                 tint = Color.White,
                 modifier = Modifier.size(if (isExpanded) 80.dp else 32.dp)
             )
@@ -428,13 +446,13 @@ fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
 @Composable
 fun FloatingMenu(
     onScreenshot: () -> Unit,
+    onRestorePin: () -> Unit,
     onSettings: () -> Unit,
-    onExit: () -> Unit,
-    onDismiss: () -> Unit
+    onExit: () -> Unit
 ) {
     Card(
         modifier = Modifier
-            .width(200.dp)
+            .width(220.dp)
             .padding(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
@@ -443,6 +461,11 @@ fun FloatingMenu(
                 icon = Icons.Default.Camera,
                 text = "截图",
                 onClick = onScreenshot
+            )
+            MenuButton(
+                icon = Icons.Default.History,
+                text = "恢复已关闭贴图",
+                onClick = onRestorePin
             )
             MenuButton(
                 icon = Icons.Default.Settings,
