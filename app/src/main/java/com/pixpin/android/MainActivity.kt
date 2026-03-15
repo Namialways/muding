@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -26,7 +28,9 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,8 +42,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.pixpin.android.domain.usecase.AnnotationSessionStore
 import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.CaptureResultAction
@@ -80,6 +88,7 @@ class MainActivity : ComponentActivity() {
                         initialScaleMode = captureFlowSettings.getPinScaleMode(),
                         initialMaxSessionCount = captureFlowSettings.getMaxSessionCount(),
                         initialRetainDays = captureFlowSettings.getRetainDays(),
+                        initialPinShadowEnabled = captureFlowSettings.isPinShadowEnabledByDefault(),
                         recordsDirectory = AnnotationSessionStore.visibleDirectoryPath(this),
                         initialSessionFiles = AnnotationSessionStore.listSessionFiles(this),
                         initialRecentClosedPinCount = RecentPinStore.count(this),
@@ -100,6 +109,9 @@ class MainActivity : ComponentActivity() {
                                 maxCount = captureFlowSettings.getMaxSessionCount(),
                                 maxDays = captureFlowSettings.getRetainDays()
                             )
+                        },
+                        onDefaultPinShadowChanged = { enabled ->
+                            captureFlowSettings.setPinShadowEnabledByDefault(enabled)
                         },
                         onClearAllRecords = {
                             AnnotationSessionStore.clearAll(this)
@@ -163,6 +175,7 @@ fun MainScreen(
     initialScaleMode: PinScaleMode,
     initialMaxSessionCount: Int,
     initialRetainDays: Int,
+    initialPinShadowEnabled: Boolean,
     recordsDirectory: String,
     initialSessionFiles: List<com.pixpin.android.domain.usecase.AnnotationSessionFile>,
     initialRecentClosedPinCount: Int,
@@ -170,6 +183,7 @@ fun MainScreen(
     onScaleModeChanged: (PinScaleMode) -> Unit,
     onMaxSessionCountChanged: (Int) -> Unit,
     onRetainDaysChanged: (Int) -> Unit,
+    onDefaultPinShadowChanged: (Boolean) -> Unit,
     onClearAllRecords: () -> Unit,
     onRefreshRecords: () -> MainScreenSnapshot,
     onRequestPermission: () -> Unit,
@@ -180,6 +194,7 @@ fun MainScreen(
     var selectedScaleMode by remember { mutableStateOf(initialScaleMode) }
     var maxSessionCount by remember { mutableIntStateOf(initialMaxSessionCount) }
     var retainDays by remember { mutableIntStateOf(initialRetainDays) }
+    var defaultPinShadowEnabled by remember { mutableStateOf(initialPinShadowEnabled) }
     var sessionFiles by remember { mutableStateOf(initialSessionFiles) }
     var recentClosedPinCount by remember { mutableIntStateOf(initialRecentClosedPinCount) }
 
@@ -279,6 +294,31 @@ fun MainScreen(
                             onScaleModeChanged(PinScaleMode.FREE_SCALE)
                         }
                     )
+                    Divider()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "贴图默认阴影",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = if (defaultPinShadowEnabled) "新贴图默认带阴影" else "新贴图默认不带阴影",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = defaultPinShadowEnabled,
+                            onCheckedChange = {
+                                defaultPinShadowEnabled = it
+                                onDefaultPinShadowChanged(it)
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -290,9 +330,10 @@ fun MainScreen(
                         text = "工程记录保留策略",
                         style = MaterialTheme.typography.titleSmall
                     )
-                    StepperRow(
+                    NumberSettingRow(
                         title = "最多保留 $maxSessionCount 个工程",
-                        valueText = maxSessionCount.toString(),
+                        value = maxSessionCount,
+                        valueRange = 1..500,
                         onDecrease = {
                             maxSessionCount = (maxSessionCount - 1).coerceAtLeast(1)
                             onMaxSessionCountChanged(maxSessionCount)
@@ -302,11 +343,17 @@ fun MainScreen(
                             maxSessionCount = (maxSessionCount + 1).coerceAtMost(500)
                             onMaxSessionCountChanged(maxSessionCount)
                             refreshRecords()
+                        },
+                        onApply = { value ->
+                            maxSessionCount = value
+                            onMaxSessionCountChanged(value)
+                            refreshRecords()
                         }
                     )
-                    StepperRow(
+                    NumberSettingRow(
                         title = "只保留最近 $retainDays 天",
-                        valueText = retainDays.toString(),
+                        value = retainDays,
+                        valueRange = 1..365,
                         onDecrease = {
                             retainDays = (retainDays - 1).coerceAtLeast(1)
                             onRetainDaysChanged(retainDays)
@@ -315,6 +362,11 @@ fun MainScreen(
                         onIncrease = {
                             retainDays = (retainDays + 1).coerceAtMost(365)
                             onRetainDaysChanged(retainDays)
+                            refreshRecords()
+                        },
+                        onApply = { value ->
+                            retainDays = value
+                            onRetainDaysChanged(value)
                             refreshRecords()
                         }
                     )
@@ -427,25 +479,60 @@ fun MainScreen(
 }
 
 @Composable
-private fun StepperRow(
+private fun NumberSettingRow(
     title: String,
-    valueText: String,
+    value: Int,
+    valueRange: IntRange,
     onDecrease: () -> Unit,
-    onIncrease: () -> Unit
+    onIncrease: () -> Unit,
+    onApply: (Int) -> Unit
 ) {
-    Row(
+    var input by remember(value) { mutableStateOf(value.toString()) }
+    val focusManager = LocalFocusManager.current
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(valueText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             OutlinedButton(onClick = onDecrease) { Text("-") }
+            OutlinedTextField(
+                value = input,
+                onValueChange = { next ->
+                    if (next.all { it.isDigit() } && next.length <= 3) {
+                        input = next
+                    }
+                },
+                modifier = Modifier.width(88.dp),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        input.toIntOrNull()?.coerceIn(valueRange)?.let(onApply)
+                        focusManager.clearFocus()
+                    }
+                )
+            )
             OutlinedButton(onClick = onIncrease) { Text("+") }
+            OutlinedButton(
+                onClick = {
+                    input.toIntOrNull()?.coerceIn(valueRange)?.let(onApply)
+                    focusManager.clearFocus()
+                }
+            ) {
+                Text("设置")
+            }
         }
+        Text(
+            "支持直接输入具体数字",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

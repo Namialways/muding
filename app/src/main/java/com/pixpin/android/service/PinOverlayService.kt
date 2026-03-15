@@ -14,6 +14,7 @@ import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -40,11 +41,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,8 +60,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
@@ -80,7 +86,6 @@ import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlin.math.max
@@ -212,6 +217,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     PinnedImageContent(
                         bitmap = bitmap,
                         scaleMode = scaleMode,
+                        defaultShadowEnabled = captureFlowSettings.isPinShadowEnabledByDefault(),
                         onContentSizeChanged = { width, height ->
                             params.width = width
                             params.height = height
@@ -494,6 +500,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 private fun PinnedImageContent(
     bitmap: Bitmap,
     scaleMode: PinScaleMode,
+    defaultShadowEnabled: Boolean,
     onContentSizeChanged: (Int, Int) -> Unit,
     onMoveWindow: (Float, Float) -> Unit,
     onClose: () -> Unit,
@@ -508,6 +515,9 @@ private fun PinnedImageContent(
     var freeScaleY by remember { mutableStateOf(1f) }
     var locked by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(false) }
+    var shadowEnabled by remember { mutableStateOf(defaultShadowEnabled) }
+    var cornerRadius by remember { mutableStateOf(0f) }
+    var cornerControlsVisible by remember { mutableStateOf(false) }
 
     fun resetScale() {
         uniformScale = 1f
@@ -542,16 +552,24 @@ private fun PinnedImageContent(
         displayHeight = (baseHeight * freeScaleY).coerceAtLeast(48.dp)
     }
 
-    LaunchedEffect(controlsVisible) {
-        if (controlsVisible) {
-            delay(2200)
-            controlsVisible = false
-        }
-    }
+    val controlsPreferOutside = displayWidth >= 180.dp && displayHeight >= 120.dp
+    val topControlsSpace = if (controlsPreferOutside) 44.dp else 0.dp
+    val bottomControlsSpace = if (controlsPreferOutside) 108.dp else 0.dp
+    val containerWidth = displayWidth
+    val containerHeight = displayHeight + topControlsSpace + bottomControlsSpace
+    val imageShape = RoundedCornerShape(cornerRadius.dp)
+    val glowShape = RoundedCornerShape((cornerRadius + 4f).dp)
+    val glowBrush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF8DE7FF).copy(alpha = 0.95f),
+            Color(0xFF54B5FF).copy(alpha = 0.9f),
+            Color(0xFF377BFF).copy(alpha = 0.95f)
+        )
+    )
 
     Box(
         modifier = Modifier
-            .requiredSize(displayWidth, displayHeight)
+            .requiredSize(containerWidth, containerHeight)
             .onSizeChanged { size ->
                 onContentSizeChanged(size.width, size.height)
             }
@@ -581,93 +599,211 @@ private fun PinnedImageContent(
                 )
             }
     ) {
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "贴图",
-            modifier = Modifier.requiredSize(displayWidth, displayHeight)
-        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = topControlsSpace)
+                .requiredSize(displayWidth, displayHeight)
+        ) {
+            if (shadowEnabled) {
+                Box(
+                    modifier = Modifier
+                        .requiredSize(displayWidth, displayHeight)
+                        .shadow(
+                            elevation = 28.dp,
+                            shape = glowShape,
+                            ambientColor = Color(0xFF3A93FF).copy(alpha = 0.65f),
+                            spotColor = Color(0xFF70D6FF).copy(alpha = 0.72f)
+                        )
+                        .border(
+                            width = 2.dp,
+                            brush = glowBrush,
+                            shape = glowShape
+                        )
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .requiredSize(displayWidth, displayHeight)
+                    .graphicsLayer {
+                        shape = imageShape
+                        clip = true
+                    }
+            ) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "贴图",
+                    modifier = Modifier.requiredSize(displayWidth, displayHeight)
+                )
+            }
+        }
 
         AnimatedVisibility(
             visible = controlsVisible,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            Box(modifier = Modifier.requiredSize(displayWidth, displayHeight)) {
-                FilledIconButton(
-                    onClick = {
-                        controlsVisible = false
-                        onEdit()
-                    },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .size(30.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "编辑",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                FilledIconButton(
-                    onClick = {
-                        locked = !locked
-                        controlsVisible = true
-                    },
-                    modifier = Modifier
+            Box(modifier = Modifier.requiredSize(containerWidth, containerHeight)) {
+                val topButtonsModifier = if (controlsPreferOutside) {
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 4.dp)
+                } else {
+                    Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 6.dp)
-                        .size(30.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (locked) Icons.Default.Lock else Icons.Default.LockOpen,
-                        contentDescription = if (locked) "解锁" else "锁定",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(18.dp)
-                    )
                 }
 
-                FilledIconButton(
-                    onClick = {
-                        controlsVisible = false
-                        onClose()
-                    },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(30.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
+                Row(
+                    modifier = topButtonsModifier,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "关闭",
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    FilledIconButton(
+                        onClick = {
+                            controlsVisible = false
+                            onEdit()
+                        },
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "编辑",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = { locked = !locked },
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Icon(
+                            imageVector = if (locked) Icons.Default.Lock else Icons.Default.LockOpen,
+                            contentDescription = if (locked) "解锁" else "锁定",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = { shadowEnabled = !shadowEnabled },
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = if (shadowEnabled) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                    ) {
+                        Text(
+                            text = "影",
+                            color = if (shadowEnabled) {
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = { cornerControlsVisible = !cornerControlsVisible },
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = if (cornerControlsVisible) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Tune,
+                            contentDescription = "圆角设置",
+                            tint = if (cornerControlsVisible) {
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = {
+                            controlsVisible = false
+                            cornerControlsVisible = false
+                            onClose()
+                        },
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "关闭",
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
-                Text(
-                    text = buildString {
-                        append(if (scaleMode == PinScaleMode.FREE_SCALE) "自由缩放" else "等比缩放")
-                        append(" | ")
-                        append(if (locked) "已锁定" else "可移动")
-                    },
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(6.dp)
-                )
+                Surface(
+                    color = Color.Black.copy(alpha = 0.72f),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = if (controlsPreferOutside) {
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 4.dp)
+                    } else {
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = 14.dp, vertical = 14.dp)
+                    }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = buildString {
+                                append(if (scaleMode == PinScaleMode.FREE_SCALE) "自由缩放" else "等比缩放")
+                                append(" | ")
+                                append(if (locked) "已锁定" else "可移动")
+                                append(" | ")
+                                append(if (shadowEnabled) "阴影已开" else "阴影已关")
+                            },
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        AnimatedVisibility(visible = cornerControlsVisible) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Spacer(modifier = Modifier.size(6.dp))
+                                Text(
+                                    text = "圆角：${cornerRadius.roundToInt()}",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Slider(
+                                    value = cornerRadius,
+                                    onValueChange = { cornerRadius = it },
+                                    valueRange = 0f..48f,
+                                    modifier = Modifier.width(displayWidth.coerceAtLeast(180.dp))
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 

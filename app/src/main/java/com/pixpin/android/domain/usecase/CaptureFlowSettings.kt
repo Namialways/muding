@@ -54,11 +54,20 @@ class CaptureFlowSettings(context: Context) {
         prefs.edit().putInt(KEY_RETAIN_DAYS, days.coerceIn(1, 365)).apply()
     }
 
+    fun isPinShadowEnabledByDefault(): Boolean {
+        return prefs.getBoolean(KEY_PIN_SHADOW_ENABLED, true)
+    }
+
+    fun setPinShadowEnabledByDefault(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PIN_SHADOW_ENABLED, enabled).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "pixpin_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"
         private const val KEY_PIN_SCALE_MODE = "pin_scale_mode"
         private const val KEY_MAX_SESSION_COUNT = "max_session_count"
         private const val KEY_RETAIN_DAYS = "retain_days"
+        private const val KEY_PIN_SHADOW_ENABLED = "pin_shadow_enabled"
     }
 }
