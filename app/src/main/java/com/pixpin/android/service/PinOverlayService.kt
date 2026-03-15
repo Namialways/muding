@@ -1,4 +1,4 @@
-package com.pixpin.android.service
+﻿package com.pixpin.android.service
 
 import android.app.Service
 import android.content.Context
@@ -12,10 +12,11 @@ import android.os.IBinder
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -36,9 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -143,11 +145,26 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     PinnedImageContent(
                         bitmap = bitmap,
                         scaleMode = scaleMode,
+                        onContentSizeChanged = { width, height ->
+                            params.width = width
+                            params.height = height
+                            val clamped = clampOverlayPosition(
+                                currentX = params.x,
+                                currentY = params.y,
+                                width = width,
+                                height = height,
+                                minVisiblePx = (resources.displayMetrics.density * 48f).roundToInt()
+                            )
+                            params.x = clamped.first
+                            params.y = clamped.second
+                            updateOverlayLayout(overlayId)
+                        },
                         onMoveWindow = { dx, dy ->
                             val clamped = clampOverlayPosition(
                                 currentX = params.x + dx.roundToInt(),
                                 currentY = params.y + dy.roundToInt(),
-                                view = this,
+                                width = params.width.takeIf { it > 0 } ?: this.width,
+                                height = params.height.takeIf { it > 0 } ?: this.height,
                                 minVisiblePx = (resources.displayMetrics.density * 48f).roundToInt()
                             )
                             params.x = clamped.first
@@ -212,12 +229,13 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun clampOverlayPosition(
         currentX: Int,
         currentY: Int,
-        view: ComposeView,
+        width: Int,
+        height: Int,
         minVisiblePx: Int
     ): Pair<Int, Int> {
         val screen = getScreenBounds()
-        val viewWidth = view.width.takeIf { it > 0 } ?: 320
-        val viewHeight = view.height.takeIf { it > 0 } ?: 220
+        val viewWidth = width.takeIf { it > 0 } ?: 320
+        val viewHeight = height.takeIf { it > 0 } ?: 220
         val minX = screen.left - viewWidth + minVisiblePx
         val maxX = screen.right - minVisiblePx
         val minY = screen.top - viewHeight + minVisiblePx
@@ -260,6 +278,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 private fun PinnedImageContent(
     bitmap: Bitmap,
     scaleMode: PinScaleMode,
+    onContentSizeChanged: (Int, Int) -> Unit,
     onMoveWindow: (Float, Float) -> Unit,
     onClose: () -> Unit,
     onEdit: () -> Unit
@@ -279,38 +298,49 @@ private fun PinnedImageContent(
         freeScaleY = 1f
     }
 
-    Box {
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Pinned Image",
-            modifier = Modifier
-                .size(baseWidth, baseHeight)
-                .graphicsLayer(
-                    scaleX = if (scaleMode == PinScaleMode.LOCK_ASPECT) uniformScale else freeScaleX,
-                    scaleY = if (scaleMode == PinScaleMode.LOCK_ASPECT) uniformScale else freeScaleY
-                )
-                .pointerInput(scaleMode, locked) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        if (!locked && (pan.x != 0f || pan.y != 0f)) {
-                            onMoveWindow(pan.x, pan.y)
-                        }
-                        if (!locked && zoom != 1f) {
-                            if (scaleMode == PinScaleMode.LOCK_ASPECT) {
-                                uniformScale = (uniformScale * zoom).coerceIn(0.2f, 6f)
-                            } else {
-                                freeScaleX = (freeScaleX * zoom).coerceIn(0.2f, 6f)
-                                freeScaleY = (freeScaleY * zoom).coerceIn(0.2f, 6f)
-                            }
+    val displayWidth: Dp
+    val displayHeight: Dp
+    if (scaleMode == PinScaleMode.LOCK_ASPECT) {
+        displayWidth = (baseWidth * uniformScale).coerceAtLeast(80.dp)
+        displayHeight = (baseHeight * uniformScale).coerceAtLeast(48.dp)
+    } else {
+        displayWidth = (baseWidth * freeScaleX).coerceAtLeast(80.dp)
+        displayHeight = (baseHeight * freeScaleY).coerceAtLeast(48.dp)
+    }
+
+    Box(
+        modifier = Modifier
+            .requiredSize(displayWidth, displayHeight)
+            .onSizeChanged { size ->
+                onContentSizeChanged(size.width, size.height)
+            }
+            .pointerInput(scaleMode, locked) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    if (!locked && (pan.x != 0f || pan.y != 0f)) {
+                        onMoveWindow(pan.x, pan.y)
+                    }
+                    if (!locked && zoom != 1f) {
+                        if (scaleMode == PinScaleMode.LOCK_ASPECT) {
+                            uniformScale = (uniformScale * zoom).coerceIn(0.2f, 6f)
+                        } else {
+                            freeScaleX = (freeScaleX * zoom).coerceIn(0.2f, 6f)
+                            freeScaleY = (freeScaleY * zoom).coerceIn(0.2f, 6f)
                         }
                     }
                 }
-                .pointerInput(locked) {
-                    detectTapGestures(
-                        onDoubleTap = {
-                            if (!locked) resetScale()
-                        }
-                    )
-                }
+            }
+            .pointerInput(locked) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        if (!locked) resetScale()
+                    }
+                )
+            }
+    ) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "Pinned Image",
+            modifier = Modifier.requiredSize(displayWidth, displayHeight)
         )
 
         FilledIconButton(
@@ -370,7 +400,7 @@ private fun PinnedImageContent(
         Text(
             text = buildString {
                 append(if (scaleMode == PinScaleMode.FREE_SCALE) "FREE" else "LOCK")
-                append(" ? ")
+                append(" | ")
                 append(if (locked) "PINNED" else "MOVE")
             },
             color = Color.White,
