@@ -1,4 +1,4 @@
-ï»¿package com.pixpin.android.service
+package com.pixpin.android.service
 
 import android.animation.ValueAnimator
 import android.app.Activity
@@ -10,6 +10,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.os.Build
@@ -57,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -75,24 +77,32 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pixpin.android.MainActivity
 import com.pixpin.android.R
 import com.pixpin.android.domain.usecase.CacheImageStore
+import com.pixpin.android.domain.usecase.CaptureFlowSettings
+import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.RecentPinStore
 import com.pixpin.android.domain.usecase.ScreenshotManager
-import com.pixpin.android.presentation.crop.RegionCropActivity
+import com.pixpin.android.presentation.crop.CaptureCropOverlay
+import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.FloatingBallGradientEnd
 import com.pixpin.android.presentation.theme.FloatingBallGradientStart
 import com.pixpin.android.presentation.theme.PixPinTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private lateinit var windowManager: WindowManager
     private var floatingView: ComposeView? = null
+    private var cropOverlayView: ComposeView? = null
+    private var cropOverlayBitmap: Bitmap? = null
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val lifecycleRegistry = LifecycleRegistry(this)
 
     private lateinit var screenshotManager: ScreenshotManager
     private lateinit var cacheImageStore: CacheImageStore
+    private lateinit var captureFlowSettings: CaptureFlowSettings
 
     private var snapAnimator: ValueAnimator? = null
     private var snapRunnable: Runnable? = null
@@ -111,6 +121,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenshotManager = ScreenshotManager(this)
         cacheImageStore = CacheImageStore(this)
+        captureFlowSettings = CaptureFlowSettings(this)
 
         showFloatingBall()
 
@@ -134,7 +145,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     startForeground(NOTIFICATION_ID, createNotification())
                 }
                 screenshotManager.initMediaProjection(resultCode, resultData)
-                captureAndOpenEditor()
+                captureAndShowCropOverlay()
+            } else {
+                floatingView?.visibility = View.VISIBLE
             }
         }
         return START_STICKY
@@ -205,7 +218,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         floatingView?.visibility = View.GONE
 
         if (screenshotManager.hasActiveProjection()) {
-            captureAndOpenEditor()
+            captureAndShowCropOverlay()
             return
         }
 
@@ -213,6 +226,130 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
+    }
+
+    private fun captureAndShowCropOverlay() {
+        lifecycleScope.launch {
+            try {
+                val bitmap = screenshotManager.captureScreen()
+                showCropOverlay(bitmap)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                screenshotManager.release()
+                restoreFloatingBall()
+            }
+        }
+    }
+
+    private fun showCropOverlay(bitmap: Bitmap) {
+        dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
+        cropOverlayBitmap = bitmap
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = 0
+        }
+
+        cropOverlayView = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@FloatingBallService)
+            setViewTreeSavedStateRegistryOwner(this@FloatingBallService)
+            setContent {
+                PixPinTheme {
+                    CaptureCropOverlay(
+                        bitmap = bitmap,
+                        onCancel = {
+                            dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = true)
+                        },
+                        onConfirm = { cropRect ->
+                            cropAndContinue(cropRect)
+                        }
+                    )
+                }
+            }
+        }
+
+        try {
+            windowManager.addView(cropOverlayView, params)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = true)
+        }
+    }
+
+    private fun cropAndContinue(cropRectInBitmap: Rect) {
+        val bitmap = cropOverlayBitmap ?: return
+        lifecycleScope.launch {
+            try {
+                val cropped = withContext(Dispatchers.Default) {
+                    val left = cropRectInBitmap.left.roundToInt().coerceIn(0, bitmap.width - 1)
+                    val top = cropRectInBitmap.top.roundToInt().coerceIn(0, bitmap.height - 1)
+                    val right = cropRectInBitmap.right.roundToInt().coerceIn(left + 1, bitmap.width)
+                    val bottom = cropRectInBitmap.bottom.roundToInt().coerceIn(top + 1, bitmap.height)
+                    Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
+                }
+
+                val uri = withContext(Dispatchers.IO) {
+                    cacheImageStore.writePngToCache(cropped, "screenshots", "region_capture")
+                }
+                cropped.recycle()
+
+                dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
+
+                if (captureFlowSettings.getResultAction() == CaptureResultAction.PIN_DIRECTLY) {
+                    val pinIntent = Intent(this@FloatingBallService, PinOverlayService::class.java).apply {
+                        putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
+                    }
+                    startService(pinIntent)
+                    restoreFloatingBall()
+                    return@launch
+                }
+
+                val editorIntent = Intent(this@FloatingBallService, AnnotationEditorActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, uri.toString())
+                }
+                startActivity(editorIntent)
+                restoreFloatingBall()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = true)
+            }
+        }
+    }
+
+    private fun dismissCropOverlay(recycleBitmap: Boolean, restoreFloatingBall: Boolean) {
+        cropOverlayView?.let {
+            try {
+                windowManager.removeView(it)
+            } catch (_: Exception) {
+            }
+        }
+        cropOverlayView = null
+        if (recycleBitmap) {
+            cropOverlayBitmap?.recycle()
+            cropOverlayBitmap = null
+        }
+        if (restoreFloatingBall) {
+            restoreFloatingBall()
+        }
+    }
+
+    private fun restoreFloatingBall() {
+        mainHandler.post {
+            floatingView?.visibility = View.VISIBLE
+        }
     }
 
     private fun restoreLastClosedPin() {
@@ -232,25 +369,6 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 action = PinOverlayService.ACTION_OPEN_MANAGER
             }
         )
-    }
-
-    private fun captureAndOpenEditor() {
-        lifecycleScope.launch {
-            try {
-                val bitmap = screenshotManager.captureScreen()
-                val uri = cacheImageStore.writePngToCache(bitmap, "screenshots", "capture")
-                val editorIntent = Intent(this@FloatingBallService, RegionCropActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    putExtra(RegionCropActivity.EXTRA_IMAGE_URI, uri.toString())
-                }
-                startActivity(editorIntent)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                screenshotManager.release()
-            } finally {
-                mainHandler.post { floatingView?.visibility = View.VISIBLE }
-            }
-        }
     }
 
     private fun openSettings() {
@@ -338,6 +456,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             screenshotManager.release()
         } catch (_: Exception) {
         }
+        dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
         floatingView?.let {
             try {
                 windowManager.removeView(it)
@@ -450,7 +569,7 @@ fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
         ) {
             Icon(
                 imageVector = Icons.Default.Camera,
-                contentDescription = "æˆªå›¾",
+                contentDescription = "½ØÍ¼",
                 tint = Color.White,
                 modifier = Modifier.size(if (isExpanded) 80.dp else 32.dp)
             )
@@ -475,27 +594,27 @@ fun FloatingMenu(
         Column(modifier = Modifier.padding(8.dp)) {
             MenuButton(
                 icon = Icons.Default.Camera,
-                text = "æˆªå›¾",
+                text = "½ØÍ¼",
                 onClick = onScreenshot
             )
             MenuButton(
                 icon = Icons.Default.History,
-                text = "æ¢å¤å·²å…³é—­è´´å›¾",
+                text = "»Ö¸´ÒÑ¹Ø±ÕÌùÍ¼",
                 onClick = onRestorePin
             )
             MenuButton(
                 icon = Icons.Default.ViewList,
-                text = "è´´å›¾ç®¡ç†",
+                text = "ÌùÍ¼¹ÜÀí",
                 onClick = onManagePins
             )
             MenuButton(
                 icon = Icons.Default.Settings,
-                text = "è®¾ç½®",
+                text = "ÉèÖÃ",
                 onClick = onSettings
             )
             MenuButton(
                 icon = Icons.Default.Close,
-                text = "é€€å‡º",
+                text = "ÍË³ö",
                 onClick = onExit
             )
         }
