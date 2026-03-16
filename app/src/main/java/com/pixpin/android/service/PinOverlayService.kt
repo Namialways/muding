@@ -313,8 +313,6 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             val entry = overlays[overlayId] ?: return@PinControlsOverlayContent
                             entry.controlsWidth = width
                             entry.controlsHeight = height
-                            entry.controlsParams.width = width
-                            entry.controlsParams.height = height
                             updateControlsLayout(overlayId)
                         },
                         onEdit = {
@@ -398,6 +396,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val visible = entry.visible && entry.uiState.controlsVisible
         entry.controlsView.visibility = if (visible) View.VISIBLE else View.GONE
         if (!visible) return
+        entry.controlsParams.width = WindowManager.LayoutParams.WRAP_CONTENT
+        entry.controlsParams.height = WindowManager.LayoutParams.WRAP_CONTENT
 
         val screen = getScreenBounds()
         val spacing = (resources.displayMetrics.density * 8f).roundToInt()

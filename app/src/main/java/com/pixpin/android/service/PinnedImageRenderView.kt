@@ -35,6 +35,7 @@ class PinnedImageRenderView(context: Context) : View(context) {
     var shadowEnabled: Boolean = false
         set(value) {
             field = value
+            setLayerType(if (value) LAYER_TYPE_SOFTWARE else LAYER_TYPE_NONE, null)
             invalidate()
         }
 
@@ -98,10 +99,6 @@ class PinnedImageRenderView(context: Context) : View(context) {
 
     private var lastRawX = 0f
     private var lastRawY = 0f
-
-    init {
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
-    }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
