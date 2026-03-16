@@ -14,10 +14,7 @@ import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,8 +47,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,14 +57,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -192,6 +187,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         scaleMode: PinScaleMode
     ) {
         val overlayId = UUID.randomUUID().toString()
+        val screenBounds = getScreenBounds()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -208,6 +204,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             x = 120 + overlays.size * 36
             y = 220 + overlays.size * 36
         }
+        var overlayX by mutableIntStateOf(params.x)
+        var overlayY by mutableIntStateOf(params.y)
 
         val composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@PinOverlayService)
@@ -218,6 +216,10 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         bitmap = bitmap,
                         scaleMode = scaleMode,
                         defaultShadowEnabled = captureFlowSettings.isPinShadowEnabledByDefault(),
+                        overlayX = overlayX,
+                        overlayY = overlayY,
+                        screenWidthPx = screenBounds.width(),
+                        screenHeightPx = screenBounds.height(),
                         onContentSizeChanged = { width, height ->
                             params.width = width
                             params.height = height
@@ -230,6 +232,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             )
                             params.x = clamped.first
                             params.y = clamped.second
+                            overlayX = clamped.first
+                            overlayY = clamped.second
                             updateOverlayLayout(overlayId)
                         },
                         onMoveWindow = { dx, dy ->
@@ -242,6 +246,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             )
                             params.x = clamped.first
                             params.y = clamped.second
+                            overlayX = clamped.first
+                            overlayY = clamped.second
                             updateOverlayLayout(overlayId)
                         },
                         onClose = {
@@ -501,6 +507,10 @@ private fun PinnedImageContent(
     bitmap: Bitmap,
     scaleMode: PinScaleMode,
     defaultShadowEnabled: Boolean,
+    overlayX: Int,
+    overlayY: Int,
+    screenWidthPx: Int,
+    screenHeightPx: Int,
     onContentSizeChanged: (Int, Int) -> Unit,
     onMoveWindow: (Float, Float) -> Unit,
     onClose: () -> Unit,
@@ -518,6 +528,7 @@ private fun PinnedImageContent(
     var shadowEnabled by remember { mutableStateOf(defaultShadowEnabled) }
     var cornerRadius by remember { mutableStateOf(0f) }
     var cornerControlsVisible by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
 
     fun resetScale() {
         uniformScale = 1f
@@ -552,91 +563,71 @@ private fun PinnedImageContent(
         displayHeight = (baseHeight * freeScaleY).coerceAtLeast(48.dp)
     }
 
+    val renderPadding = 18.dp
+    val imageLayerWidth = displayWidth + renderPadding * 2
+    val imageLayerHeight = displayHeight + renderPadding * 2
     val controlsPreferOutside = displayWidth >= 180.dp && displayHeight >= 120.dp
     val topControlsSpace = if (controlsPreferOutside) 44.dp else 0.dp
     val bottomControlsSpace = if (controlsPreferOutside) 108.dp else 0.dp
-    val containerWidth = displayWidth
-    val containerHeight = displayHeight + topControlsSpace + bottomControlsSpace
-    val imageShape = RoundedCornerShape(cornerRadius.dp)
-    val glowShape = RoundedCornerShape((cornerRadius + 4f).dp)
-    val glowBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFF8DE7FF).copy(alpha = 0.95f),
-            Color(0xFF54B5FF).copy(alpha = 0.9f),
-            Color(0xFF377BFF).copy(alpha = 0.95f)
-        )
-    )
-
+    val containerWidth = imageLayerWidth
+    val containerHeight = imageLayerHeight + topControlsSpace + bottomControlsSpace
+    val topControlsSpacePx = with(density) { topControlsSpace.roundToPx() }
+    val bottomControlsSpacePx = with(density) { bottomControlsSpace.roundToPx() }
+    val imageLayerHeightPx = with(density) { imageLayerHeight.roundToPx() }
+    val containerWidthPx = with(density) { containerWidth.roundToPx() }
+    val edgeMarginPx = with(density) { 8.dp.roundToPx() }
+    val imageBottomOnScreen = overlayY + topControlsSpacePx + imageLayerHeightPx
+    val canDockTopOutside = controlsPreferOutside && overlayY >= edgeMarginPx
+    val canDockBottomOutside = controlsPreferOutside &&
+        (screenHeightPx - imageBottomOnScreen) >= (bottomControlsSpacePx + edgeMarginPx)
+    val preferLeftDock = overlayX <= edgeMarginPx
+    val preferRightDock = (overlayX + containerWidthPx) >= (screenWidthPx - edgeMarginPx)
     Box(
         modifier = Modifier
             .requiredSize(containerWidth, containerHeight)
             .onSizeChanged { size ->
                 onContentSizeChanged(size.width, size.height)
             }
-            .pointerInput(scaleMode, locked) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    if (!locked && (pan.x != 0f || pan.y != 0f)) {
-                        onMoveWindow(pan.x, pan.y)
-                    }
-                    if (!locked && zoom != 1f) {
-                        if (scaleMode == PinScaleMode.LOCK_ASPECT) {
-                            uniformScale = (uniformScale * zoom).coerceIn(0.2f, 6f)
-                        } else {
-                            freeScaleX = (freeScaleX * zoom).coerceIn(0.2f, 6f)
-                            freeScaleY = (freeScaleY * zoom).coerceIn(0.2f, 6f)
+    ) {
+        AndroidView(
+            factory = { context ->
+                PinnedImageRenderView(context).apply {
+                    this.bitmap = bitmap
+                    this.shadowEnabled = shadowEnabled
+                    this.cornerRadiusPx = cornerRadius * context.resources.displayMetrics.density
+                    this.onMoveWindow = { dx, dy ->
+                        if (!locked) {
+                            onMoveWindow(dx, dy)
                         }
                     }
-                }
-            }
-            .pointerInput(locked) {
-                detectTapGestures(
-                    onTap = {
+                    this.onScaleBy = { scaleFactor ->
+                        if (!locked && scaleFactor != 1f) {
+                            if (scaleMode == PinScaleMode.LOCK_ASPECT) {
+                                uniformScale = (uniformScale * scaleFactor).coerceIn(0.2f, 6f)
+                            } else {
+                                freeScaleX = (freeScaleX * scaleFactor).coerceIn(0.2f, 6f)
+                                freeScaleY = (freeScaleY * scaleFactor).coerceIn(0.2f, 6f)
+                            }
+                        }
+                    }
+                    this.onSingleTap = {
                         controlsVisible = !controlsVisible
-                    },
-                    onDoubleTap = {
+                    }
+                    this.onDoubleTap = {
                         onClose()
                     }
-                )
-            }
-    ) {
-        Box(
+                }
+            },
+            update = { view ->
+                view.bitmap = bitmap
+                view.shadowEnabled = shadowEnabled
+                view.cornerRadiusPx = cornerRadius * view.resources.displayMetrics.density
+            },
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = topControlsSpace)
-                .requiredSize(displayWidth, displayHeight)
-        ) {
-            if (shadowEnabled) {
-                Box(
-                    modifier = Modifier
-                        .requiredSize(displayWidth, displayHeight)
-                        .shadow(
-                            elevation = 28.dp,
-                            shape = glowShape,
-                            ambientColor = Color(0xFF3A93FF).copy(alpha = 0.65f),
-                            spotColor = Color(0xFF70D6FF).copy(alpha = 0.72f)
-                        )
-                        .border(
-                            width = 2.dp,
-                            brush = glowBrush,
-                            shape = glowShape
-                        )
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .requiredSize(displayWidth, displayHeight)
-                    .graphicsLayer {
-                        shape = imageShape
-                        clip = true
-                    }
-            ) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "贴图",
-                    modifier = Modifier.requiredSize(displayWidth, displayHeight)
-                )
-            }
-        }
+                .requiredSize(imageLayerWidth, imageLayerHeight)
+        )
 
         AnimatedVisibility(
             visible = controlsVisible,
@@ -644,14 +635,19 @@ private fun PinnedImageContent(
             exit = fadeOut()
         ) {
             Box(modifier = Modifier.requiredSize(containerWidth, containerHeight)) {
-                val topButtonsModifier = if (controlsPreferOutside) {
+                val topButtonsAlignment = when {
+                    preferLeftDock -> Alignment.TopStart
+                    preferRightDock -> Alignment.TopEnd
+                    else -> Alignment.TopCenter
+                }
+                val topButtonsModifier = if (canDockTopOutside) {
                     Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 4.dp)
+                        .align(topButtonsAlignment)
+                        .padding(top = 4.dp, start = 12.dp, end = 12.dp)
                 } else {
                     Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 6.dp)
+                        .align(topButtonsAlignment)
+                        .padding(top = topControlsSpace + 8.dp, start = 12.dp, end = 12.dp)
                 }
 
                 Row(
@@ -759,14 +755,31 @@ private fun PinnedImageContent(
                 Surface(
                     color = Color.Black.copy(alpha = 0.72f),
                     shape = RoundedCornerShape(14.dp),
-                    modifier = if (controlsPreferOutside) {
+                    shadowElevation = 0.dp,
+                    modifier = if (canDockBottomOutside) {
                         Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 4.dp)
+                            .align(
+                                when {
+                                    preferLeftDock -> Alignment.BottomStart
+                                    preferRightDock -> Alignment.BottomEnd
+                                    else -> Alignment.BottomCenter
+                                }
+                            )
+                            .padding(bottom = 4.dp, start = 12.dp, end = 12.dp)
                     } else {
                         Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 14.dp, vertical = 14.dp)
+                            .align(
+                                when {
+                                    preferLeftDock -> Alignment.BottomStart
+                                    preferRightDock -> Alignment.BottomEnd
+                                    else -> Alignment.BottomCenter
+                                }
+                            )
+                            .padding(
+                                start = 14.dp,
+                                end = 14.dp,
+                                bottom = bottomControlsSpace + 14.dp
+                            )
                     }
                 ) {
                     Column(
@@ -775,7 +788,13 @@ private fun PinnedImageContent(
                     ) {
                         Text(
                             text = buildString {
-                                append(if (scaleMode == PinScaleMode.FREE_SCALE) "自由缩放" else "等比缩放")
+                                append(
+                                    if (scaleMode == PinScaleMode.FREE_SCALE) {
+                                        "自由缩放（双指等比 / 控制点非等比）"
+                                    } else {
+                                        "等比缩放"
+                                    }
+                                )
                                 append(" | ")
                                 append(if (locked) "已锁定" else "可移动")
                                 append(" | ")
