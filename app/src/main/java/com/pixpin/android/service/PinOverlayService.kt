@@ -62,7 +62,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -88,13 +87,31 @@ import kotlin.math.roundToInt
 
 class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
+    class PinOverlayUiState(defaultShadowEnabled: Boolean) {
+        var uniformScale by mutableStateOf(1f)
+        var freeScaleX by mutableStateOf(1f)
+        var freeScaleY by mutableStateOf(1f)
+        var locked by mutableStateOf(false)
+        var controlsVisible by mutableStateOf(false)
+        var shadowEnabled by mutableStateOf(defaultShadowEnabled)
+        var cornerRadius by mutableStateOf(0f)
+        var cornerControlsVisible by mutableStateOf(false)
+    }
+
     private data class OverlayEntry(
         val id: String,
-        val view: ComposeView,
-        val params: WindowManager.LayoutParams,
+        val imageView: ComposeView,
+        val imageParams: WindowManager.LayoutParams,
+        val controlsView: ComposeView,
+        val controlsParams: WindowManager.LayoutParams,
         val bitmap: Bitmap,
         val imageUri: String,
         val annotationSessionId: String?,
+        val uiState: PinOverlayUiState,
+        var imageWidth: Int,
+        var imageHeight: Int,
+        var controlsWidth: Int,
+        var controlsHeight: Int,
         var visible: Boolean
     )
 
@@ -187,8 +204,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         scaleMode: PinScaleMode
     ) {
         val overlayId = UUID.randomUUID().toString()
-        val screenBounds = getScreenBounds()
-        val params = WindowManager.LayoutParams(
+        val uiState = PinOverlayUiState(captureFlowSettings.isPinShadowEnabledByDefault())
+        val imageParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
@@ -204,51 +221,71 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             x = 120 + overlays.size * 36
             y = 220 + overlays.size * 36
         }
-        var overlayX by mutableIntStateOf(params.x)
-        var overlayY by mutableIntStateOf(params.y)
+        val controlsParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = imageParams.x
+            y = imageParams.y
+        }
 
-        val composeView = ComposeView(this).apply {
+        val imageView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@PinOverlayService)
             setViewTreeSavedStateRegistryOwner(this@PinOverlayService)
             setContent {
                 PixPinTheme {
-                    PinnedImageContent(
+                    PinImageOverlayContent(
                         bitmap = bitmap,
                         scaleMode = scaleMode,
-                        defaultShadowEnabled = captureFlowSettings.isPinShadowEnabledByDefault(),
-                        overlayX = overlayX,
-                        overlayY = overlayY,
-                        screenWidthPx = screenBounds.width(),
-                        screenHeightPx = screenBounds.height(),
-                        onContentSizeChanged = { width, height ->
-                            params.width = width
-                            params.height = height
+                        uiState = uiState,
+                        onImageSizeChanged = { width, height ->
+                            val entry = overlays[overlayId] ?: return@PinImageOverlayContent
+                            entry.imageWidth = width
+                            entry.imageHeight = height
+                            entry.imageParams.width = width
+                            entry.imageParams.height = height
                             val clamped = clampOverlayPosition(
-                                currentX = params.x,
-                                currentY = params.y,
+                                currentX = entry.imageParams.x,
+                                currentY = entry.imageParams.y,
                                 width = width,
                                 height = height,
                                 minVisiblePx = (resources.displayMetrics.density * 48f).roundToInt()
                             )
-                            params.x = clamped.first
-                            params.y = clamped.second
-                            overlayX = clamped.first
-                            overlayY = clamped.second
+                            entry.imageParams.x = clamped.first
+                            entry.imageParams.y = clamped.second
                             updateOverlayLayout(overlayId)
+                            updateControlsLayout(overlayId)
                         },
                         onMoveWindow = { dx, dy ->
+                            val entry = overlays[overlayId] ?: return@PinImageOverlayContent
                             val clamped = clampOverlayPosition(
-                                currentX = params.x + dx.roundToInt(),
-                                currentY = params.y + dy.roundToInt(),
-                                width = params.width.takeIf { it > 0 } ?: this.width,
-                                height = params.height.takeIf { it > 0 } ?: this.height,
+                                currentX = entry.imageParams.x + dx.roundToInt(),
+                                currentY = entry.imageParams.y + dy.roundToInt(),
+                                width = entry.imageWidth.takeIf { it > 0 } ?: this.width,
+                                height = entry.imageHeight.takeIf { it > 0 } ?: this.height,
                                 minVisiblePx = (resources.displayMetrics.density * 48f).roundToInt()
                             )
-                            params.x = clamped.first
-                            params.y = clamped.second
-                            overlayX = clamped.first
-                            overlayY = clamped.second
+                            entry.imageParams.x = clamped.first
+                            entry.imageParams.y = clamped.second
                             updateOverlayLayout(overlayId)
+                            updateControlsLayout(overlayId)
+                        },
+                        onToggleControls = {
+                            val entry = overlays[overlayId] ?: return@PinImageOverlayContent
+                            entry.uiState.controlsVisible = !entry.uiState.controlsVisible
+                            if (!entry.uiState.controlsVisible) {
+                                entry.uiState.cornerControlsVisible = false
+                            }
+                            updateControlsLayout(overlayId)
                         },
                         onClose = {
                             RecentPinStore.push(
@@ -259,8 +296,29 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                                 )
                             )
                             removeOverlay(overlayId)
+                        }
+                    )
+                }
+            }
+        }
+
+        val controlsView = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@PinOverlayService)
+            setViewTreeSavedStateRegistryOwner(this@PinOverlayService)
+            setContent {
+                PixPinTheme {
+                    PinControlsOverlayContent(
+                        uiState = uiState,
+                        onControlsSizeChanged = { width, height ->
+                            val entry = overlays[overlayId] ?: return@PinControlsOverlayContent
+                            entry.controlsWidth = width
+                            entry.controlsHeight = height
+                            entry.controlsParams.width = width
+                            entry.controlsParams.height = height
+                            updateControlsLayout(overlayId)
                         },
                         onEdit = {
+                            uiState.controlsVisible = false
                             val editorIntent = Intent(this@PinOverlayService, AnnotationEditorActivity::class.java).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 if (!annotationSessionId.isNullOrBlank()) {
@@ -271,6 +329,18 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             }
                             startActivity(editorIntent)
                             removeOverlay(overlayId)
+                        },
+                        onClose = {
+                            uiState.controlsVisible = false
+                            uiState.cornerControlsVisible = false
+                            RecentPinStore.push(
+                                this@PinOverlayService,
+                                ClosedPinRecord(
+                                    imageUri = imageUriString,
+                                    annotationSessionId = annotationSessionId
+                                )
+                            )
+                            removeOverlay(overlayId)
                         }
                     )
                 }
@@ -279,19 +349,36 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         val entry = OverlayEntry(
             id = overlayId,
-            view = composeView,
-            params = params,
+            imageView = imageView,
+            imageParams = imageParams,
+            controlsView = controlsView,
+            controlsParams = controlsParams,
             bitmap = bitmap,
             imageUri = imageUriString,
             annotationSessionId = annotationSessionId,
+            uiState = uiState,
+            imageWidth = 0,
+            imageHeight = 0,
+            controlsWidth = 0,
+            controlsHeight = 0,
             visible = true
         )
         overlays[overlayId] = entry
 
         try {
-            windowManager.addView(composeView, params)
+            windowManager.addView(imageView, imageParams)
+            windowManager.addView(controlsView, controlsParams)
+            controlsView.visibility = View.GONE
         } catch (e: Exception) {
             overlays.remove(overlayId)
+            try {
+                windowManager.removeView(imageView)
+            } catch (_: Exception) {
+            }
+            try {
+                windowManager.removeView(controlsView)
+            } catch (_: Exception) {
+            }
             bitmap.recycle()
             e.printStackTrace()
         }
@@ -301,7 +388,42 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun updateOverlayLayout(overlayId: String) {
         val entry = overlays[overlayId] ?: return
         try {
-            windowManager.updateViewLayout(entry.view, entry.params)
+            windowManager.updateViewLayout(entry.imageView, entry.imageParams)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun updateControlsLayout(overlayId: String) {
+        val entry = overlays[overlayId] ?: return
+        val visible = entry.visible && entry.uiState.controlsVisible
+        entry.controlsView.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+
+        val screen = getScreenBounds()
+        val spacing = (resources.displayMetrics.density * 8f).roundToInt()
+        val minVisible = (resources.displayMetrics.density * 16f).roundToInt()
+        val imageLeft = entry.imageParams.x
+        val imageTop = entry.imageParams.y
+        val imageWidth = entry.imageWidth.takeIf { it > 0 } ?: 0
+        val imageHeight = entry.imageHeight.takeIf { it > 0 } ?: 0
+        val controlsWidth = entry.controlsWidth.takeIf { it > 0 } ?: 220
+        val controlsHeight = entry.controlsHeight.takeIf { it > 0 } ?: 56
+
+        val centeredX = imageLeft + ((imageWidth - controlsWidth) / 2f).roundToInt()
+        val minX = screen.left - controlsWidth + minVisible
+        val maxX = screen.right - minVisible
+        entry.controlsParams.x = centeredX.coerceIn(minX, maxX)
+
+        val belowY = imageTop + imageHeight + spacing
+        val aboveY = imageTop - controlsHeight - spacing
+        entry.controlsParams.y = if (belowY + controlsHeight <= screen.bottom - spacing) {
+            belowY
+        } else {
+            aboveY.coerceAtLeast(screen.top + spacing)
+        }
+
+        try {
+            windowManager.updateViewLayout(entry.controlsView, entry.controlsParams)
         } catch (_: Exception) {
         }
     }
@@ -309,7 +431,11 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun removeOverlay(overlayId: String) {
         val entry = overlays.remove(overlayId) ?: return
         try {
-            windowManager.removeView(entry.view)
+            windowManager.removeView(entry.imageView)
+        } catch (_: Exception) {
+        }
+        try {
+            windowManager.removeView(entry.controlsView)
         } catch (_: Exception) {
         }
         entry.bitmap.recycle()
@@ -332,7 +458,12 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun setOverlayVisible(overlayId: String, visible: Boolean) {
         val entry = overlays[overlayId] ?: return
         entry.visible = visible
-        entry.view.visibility = if (visible) View.VISIBLE else View.GONE
+        entry.imageView.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) {
+            entry.uiState.controlsVisible = false
+            entry.uiState.cornerControlsVisible = false
+        }
+        updateControlsLayout(overlayId)
         notifyManagerChanged()
     }
 
@@ -358,14 +489,17 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun bringOverlayToFront(overlayId: String) {
         val entry = overlays[overlayId] ?: return
         try {
-            windowManager.removeView(entry.view)
-            windowManager.addView(entry.view, entry.params)
+            windowManager.removeView(entry.imageView)
+            windowManager.addView(entry.imageView, entry.imageParams)
+            windowManager.removeView(entry.controlsView)
+            windowManager.addView(entry.controlsView, entry.controlsParams)
         } catch (_: Exception) {
         }
         entry.visible = true
-        entry.view.visibility = View.VISIBLE
+        entry.imageView.visibility = View.VISIBLE
         overlays.remove(overlayId)
         overlays[overlayId] = entry
+        updateControlsLayout(overlayId)
         notifyManagerChanged()
     }
 
@@ -486,7 +620,11 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         managerView = null
         overlays.values.toList().forEach { entry ->
             try {
-                windowManager.removeView(entry.view)
+                windowManager.removeView(entry.imageView)
+            } catch (_: Exception) {
+            }
+            try {
+                windowManager.removeView(entry.controlsView)
             } catch (_: Exception) {
             }
             entry.bitmap.recycle()
@@ -503,115 +641,79 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 }
 
 @Composable
-private fun PinnedImageContent(
+private fun PinImageOverlayContent(
     bitmap: Bitmap,
     scaleMode: PinScaleMode,
-    defaultShadowEnabled: Boolean,
-    overlayX: Int,
-    overlayY: Int,
-    screenWidthPx: Int,
-    screenHeightPx: Int,
-    onContentSizeChanged: (Int, Int) -> Unit,
+    uiState: PinOverlayService.PinOverlayUiState,
+    onImageSizeChanged: (Int, Int) -> Unit,
     onMoveWindow: (Float, Float) -> Unit,
-    onClose: () -> Unit,
-    onEdit: () -> Unit
+    onToggleControls: () -> Unit,
+    onClose: () -> Unit
 ) {
     val aspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height.toFloat()
     val baseWidth = 260.dp
     val baseHeight = (baseWidth / aspect).coerceAtLeast(90.dp)
 
-    var uniformScale by remember { mutableStateOf(1f) }
-    var freeScaleX by remember { mutableStateOf(1f) }
-    var freeScaleY by remember { mutableStateOf(1f) }
-    var locked by remember { mutableStateOf(false) }
-    var controlsVisible by remember { mutableStateOf(false) }
-    var shadowEnabled by remember { mutableStateOf(defaultShadowEnabled) }
-    var cornerRadius by remember { mutableStateOf(0f) }
-    var cornerControlsVisible by remember { mutableStateOf(false) }
-    val density = LocalDensity.current
-
-    fun resetScale() {
-        uniformScale = 1f
-        freeScaleX = 1f
-        freeScaleY = 1f
-    }
-
     fun resizeFreeScale(deltaX: Float, deltaY: Float) {
         val currentWidth = if (scaleMode == PinScaleMode.LOCK_ASPECT) {
-            baseWidth.value * uniformScale
+            baseWidth.value * uiState.uniformScale
         } else {
-            baseWidth.value * freeScaleX
+            baseWidth.value * uiState.freeScaleX
         }
         val currentHeight = if (scaleMode == PinScaleMode.LOCK_ASPECT) {
-            baseHeight.value * uniformScale
+            baseHeight.value * uiState.uniformScale
         } else {
-            baseHeight.value * freeScaleY
+            baseHeight.value * uiState.freeScaleY
         }
         val nextWidth = max(80f, currentWidth + deltaX)
         val nextHeight = max(48f, currentHeight + deltaY)
-        freeScaleX = (nextWidth / baseWidth.value).coerceIn(0.2f, 6f)
-        freeScaleY = (nextHeight / baseHeight.value).coerceIn(0.2f, 6f)
+        uiState.freeScaleX = (nextWidth / baseWidth.value).coerceIn(0.2f, 6f)
+        uiState.freeScaleY = (nextHeight / baseHeight.value).coerceIn(0.2f, 6f)
     }
 
     val displayWidth: Dp
     val displayHeight: Dp
     if (scaleMode == PinScaleMode.LOCK_ASPECT) {
-        displayWidth = (baseWidth * uniformScale).coerceAtLeast(80.dp)
-        displayHeight = (baseHeight * uniformScale).coerceAtLeast(48.dp)
+        displayWidth = (baseWidth * uiState.uniformScale).coerceAtLeast(80.dp)
+        displayHeight = (baseHeight * uiState.uniformScale).coerceAtLeast(48.dp)
     } else {
-        displayWidth = (baseWidth * freeScaleX).coerceAtLeast(80.dp)
-        displayHeight = (baseHeight * freeScaleY).coerceAtLeast(48.dp)
+        displayWidth = (baseWidth * uiState.freeScaleX).coerceAtLeast(80.dp)
+        displayHeight = (baseHeight * uiState.freeScaleY).coerceAtLeast(48.dp)
     }
 
     val renderPadding = 18.dp
     val imageLayerWidth = displayWidth + renderPadding * 2
     val imageLayerHeight = displayHeight + renderPadding * 2
-    val controlsPreferOutside = displayWidth >= 180.dp && displayHeight >= 120.dp
-    val topControlsSpace = if (controlsPreferOutside) 44.dp else 0.dp
-    val bottomControlsSpace = if (controlsPreferOutside) 108.dp else 0.dp
-    val containerWidth = imageLayerWidth
-    val containerHeight = imageLayerHeight + topControlsSpace + bottomControlsSpace
-    val topControlsSpacePx = with(density) { topControlsSpace.roundToPx() }
-    val bottomControlsSpacePx = with(density) { bottomControlsSpace.roundToPx() }
-    val imageLayerHeightPx = with(density) { imageLayerHeight.roundToPx() }
-    val containerWidthPx = with(density) { containerWidth.roundToPx() }
-    val edgeMarginPx = with(density) { 8.dp.roundToPx() }
-    val imageBottomOnScreen = overlayY + topControlsSpacePx + imageLayerHeightPx
-    val canDockTopOutside = controlsPreferOutside && overlayY >= edgeMarginPx
-    val canDockBottomOutside = controlsPreferOutside &&
-        (screenHeightPx - imageBottomOnScreen) >= (bottomControlsSpacePx + edgeMarginPx)
-    val preferLeftDock = overlayX <= edgeMarginPx
-    val preferRightDock = (overlayX + containerWidthPx) >= (screenWidthPx - edgeMarginPx)
     Box(
         modifier = Modifier
-            .requiredSize(containerWidth, containerHeight)
+            .requiredSize(imageLayerWidth, imageLayerHeight)
             .onSizeChanged { size ->
-                onContentSizeChanged(size.width, size.height)
+                onImageSizeChanged(size.width, size.height)
             }
     ) {
         AndroidView(
             factory = { context ->
                 PinnedImageRenderView(context).apply {
                     this.bitmap = bitmap
-                    this.shadowEnabled = shadowEnabled
-                    this.cornerRadiusPx = cornerRadius * context.resources.displayMetrics.density
+                    this.shadowEnabled = uiState.shadowEnabled
+                    this.cornerRadiusPx = uiState.cornerRadius * context.resources.displayMetrics.density
                     this.onMoveWindow = { dx, dy ->
-                        if (!locked) {
+                        if (!uiState.locked) {
                             onMoveWindow(dx, dy)
                         }
                     }
                     this.onScaleBy = { scaleFactor ->
-                        if (!locked && scaleFactor != 1f) {
+                        if (!uiState.locked && scaleFactor != 1f) {
                             if (scaleMode == PinScaleMode.LOCK_ASPECT) {
-                                uniformScale = (uniformScale * scaleFactor).coerceIn(0.2f, 6f)
+                                uiState.uniformScale = (uiState.uniformScale * scaleFactor).coerceIn(0.2f, 6f)
                             } else {
-                                freeScaleX = (freeScaleX * scaleFactor).coerceIn(0.2f, 6f)
-                                freeScaleY = (freeScaleY * scaleFactor).coerceIn(0.2f, 6f)
+                                uiState.freeScaleX = (uiState.freeScaleX * scaleFactor).coerceIn(0.2f, 6f)
+                                uiState.freeScaleY = (uiState.freeScaleY * scaleFactor).coerceIn(0.2f, 6f)
                             }
                         }
                     }
                     this.onSingleTap = {
-                        controlsVisible = !controlsVisible
+                        onToggleControls()
                     }
                     this.onDoubleTap = {
                         onClose()
@@ -620,213 +722,15 @@ private fun PinnedImageContent(
             },
             update = { view ->
                 view.bitmap = bitmap
-                view.shadowEnabled = shadowEnabled
-                view.cornerRadiusPx = cornerRadius * view.resources.displayMetrics.density
+                view.shadowEnabled = uiState.shadowEnabled
+                view.cornerRadiusPx = uiState.cornerRadius * view.resources.displayMetrics.density
             },
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = topControlsSpace)
+                .align(Alignment.Center)
                 .requiredSize(imageLayerWidth, imageLayerHeight)
         )
 
-        AnimatedVisibility(
-            visible = controlsVisible,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            Box(modifier = Modifier.requiredSize(containerWidth, containerHeight)) {
-                val topButtonsAlignment = when {
-                    preferLeftDock -> Alignment.TopStart
-                    preferRightDock -> Alignment.TopEnd
-                    else -> Alignment.TopCenter
-                }
-                val topButtonsModifier = if (canDockTopOutside) {
-                    Modifier
-                        .align(topButtonsAlignment)
-                        .padding(top = 4.dp, start = 12.dp, end = 12.dp)
-                } else {
-                    Modifier
-                        .align(topButtonsAlignment)
-                        .padding(top = topControlsSpace + 8.dp, start = 12.dp, end = 12.dp)
-                }
-
-                Row(
-                    modifier = topButtonsModifier,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilledIconButton(
-                        onClick = {
-                            controlsVisible = false
-                            onEdit()
-                        },
-                        modifier = Modifier.size(30.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "编辑",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = { locked = !locked },
-                        modifier = Modifier.size(30.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Icon(
-                            imageVector = if (locked) Icons.Default.Lock else Icons.Default.LockOpen,
-                            contentDescription = if (locked) "解锁" else "锁定",
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = { shadowEnabled = !shadowEnabled },
-                        modifier = Modifier.size(30.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = if (shadowEnabled) {
-                                MaterialTheme.colorScheme.tertiaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            }
-                        )
-                    ) {
-                        Text(
-                            text = "影",
-                            color = if (shadowEnabled) {
-                                MaterialTheme.colorScheme.onTertiaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = { cornerControlsVisible = !cornerControlsVisible },
-                        modifier = Modifier.size(30.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = if (cornerControlsVisible) {
-                                MaterialTheme.colorScheme.tertiaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            }
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Tune,
-                            contentDescription = "圆角设置",
-                            tint = if (cornerControlsVisible) {
-                                MaterialTheme.colorScheme.onTertiaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    FilledIconButton(
-                        onClick = {
-                            controlsVisible = false
-                            cornerControlsVisible = false
-                            onClose()
-                        },
-                        modifier = Modifier.size(30.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "关闭",
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Surface(
-                    color = Color.Black.copy(alpha = 0.72f),
-                    shape = RoundedCornerShape(14.dp),
-                    shadowElevation = 0.dp,
-                    modifier = if (canDockBottomOutside) {
-                        Modifier
-                            .align(
-                                when {
-                                    preferLeftDock -> Alignment.BottomStart
-                                    preferRightDock -> Alignment.BottomEnd
-                                    else -> Alignment.BottomCenter
-                                }
-                            )
-                            .padding(bottom = 4.dp, start = 12.dp, end = 12.dp)
-                    } else {
-                        Modifier
-                            .align(
-                                when {
-                                    preferLeftDock -> Alignment.BottomStart
-                                    preferRightDock -> Alignment.BottomEnd
-                                    else -> Alignment.BottomCenter
-                                }
-                            )
-                            .padding(
-                                start = 14.dp,
-                                end = 14.dp,
-                                bottom = bottomControlsSpace + 14.dp
-                            )
-                    }
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = buildString {
-                                append(
-                                    if (scaleMode == PinScaleMode.FREE_SCALE) {
-                                        "自由缩放（双指等比 / 控制点非等比）"
-                                    } else {
-                                        "等比缩放"
-                                    }
-                                )
-                                append(" | ")
-                                append(if (locked) "已锁定" else "可移动")
-                                append(" | ")
-                                append(if (shadowEnabled) "阴影已开" else "阴影已关")
-                            },
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                        AnimatedVisibility(visible = cornerControlsVisible) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Spacer(modifier = Modifier.size(6.dp))
-                                Text(
-                                    text = "圆角：${cornerRadius.roundToInt()}",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                Slider(
-                                    value = cornerRadius,
-                                    onValueChange = { cornerRadius = it },
-                                    valueRange = 0f..48f,
-                                    modifier = Modifier.width(displayWidth.coerceAtLeast(180.dp))
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (scaleMode == PinScaleMode.FREE_SCALE && !locked) {
+        if (scaleMode == PinScaleMode.FREE_SCALE && !uiState.locked) {
             FreeScaleHandle(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -845,6 +749,155 @@ private fun PinnedImageContent(
                     .offset { IntOffset(10, 10) },
                 onDragDelta = { dx, dy -> resizeFreeScale(dx, dy) }
             )
+        }
+    }
+}
+
+@Composable
+private fun PinControlsOverlayContent(
+    uiState: PinOverlayService.PinOverlayUiState,
+    onControlsSizeChanged: (Int, Int) -> Unit,
+    onEdit: () -> Unit,
+    onClose: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = uiState.controlsVisible,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Column(
+            modifier = Modifier
+                .onSizeChanged { size ->
+                    onControlsSizeChanged(size.width, size.height)
+                },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.76f),
+                shape = RoundedCornerShape(16.dp),
+                shadowElevation = 0.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilledIconButton(
+                        onClick = onEdit,
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "编辑",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = { uiState.locked = !uiState.locked },
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Icon(
+                            imageVector = if (uiState.locked) Icons.Default.Lock else Icons.Default.LockOpen,
+                            contentDescription = if (uiState.locked) "解锁" else "锁定",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = { uiState.shadowEnabled = !uiState.shadowEnabled },
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = if (uiState.shadowEnabled) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                    ) {
+                        Text(
+                            text = "影",
+                            color = if (uiState.shadowEnabled) {
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = { uiState.cornerControlsVisible = !uiState.cornerControlsVisible },
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = if (uiState.cornerControlsVisible) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Tune,
+                            contentDescription = "圆角设置",
+                            tint = if (uiState.cornerControlsVisible) {
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    FilledIconButton(
+                        onClick = onClose,
+                        modifier = Modifier.size(30.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "关闭",
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(visible = uiState.cornerControlsVisible) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.78f),
+                    shape = RoundedCornerShape(16.dp),
+                    shadowElevation = 0.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "圆角：${uiState.cornerRadius.roundToInt()}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Slider(
+                            value = uiState.cornerRadius,
+                            onValueChange = { uiState.cornerRadius = it },
+                            valueRange = 0f..48f,
+                            modifier = Modifier.width(180.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
