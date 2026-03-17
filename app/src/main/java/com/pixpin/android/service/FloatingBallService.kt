@@ -332,8 +332,12 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun dismissCropOverlay(recycleBitmap: Boolean, restoreFloatingBall: Boolean) {
         cropOverlayView?.let {
             try {
-                windowManager.removeView(it)
+                windowManager.removeViewImmediate(it)
             } catch (_: Exception) {
+                try {
+                    windowManager.removeView(it)
+                } catch (_: Exception) {
+                }
             }
         }
         cropOverlayView = null
@@ -459,9 +463,13 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
         floatingView?.let {
             try {
-                windowManager.removeView(it)
+                windowManager.removeViewImmediate(it)
             } catch (e: Exception) {
-                e.printStackTrace()
+                try {
+                    windowManager.removeView(it)
+                } catch (inner: Exception) {
+                    inner.printStackTrace()
+                }
             }
         }
         floatingView = null
@@ -642,3 +650,4 @@ fun MenuButton(
         }
     }
 }
+

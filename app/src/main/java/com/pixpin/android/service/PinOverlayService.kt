@@ -436,12 +436,20 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun removeOverlay(overlayId: String) {
         val entry = overlays.remove(overlayId) ?: return
         try {
-            windowManager.removeView(entry.imageView)
+            windowManager.removeViewImmediate(entry.imageView)
         } catch (_: Exception) {
+            try {
+                windowManager.removeView(entry.imageView)
+            } catch (_: Exception) {
+            }
         }
         try {
-            windowManager.removeView(entry.controlsView)
+            windowManager.removeViewImmediate(entry.controlsView)
         } catch (_: Exception) {
+            try {
+                windowManager.removeView(entry.controlsView)
+            } catch (_: Exception) {
+            }
         }
         entry.bitmap.recycle()
         notifyManagerChanged()
@@ -494,9 +502,9 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun bringOverlayToFront(overlayId: String) {
         val entry = overlays[overlayId] ?: return
         try {
-            windowManager.removeView(entry.imageView)
+            windowManager.removeViewImmediate(entry.imageView)
             windowManager.addView(entry.imageView, entry.imageParams)
-            windowManager.removeView(entry.controlsView)
+            windowManager.removeViewImmediate(entry.controlsView)
             windowManager.addView(entry.controlsView, entry.controlsParams)
         } catch (_: Exception) {
         }
@@ -618,19 +626,31 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         managerView?.let {
             try {
-                windowManager.removeView(it)
+                windowManager.removeViewImmediate(it)
             } catch (_: Exception) {
+                try {
+                    windowManager.removeView(it)
+                } catch (_: Exception) {
+                }
             }
         }
         managerView = null
         overlays.values.toList().forEach { entry ->
             try {
-                windowManager.removeView(entry.imageView)
+                windowManager.removeViewImmediate(entry.imageView)
             } catch (_: Exception) {
+                try {
+                    windowManager.removeView(entry.imageView)
+                } catch (_: Exception) {
+                }
             }
             try {
-                windowManager.removeView(entry.controlsView)
+                windowManager.removeViewImmediate(entry.controlsView)
             } catch (_: Exception) {
+                try {
+                    windowManager.removeView(entry.controlsView)
+                } catch (_: Exception) {
+                }
             }
             entry.bitmap.recycle()
         }
