@@ -81,6 +81,7 @@ import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -160,8 +161,10 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val imageUri = android.net.Uri.parse(imageUriString)
             serviceScope.launch {
                 try {
-                    val bitmap = contentResolver.openInputStream(imageUri)?.use { input ->
-                        BitmapFactory.decodeStream(input)
+                    val bitmap = withContext(Dispatchers.IO) {
+                        contentResolver.openInputStream(imageUri)?.use { input ->
+                            BitmapFactory.decodeStream(input)
+                        }
                     }
                     if (bitmap != null) {
                         showPinOverlay(bitmap, imageUriString, annotationSessionId, captureFlowSettings.getPinScaleMode())
@@ -180,8 +183,10 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val record = RecentPinStore.popMostRecent(this) ?: return
         serviceScope.launch {
             try {
-                val bitmap = contentResolver.openInputStream(android.net.Uri.parse(record.imageUri))?.use { input ->
-                    BitmapFactory.decodeStream(input)
+                val bitmap = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(android.net.Uri.parse(record.imageUri))?.use { input ->
+                        BitmapFactory.decodeStream(input)
+                    }
                 }
                 if (bitmap != null) {
                     showPinOverlay(
