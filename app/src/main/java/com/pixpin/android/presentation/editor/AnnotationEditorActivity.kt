@@ -41,6 +41,7 @@ import com.pixpin.android.domain.usecase.ImageSaver
 import com.pixpin.android.domain.usecase.CacheImageStore
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.CaptureFlowSettings
+import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.presentation.crop.RegionCropActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.PinOverlayService
@@ -224,6 +225,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                 val intent = Intent(this@AnnotationEditorActivity, PinOverlayService::class.java).apply {
                     putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
                     putExtra(PinOverlayService.EXTRA_ANNOTATION_SESSION_ID, sessionId)
+                    putExtra(PinOverlayService.EXTRA_HISTORY_SOURCE, PinHistorySourceType.EDITOR_EXPORT.value)
                 }
                 startService(intent)
                 Toast.makeText(this@AnnotationEditorActivity, R.string.image_pinned, Toast.LENGTH_SHORT).show()

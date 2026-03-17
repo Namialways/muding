@@ -1,4 +1,4 @@
-package com.pixpin.android.service
+ï»¿package com.pixpin.android.service
 
 import android.animation.ValueAnimator
 import android.app.Activity
@@ -310,6 +310,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 if (captureFlowSettings.getResultAction() == CaptureResultAction.PIN_DIRECTLY) {
                     val pinIntent = Intent(this@FloatingBallService, PinOverlayService::class.java).apply {
                         putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
+                        putExtra(PinOverlayService.EXTRA_HISTORY_SOURCE, com.pixpin.android.domain.usecase.PinHistorySourceType.SCREENSHOT.value)
                     }
                     startService(pinIntent)
                     restoreFloatingBall()
@@ -577,7 +578,7 @@ fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
         ) {
             Icon(
                 imageVector = Icons.Default.Camera,
-                contentDescription = "½ØÍ¼",
+                contentDescription = "æˆªå›¾",
                 tint = Color.White,
                 modifier = Modifier.size(if (isExpanded) 80.dp else 32.dp)
             )
@@ -602,27 +603,27 @@ fun FloatingMenu(
         Column(modifier = Modifier.padding(8.dp)) {
             MenuButton(
                 icon = Icons.Default.Camera,
-                text = "½ØÍ¼",
+                text = "æˆªå›¾",
                 onClick = onScreenshot
             )
             MenuButton(
                 icon = Icons.Default.History,
-                text = "»Ö¸´ÒÑ¹Ø±ÕÌùÍ¼",
+                text = "æ¢å¤å·²å…³é—­è´´å›¾",
                 onClick = onRestorePin
             )
             MenuButton(
                 icon = Icons.Default.ViewList,
-                text = "ÌùÍ¼¹ÜÀí",
+                text = "è´´å›¾ç®¡ç†",
                 onClick = onManagePins
             )
             MenuButton(
                 icon = Icons.Default.Settings,
-                text = "ÉèÖÃ",
+                text = "è®¾ç½®",
                 onClick = onSettings
             )
             MenuButton(
                 icon = Icons.Default.Close,
-                text = "ÍË³ö",
+                text = "é€€å‡º",
                 onClick = onExit
             )
         }
@@ -650,4 +651,7 @@ fun MenuButton(
         }
     }
 }
+
+
+
 

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,22 +17,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,23 +45,32 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pixpin.android.domain.usecase.AnnotationSessionFile
 import com.pixpin.android.domain.usecase.AnnotationSessionStore
 import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.PermissionHandler
+import com.pixpin.android.domain.usecase.PinHistoryRecord
+import com.pixpin.android.domain.usecase.PinHistorySourceType
+import com.pixpin.android.domain.usecase.PinHistoryStore
 import com.pixpin.android.domain.usecase.PinScaleMode
 import com.pixpin.android.domain.usecase.RecentPinStore
+import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.FloatingBallService
+import com.pixpin.android.service.PinOverlayService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -70,11 +85,6 @@ class MainActivity : ComponentActivity() {
 
         permissionHandler = PermissionHandler(this)
         captureFlowSettings = CaptureFlowSettings(this)
-        AnnotationSessionStore.prune(
-            this,
-            maxCount = captureFlowSettings.getMaxSessionCount(),
-            maxDays = captureFlowSettings.getRetainDays()
-        )
 
         setContent {
             PixPinTheme {
@@ -89,44 +99,74 @@ class MainActivity : ComponentActivity() {
                         initialMaxSessionCount = captureFlowSettings.getMaxSessionCount(),
                         initialRetainDays = captureFlowSettings.getRetainDays(),
                         initialPinShadowEnabled = captureFlowSettings.isPinShadowEnabledByDefault(),
-                        recordsDirectory = AnnotationSessionStore.visibleDirectoryPath(this),
-                        initialSessionFiles = AnnotationSessionStore.listSessionFiles(this),
-                        initialRecentClosedPinCount = RecentPinStore.count(this),
+                        initialPinHistoryEnabled = captureFlowSettings.isPinHistoryEnabled(),
+                        initialMaxPinHistoryCount = captureFlowSettings.getMaxPinHistoryCount(),
+                        initialPinHistoryRetainDays = captureFlowSettings.getPinHistoryRetainDays(),
+                        initialSnapshot = MainScreenSnapshot.empty(),
                         onActionChanged = { action -> captureFlowSettings.setResultAction(action) },
                         onScaleModeChanged = { mode -> captureFlowSettings.setPinScaleMode(mode) },
                         onMaxSessionCountChanged = { count ->
                             captureFlowSettings.setMaxSessionCount(count)
-                            AnnotationSessionStore.prune(
-                                this,
-                                maxCount = captureFlowSettings.getMaxSessionCount(),
-                                maxDays = captureFlowSettings.getRetainDays()
-                            )
+                            pruneRecords()
                         },
                         onRetainDaysChanged = { days ->
                             captureFlowSettings.setRetainDays(days)
-                            AnnotationSessionStore.prune(
-                                this,
-                                maxCount = captureFlowSettings.getMaxSessionCount(),
-                                maxDays = captureFlowSettings.getRetainDays()
-                            )
+                            pruneRecords()
                         },
                         onDefaultPinShadowChanged = { enabled ->
                             captureFlowSettings.setPinShadowEnabledByDefault(enabled)
                         },
+                        onPinHistoryEnabledChanged = { enabled ->
+                            captureFlowSettings.setPinHistoryEnabled(enabled)
+                        },
+                        onMaxPinHistoryCountChanged = { count ->
+                            captureFlowSettings.setMaxPinHistoryCount(count)
+                            pruneRecords()
+                        },
+                        onPinHistoryRetainDaysChanged = { days ->
+                            captureFlowSettings.setPinHistoryRetainDays(days)
+                            pruneRecords()
+                        },
                         onClearAllRecords = {
                             AnnotationSessionStore.clearAll(this)
                             RecentPinStore.clear(this)
+                            PinHistoryStore.clear(this)
+                        },
+                        onClearPinHistory = {
+                            PinHistoryStore.clear(this)
+                        },
+                        onDeleteHistory = { record ->
+                            PinHistoryStore.delete(this, record.id)
+                        },
+                        onRestoreHistory = { record ->
+                            startService(
+                                Intent(this, PinOverlayService::class.java).apply {
+                                    putExtra(PinOverlayService.EXTRA_IMAGE_URI, record.imageUri)
+                                    putExtra(PinOverlayService.EXTRA_ANNOTATION_SESSION_ID, record.annotationSessionId)
+                                    putExtra(
+                                        PinOverlayService.EXTRA_HISTORY_SOURCE,
+                                        PinHistorySourceType.RESTORED_PIN.value
+                                    )
+                                }
+                            )
+                        },
+                        onEditHistory = { record ->
+                            startActivity(
+                                Intent(this, AnnotationEditorActivity::class.java).apply {
+                                    if (!record.annotationSessionId.isNullOrBlank()) {
+                                        putExtra(
+                                            AnnotationEditorActivity.EXTRA_ANNOTATION_SESSION_ID,
+                                            record.annotationSessionId
+                                        )
+                                    } else {
+                                        putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, record.imageUri)
+                                    }
+                                }
+                            )
                         },
                         onRefreshRecords = {
-                            AnnotationSessionStore.prune(
-                                this,
-                                maxCount = captureFlowSettings.getMaxSessionCount(),
-                                maxDays = captureFlowSettings.getRetainDays()
-                            )
-                            MainScreenSnapshot(
-                                sessionFiles = AnnotationSessionStore.listSessionFiles(this),
-                                recentClosedPinCount = RecentPinStore.count(this)
-                            )
+                            pruneRecords()
+                            buildSnapshot()
                         },
                         onRequestPermission = {
                             permissionHandler.requestOverlayPermission(this)
@@ -147,6 +187,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun pruneRecords() {
+        AnnotationSessionStore.prune(
+            this,
+            maxCount = captureFlowSettings.getMaxSessionCount(),
+            maxDays = captureFlowSettings.getRetainDays()
+        )
+        PinHistoryStore.prune(
+            this,
+            maxCount = captureFlowSettings.getMaxPinHistoryCount(),
+            maxDays = captureFlowSettings.getPinHistoryRetainDays()
+        )
+    }
+
+    private fun buildSnapshot(): MainScreenSnapshot {
+        return MainScreenSnapshot(
+            sessionFiles = AnnotationSessionStore.listSessionFiles(this),
+            recentClosedPinCount = RecentPinStore.count(this),
+            pinHistoryRecords = PinHistoryStore.list(this),
+            recordsDirectory = AnnotationSessionStore.visibleDirectoryPath(this),
+            pinHistoryDirectory = PinHistoryStore.visibleDirectoryPath(this)
+        )
+    }
+
     private fun startFloatingBallService() {
         val intent = Intent(this, FloatingBallService::class.java)
         startService(intent)
@@ -163,54 +226,199 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private enum class SettingsTab {
+    BASIC,
+    HISTORY
+}
+
 data class MainScreenSnapshot(
-    val sessionFiles: List<com.pixpin.android.domain.usecase.AnnotationSessionFile>,
-    val recentClosedPinCount: Int
-)
+    val sessionFiles: List<AnnotationSessionFile>,
+    val recentClosedPinCount: Int,
+    val pinHistoryRecords: List<PinHistoryRecord>,
+    val recordsDirectory: String,
+    val pinHistoryDirectory: String
+) {
+    companion object {
+        fun empty(): MainScreenSnapshot {
+            return MainScreenSnapshot(
+                sessionFiles = emptyList(),
+                recentClosedPinCount = 0,
+                pinHistoryRecords = emptyList(),
+                recordsDirectory = "",
+                pinHistoryDirectory = ""
+            )
+        }
+    }
+}
 
 @Composable
-fun MainScreen(
+private fun MainScreen(
     hasOverlayPermission: Boolean,
     initialAction: CaptureResultAction,
     initialScaleMode: PinScaleMode,
     initialMaxSessionCount: Int,
     initialRetainDays: Int,
     initialPinShadowEnabled: Boolean,
-    recordsDirectory: String,
-    initialSessionFiles: List<com.pixpin.android.domain.usecase.AnnotationSessionFile>,
-    initialRecentClosedPinCount: Int,
+    initialPinHistoryEnabled: Boolean,
+    initialMaxPinHistoryCount: Int,
+    initialPinHistoryRetainDays: Int,
+    initialSnapshot: MainScreenSnapshot,
     onActionChanged: (CaptureResultAction) -> Unit,
     onScaleModeChanged: (PinScaleMode) -> Unit,
     onMaxSessionCountChanged: (Int) -> Unit,
     onRetainDaysChanged: (Int) -> Unit,
     onDefaultPinShadowChanged: (Boolean) -> Unit,
+    onPinHistoryEnabledChanged: (Boolean) -> Unit,
+    onMaxPinHistoryCountChanged: (Int) -> Unit,
+    onPinHistoryRetainDaysChanged: (Int) -> Unit,
     onClearAllRecords: () -> Unit,
+    onClearPinHistory: () -> Unit,
+    onDeleteHistory: (PinHistoryRecord) -> Unit,
+    onRestoreHistory: (PinHistoryRecord) -> Unit,
+    onEditHistory: (PinHistoryRecord) -> Unit,
     onRefreshRecords: () -> MainScreenSnapshot,
     onRequestPermission: () -> Unit,
     onStartService: () -> Unit
 ) {
+    var currentTab by remember { mutableStateOf(SettingsTab.BASIC) }
+    val scope = rememberCoroutineScope()
     var permissionGranted by remember { mutableStateOf(hasOverlayPermission) }
     var selectedAction by remember { mutableStateOf(initialAction) }
     var selectedScaleMode by remember { mutableStateOf(initialScaleMode) }
     var maxSessionCount by remember { mutableIntStateOf(initialMaxSessionCount) }
     var retainDays by remember { mutableIntStateOf(initialRetainDays) }
     var defaultPinShadowEnabled by remember { mutableStateOf(initialPinShadowEnabled) }
-    var sessionFiles by remember { mutableStateOf(initialSessionFiles) }
-    var recentClosedPinCount by remember { mutableIntStateOf(initialRecentClosedPinCount) }
+    var pinHistoryEnabled by remember { mutableStateOf(initialPinHistoryEnabled) }
+    var maxPinHistoryCount by remember { mutableIntStateOf(initialMaxPinHistoryCount) }
+    var pinHistoryRetainDays by remember { mutableIntStateOf(initialPinHistoryRetainDays) }
+    var snapshot by remember { mutableStateOf(initialSnapshot) }
+    var recordsLoading by remember { mutableStateOf(false) }
 
-    fun refreshRecords() {
-        val snapshot = onRefreshRecords()
-        sessionFiles = snapshot.sessionFiles
-        recentClosedPinCount = snapshot.recentClosedPinCount
+    fun refreshRecordsAsync() {
+        scope.launch {
+            recordsLoading = true
+            snapshot = withContext(Dispatchers.IO) { onRefreshRecords() }
+            recordsLoading = false
+        }
+    }
+
+    fun runRecordsMutation(task: () -> Unit) {
+        scope.launch {
+            recordsLoading = true
+            snapshot = withContext(Dispatchers.IO) {
+                task()
+                onRefreshRecords()
+            }
+            recordsLoading = false
+        }
     }
 
     LaunchedEffect(hasOverlayPermission) {
         permissionGranted = hasOverlayPermission
-        refreshRecords()
+        refreshRecordsAsync()
     }
 
+    Scaffold(
+        bottomBar = {
+            BottomAppBar {
+                NavigationBarItem(
+                    selected = currentTab == SettingsTab.BASIC,
+                    onClick = { currentTab = SettingsTab.BASIC },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text("基础设置") }
+                )
+                NavigationBarItem(
+                    selected = currentTab == SettingsTab.HISTORY,
+                    onClick = { currentTab = SettingsTab.HISTORY },
+                    icon = { Icon(Icons.Default.History, contentDescription = null) },
+                    label = { Text("历史管理") }
+                )
+            }
+        }
+    ) { paddingValues ->
+        when (currentTab) {
+            SettingsTab.BASIC -> BasicSettingsTab(
+                modifier = Modifier.padding(paddingValues),
+                permissionGranted = permissionGranted,
+                selectedAction = selectedAction,
+                selectedScaleMode = selectedScaleMode,
+                defaultPinShadowEnabled = defaultPinShadowEnabled,
+                onActionChanged = {
+                    selectedAction = it
+                    onActionChanged(it)
+                },
+                onScaleModeChanged = {
+                    selectedScaleMode = it
+                    onScaleModeChanged(it)
+                },
+                onDefaultPinShadowChanged = {
+                    defaultPinShadowEnabled = it
+                    onDefaultPinShadowChanged(it)
+                },
+                onRequestPermission = onRequestPermission,
+                onStartService = onStartService
+            )
+
+            SettingsTab.HISTORY -> HistoryManagementTab(
+                modifier = Modifier.padding(paddingValues),
+                pinHistoryEnabled = pinHistoryEnabled,
+                maxPinHistoryCount = maxPinHistoryCount,
+                pinHistoryRetainDays = pinHistoryRetainDays,
+                maxSessionCount = maxSessionCount,
+                retainDays = retainDays,
+                snapshot = snapshot,
+                onPinHistoryEnabledChanged = {
+                    pinHistoryEnabled = it
+                    runRecordsMutation { onPinHistoryEnabledChanged(it) }
+                },
+                onMaxPinHistoryCountChanged = { value ->
+                    maxPinHistoryCount = value
+                    runRecordsMutation { onMaxPinHistoryCountChanged(value) }
+                },
+                onPinHistoryRetainDaysChanged = { value ->
+                    pinHistoryRetainDays = value
+                    runRecordsMutation { onPinHistoryRetainDaysChanged(value) }
+                },
+                onMaxSessionCountChanged = { value ->
+                    maxSessionCount = value
+                    runRecordsMutation { onMaxSessionCountChanged(value) }
+                },
+                onRetainDaysChanged = { value ->
+                    retainDays = value
+                    runRecordsMutation { onRetainDaysChanged(value) }
+                },
+                onClearPinHistory = {
+                    runRecordsMutation { onClearPinHistory() }
+                },
+                onClearAllRecords = {
+                    runRecordsMutation { onClearAllRecords() }
+                },
+                onDeleteHistory = {
+                    runRecordsMutation { onDeleteHistory(it) }
+                },
+                onRestoreHistory = onRestoreHistory,
+                onEditHistory = onEditHistory,
+                onRefreshRecords = { refreshRecordsAsync() },
+                recordsLoading = recordsLoading
+            )
+        }
+    }
+}
+@Composable
+private fun BasicSettingsTab(
+    modifier: Modifier = Modifier,
+    permissionGranted: Boolean,
+    selectedAction: CaptureResultAction,
+    selectedScaleMode: PinScaleMode,
+    defaultPinShadowEnabled: Boolean,
+    onActionChanged: (CaptureResultAction) -> Unit,
+    onScaleModeChanged: (PinScaleMode) -> Unit,
+    onDefaultPinShadowChanged: (Boolean) -> Unit,
+    onRequestPermission: () -> Unit,
+    onStartService: () -> Unit
+) {
     LazyColumn(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -253,46 +461,28 @@ fun MainScreen(
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "选区完成后的操作",
-                        style = MaterialTheme.typography.titleSmall
-                    )
+                    Text("选区完成后的操作", style = MaterialTheme.typography.titleSmall)
                     CaptureOptionRow(
                         title = "直接贴图到屏幕",
                         selected = selectedAction == CaptureResultAction.PIN_DIRECTLY,
-                        onSelect = {
-                            selectedAction = CaptureResultAction.PIN_DIRECTLY
-                            onActionChanged(CaptureResultAction.PIN_DIRECTLY)
-                        }
+                        onSelect = { onActionChanged(CaptureResultAction.PIN_DIRECTLY) }
                     )
                     CaptureOptionRow(
                         title = "直接进入编辑页",
                         selected = selectedAction == CaptureResultAction.OPEN_EDITOR,
-                        onSelect = {
-                            selectedAction = CaptureResultAction.OPEN_EDITOR
-                            onActionChanged(CaptureResultAction.OPEN_EDITOR)
-                        }
+                        onSelect = { onActionChanged(CaptureResultAction.OPEN_EDITOR) }
                     )
                     Divider()
-                    Text(
-                        text = "贴图缩放方式",
-                        style = MaterialTheme.typography.titleSmall
-                    )
+                    Text("贴图缩放方式", style = MaterialTheme.typography.titleSmall)
                     CaptureOptionRow(
                         title = "等比例缩放",
                         selected = selectedScaleMode == PinScaleMode.LOCK_ASPECT,
-                        onSelect = {
-                            selectedScaleMode = PinScaleMode.LOCK_ASPECT
-                            onScaleModeChanged(PinScaleMode.LOCK_ASPECT)
-                        }
+                        onSelect = { onScaleModeChanged(PinScaleMode.LOCK_ASPECT) }
                     )
                     CaptureOptionRow(
                         title = "自由缩放（宽高独立）",
                         selected = selectedScaleMode == PinScaleMode.FREE_SCALE,
-                        onSelect = {
-                            selectedScaleMode = PinScaleMode.FREE_SCALE
-                            onScaleModeChanged(PinScaleMode.FREE_SCALE)
-                        }
+                        onSelect = { onScaleModeChanged(PinScaleMode.FREE_SCALE) }
                     )
                     Divider()
                     Row(
@@ -301,10 +491,7 @@ fun MainScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "贴图默认阴影",
-                                style = MaterialTheme.typography.titleSmall
-                            )
+                            Text("贴图默认阴影", style = MaterialTheme.typography.titleSmall)
                             Text(
                                 text = if (defaultPinShadowEnabled) "新贴图默认带阴影" else "新贴图默认不带阴影",
                                 style = MaterialTheme.typography.bodySmall,
@@ -313,132 +500,7 @@ fun MainScreen(
                         }
                         Switch(
                             checked = defaultPinShadowEnabled,
-                            onCheckedChange = {
-                                defaultPinShadowEnabled = it
-                                onDefaultPinShadowChanged(it)
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "工程记录保留策略",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    NumberSettingRow(
-                        title = "最多保留 $maxSessionCount 个工程",
-                        value = maxSessionCount,
-                        valueRange = 1..500,
-                        onDecrease = {
-                            maxSessionCount = (maxSessionCount - 1).coerceAtLeast(1)
-                            onMaxSessionCountChanged(maxSessionCount)
-                            refreshRecords()
-                        },
-                        onIncrease = {
-                            maxSessionCount = (maxSessionCount + 1).coerceAtMost(500)
-                            onMaxSessionCountChanged(maxSessionCount)
-                            refreshRecords()
-                        },
-                        onApply = { value ->
-                            maxSessionCount = value
-                            onMaxSessionCountChanged(value)
-                            refreshRecords()
-                        }
-                    )
-                    NumberSettingRow(
-                        title = "只保留最近 $retainDays 天",
-                        value = retainDays,
-                        valueRange = 1..365,
-                        onDecrease = {
-                            retainDays = (retainDays - 1).coerceAtLeast(1)
-                            onRetainDaysChanged(retainDays)
-                            refreshRecords()
-                        },
-                        onIncrease = {
-                            retainDays = (retainDays + 1).coerceAtMost(365)
-                            onRetainDaysChanged(retainDays)
-                            refreshRecords()
-                        },
-                        onApply = { value ->
-                            retainDays = value
-                            onRetainDaysChanged(value)
-                            refreshRecords()
-                        }
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            onClearAllRecords()
-                            refreshRecords()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.DeleteSweep, contentDescription = null)
-                        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                        Text("清空全部工程记录")
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Folder, contentDescription = null)
-                        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                        Text(
-                            text = "可见记录目录",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
-                    Text(
-                        text = recordsDirectory,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "工程文件数：${sessionFiles.size}    已关闭贴图恢复队列：$recentClosedPinCount",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    OutlinedButton(
-                        onClick = { refreshRecords() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("刷新记录列表")
-                    }
-                }
-            }
-        }
-
-        if (sessionFiles.isEmpty()) {
-            item {
-                Text(
-                    text = "当前还没有保存的工程记录。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            item {
-                Text(
-                    text = "最近的工程文件",
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            items(sessionFiles, key = { it.id }) { item ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(item.file.name, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = formatTimestamp(item.lastModified),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            onCheckedChange = onDefaultPinShadowChanged
                         )
                     }
                 }
@@ -453,7 +515,7 @@ fun MainScreen(
                         .fillMaxWidth()
                         .height(56.dp)
                 ) {
-                    Text(text = "授予权限")
+                    Text("授予权限")
                 }
             } else {
                 OutlinedButton(
@@ -462,7 +524,7 @@ fun MainScreen(
                         .fillMaxWidth()
                         .height(56.dp)
                 ) {
-                    Text(text = "重启悬浮球")
+                    Text("重启悬浮球")
                 }
             }
         }
@@ -474,6 +536,268 @@ fun MainScreen(
                 color = MaterialTheme.colorScheme.outline,
                 textAlign = TextAlign.Center
             )
+        }
+    }
+}
+
+@Composable
+private fun HistoryManagementTab(
+    modifier: Modifier = Modifier,
+    pinHistoryEnabled: Boolean,
+    maxPinHistoryCount: Int,
+    pinHistoryRetainDays: Int,
+    maxSessionCount: Int,
+    retainDays: Int,
+    snapshot: MainScreenSnapshot,
+    onPinHistoryEnabledChanged: (Boolean) -> Unit,
+    onMaxPinHistoryCountChanged: (Int) -> Unit,
+    onPinHistoryRetainDaysChanged: (Int) -> Unit,
+    onMaxSessionCountChanged: (Int) -> Unit,
+    onRetainDaysChanged: (Int) -> Unit,
+    onClearPinHistory: () -> Unit,
+    onClearAllRecords: () -> Unit,
+    onDeleteHistory: (PinHistoryRecord) -> Unit,
+    onRestoreHistory: (PinHistoryRecord) -> Unit,
+    onEditHistory: (PinHistoryRecord) -> Unit,
+    onRefreshRecords: () -> Unit,
+    recordsLoading: Boolean
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("贴图历史策略", style = MaterialTheme.typography.titleSmall)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("启用贴图历史", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = if (pinHistoryEnabled) "已启用，新的贴图会进入历史记录。" else "已关闭，历史只读不再写入新记录。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = pinHistoryEnabled,
+                            onCheckedChange = onPinHistoryEnabledChanged
+                        )
+                    }
+                    NumberSettingRow(
+                        title = "最多保留 $maxPinHistoryCount 条贴图历史",
+                        value = maxPinHistoryCount,
+                        valueRange = 1..500,
+                        onDecrease = { onMaxPinHistoryCountChanged((maxPinHistoryCount - 1).coerceAtLeast(1)) },
+                        onIncrease = { onMaxPinHistoryCountChanged((maxPinHistoryCount + 1).coerceAtMost(500)) },
+                        onApply = onMaxPinHistoryCountChanged
+                    )
+                    NumberSettingRow(
+                        title = "只保留最近 $pinHistoryRetainDays 天的贴图历史",
+                        value = pinHistoryRetainDays,
+                        valueRange = 1..365,
+                        onDecrease = { onPinHistoryRetainDaysChanged((pinHistoryRetainDays - 1).coerceAtLeast(1)) },
+                        onIncrease = { onPinHistoryRetainDaysChanged((pinHistoryRetainDays + 1).coerceAtMost(365)) },
+                        onApply = onPinHistoryRetainDaysChanged
+                    )
+                    Text(
+                        text = "贴图历史目录：${snapshot.pinHistoryDirectory}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text("当前贴图历史数：${snapshot.pinHistoryRecords.size}", style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = onRefreshRecords,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("刷新")
+                        }
+                        OutlinedButton(
+                            onClick = onClearPinHistory,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("清空贴图历史")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("工程记录策略", style = MaterialTheme.typography.titleSmall)
+                    NumberSettingRow(
+                        title = "最多保留 $maxSessionCount 个工程",
+                        value = maxSessionCount,
+                        valueRange = 1..500,
+                        onDecrease = { onMaxSessionCountChanged((maxSessionCount - 1).coerceAtLeast(1)) },
+                        onIncrease = { onMaxSessionCountChanged((maxSessionCount + 1).coerceAtMost(500)) },
+                        onApply = onMaxSessionCountChanged
+                    )
+                    NumberSettingRow(
+                        title = "只保留最近 $retainDays 天",
+                        value = retainDays,
+                        valueRange = 1..365,
+                        onDecrease = { onRetainDaysChanged((retainDays - 1).coerceAtLeast(1)) },
+                        onIncrease = { onRetainDaysChanged((retainDays + 1).coerceAtMost(365)) },
+                        onApply = onRetainDaysChanged
+                    )
+                    Text(
+                        text = "工程目录：${snapshot.recordsDirectory}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "工程文件数：${snapshot.sessionFiles.size}    已关闭贴图恢复队列：${snapshot.recentClosedPinCount}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedButton(
+                        onClick = onClearAllRecords,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.DeleteSweep, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("清空全部记录")
+                    }
+                }
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("贴图历史记录", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "共 ${snapshot.pinHistoryRecords.size} 条",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (recordsLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+
+        if (snapshot.pinHistoryRecords.isEmpty()) {
+            item {
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    tonalElevation = 2.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("当前还没有贴图历史", style = MaterialTheme.typography.titleSmall)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "贴图后会自动出现在这里。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            items(snapshot.pinHistoryRecords, key = { it.id }) { item ->
+                PinHistoryRecordCard(
+                    item = item,
+                    onRestore = { onRestoreHistory(item) },
+                    onEdit = { onEditHistory(item) },
+                    onDelete = { onDeleteHistory(item) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PinHistoryRecordCard(
+    item: PinHistoryRecord,
+    onRestore: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(historySourceLabel(item.sourceType), style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = formatTimestamp(item.createdAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = if (item.annotationSessionId.isNullOrBlank()) "图片历史" else "可继续编辑",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (item.annotationSessionId.isNullOrBlank()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
+                )
+            }
+
+            Text(
+                text = item.imageUri,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(onClick = onRestore, modifier = Modifier.weight(1f)) {
+                    Text("重新贴图")
+                }
+                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
+                    Text("继续编辑")
+                }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
+                    Text("删除")
+                }
+            }
         }
     }
 }
@@ -551,6 +875,14 @@ private fun CaptureOptionRow(
     ) {
         RadioButton(selected = selected, onClick = onSelect)
         Text(text = title, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private fun historySourceLabel(sourceType: PinHistorySourceType): String {
+    return when (sourceType) {
+        PinHistorySourceType.SCREENSHOT -> "截图直贴"
+        PinHistorySourceType.EDITOR_EXPORT -> "编辑后贴图"
+        PinHistorySourceType.RESTORED_PIN -> "历史恢复贴图"
     }
 }
 

@@ -1,4 +1,4 @@
-package com.pixpin.android.presentation.crop
+Ôªøpackage com.pixpin.android.presentation.crop
 
 import android.content.Intent
 import android.graphics.Bitmap
@@ -42,7 +42,7 @@ class RegionCropActivity : ComponentActivity() {
 
         val uriString = intent.getStringExtra(EXTRA_IMAGE_URI)
         if (uriString.isNullOrBlank()) {
-            Toast.makeText(this, "Œﬁ∑®º”‘ÿΩÿÕº", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Êó†Ê≥ïÂä†ËΩΩÊà™Âõæ", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -54,7 +54,7 @@ class RegionCropActivity : ComponentActivity() {
             }
             if (sourceBitmap == null) throw IllegalStateException("Bitmap decode failed")
         } catch (e: Exception) {
-            Toast.makeText(this, "ΩÿÕºº”‘ÿ ß∞‹£∫${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Êà™ÂõæÂä†ËΩΩÂ§±Ë¥•Ôºö${e.message}", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -93,6 +93,7 @@ class RegionCropActivity : ComponentActivity() {
                 if (resultAction == CaptureResultAction.PIN_DIRECTLY) {
                     val pinIntent = Intent(this@RegionCropActivity, PinOverlayService::class.java).apply {
                         putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
+                        putExtra(PinOverlayService.EXTRA_HISTORY_SOURCE, com.pixpin.android.domain.usecase.PinHistorySourceType.SCREENSHOT.value)
                     }
                     startService(pinIntent)
                     closeScreenshotFlow()
@@ -105,7 +106,7 @@ class RegionCropActivity : ComponentActivity() {
                 startActivity(editorIntent)
                 finish()
             } catch (e: Exception) {
-                Toast.makeText(this@RegionCropActivity, "«¯”Ú≤√ºÙ ß∞‹£∫${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@RegionCropActivity, "Âå∫ÂüüË£ÅÂâ™Â§±Ë¥•Ôºö${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -129,3 +130,6 @@ class RegionCropActivity : ComponentActivity() {
         const val EXTRA_FORCE_RESULT_ACTION = "extra_force_result_action"
     }
 }
+
+
+

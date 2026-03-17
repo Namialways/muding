@@ -62,6 +62,30 @@ class CaptureFlowSettings(context: Context) {
         prefs.edit().putBoolean(KEY_PIN_SHADOW_ENABLED, enabled).apply()
     }
 
+    fun isPinHistoryEnabled(): Boolean {
+        return prefs.getBoolean(KEY_PIN_HISTORY_ENABLED, true)
+    }
+
+    fun setPinHistoryEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PIN_HISTORY_ENABLED, enabled).apply()
+    }
+
+    fun getMaxPinHistoryCount(): Int {
+        return prefs.getInt(KEY_MAX_PIN_HISTORY_COUNT, 50).coerceIn(1, 500)
+    }
+
+    fun setMaxPinHistoryCount(count: Int) {
+        prefs.edit().putInt(KEY_MAX_PIN_HISTORY_COUNT, count.coerceIn(1, 500)).apply()
+    }
+
+    fun getPinHistoryRetainDays(): Int {
+        return prefs.getInt(KEY_PIN_HISTORY_RETAIN_DAYS, 14).coerceIn(1, 365)
+    }
+
+    fun setPinHistoryRetainDays(days: Int) {
+        prefs.edit().putInt(KEY_PIN_HISTORY_RETAIN_DAYS, days.coerceIn(1, 365)).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "pixpin_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"
@@ -69,5 +93,8 @@ class CaptureFlowSettings(context: Context) {
         private const val KEY_MAX_SESSION_COUNT = "max_session_count"
         private const val KEY_RETAIN_DAYS = "retain_days"
         private const val KEY_PIN_SHADOW_ENABLED = "pin_shadow_enabled"
+        private const val KEY_PIN_HISTORY_ENABLED = "pin_history_enabled"
+        private const val KEY_MAX_PIN_HISTORY_COUNT = "max_pin_history_count"
+        private const val KEY_PIN_HISTORY_RETAIN_DAYS = "pin_history_retain_days"
     }
 }

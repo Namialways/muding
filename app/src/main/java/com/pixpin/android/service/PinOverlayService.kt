@@ -73,6 +73,9 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pixpin.android.domain.usecase.CaptureFlowSettings
+import com.pixpin.android.domain.usecase.PinHistoryRecord
+import com.pixpin.android.domain.usecase.PinHistorySourceType
+import com.pixpin.android.domain.usecase.PinHistoryStore
 import com.pixpin.android.domain.usecase.PinScaleMode
 import com.pixpin.android.domain.usecase.RecentPinStore
 import com.pixpin.android.domain.usecase.ClosedPinRecord
@@ -157,6 +160,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
         val imageUriString = intent?.getStringExtra(EXTRA_IMAGE_URI)
         val annotationSessionId = intent?.getStringExtra(EXTRA_ANNOTATION_SESSION_ID)
+        val historySourceType = PinHistorySourceType.fromValue(intent?.getStringExtra(EXTRA_HISTORY_SOURCE))
         if (!imageUriString.isNullOrBlank()) {
             val imageUri = android.net.Uri.parse(imageUriString)
             serviceScope.launch {
@@ -167,7 +171,13 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         }
                     }
                     if (bitmap != null) {
-                        showPinOverlay(bitmap, imageUriString, annotationSessionId, captureFlowSettings.getPinScaleMode())
+                        showPinOverlay(
+                            bitmap = bitmap,
+                            imageUriString = imageUriString,
+                            annotationSessionId = annotationSessionId,
+                            scaleMode = captureFlowSettings.getPinScaleMode(),
+                            historySourceType = historySourceType
+                        )
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -193,7 +203,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         bitmap = bitmap,
                         imageUriString = record.imageUri,
                         annotationSessionId = record.annotationSessionId,
-                        scaleMode = captureFlowSettings.getPinScaleMode()
+                        scaleMode = captureFlowSettings.getPinScaleMode(),
+                        historySourceType = PinHistorySourceType.RESTORED_PIN
                     )
                 }
             } catch (e: Exception) {
@@ -206,7 +217,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         bitmap: Bitmap,
         imageUriString: String,
         annotationSessionId: String?,
-        scaleMode: PinScaleMode
+        scaleMode: PinScaleMode,
+        historySourceType: PinHistorySourceType
     ) {
         val overlayId = UUID.randomUUID().toString()
         val uiState = PinOverlayUiState(captureFlowSettings.isPinShadowEnabledByDefault())
@@ -372,6 +384,11 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             windowManager.addView(imageView, imageParams)
             windowManager.addView(controlsView, controlsParams)
             controlsView.visibility = View.GONE
+            recordPinHistoryIfNeeded(
+                imageUri = imageUriString,
+                annotationSessionId = annotationSessionId,
+                sourceType = historySourceType
+            )
         } catch (e: Exception) {
             overlays.remove(overlayId)
             try {
@@ -466,6 +483,26 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 annotationSessionId = entry.annotationSessionId
             )
         )
+    }
+
+    private fun recordPinHistoryIfNeeded(
+        imageUri: String,
+        annotationSessionId: String?,
+        sourceType: PinHistorySourceType
+    ) {
+        if (!captureFlowSettings.isPinHistoryEnabled()) return
+        PinHistoryStore.put(
+            context = this,
+            imageUri = imageUri,
+            annotationSessionId = annotationSessionId,
+            sourceType = sourceType
+        )
+        PinHistoryStore.prune(
+            context = this,
+            maxCount = captureFlowSettings.getMaxPinHistoryCount(),
+            maxDays = captureFlowSettings.getPinHistoryRetainDays()
+        )
+        notifyManagerChanged()
     }
 
     private fun setOverlayVisible(overlayId: String, visible: Boolean) {
@@ -662,6 +699,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         const val ACTION_OPEN_MANAGER = "com.pixpin.android.action.OPEN_MANAGER"
         const val EXTRA_IMAGE_URI = "extra_image_uri"
         const val EXTRA_ANNOTATION_SESSION_ID = "extra_annotation_session_id"
+        const val EXTRA_HISTORY_SOURCE = "extra_history_source"
     }
 }
 
@@ -1059,6 +1097,7 @@ private fun PinManagerContent(
                     }
                 }
             }
+
         }
     }
 }
