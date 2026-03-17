@@ -64,6 +64,8 @@ import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.domain.usecase.PinHistoryStore
 import com.pixpin.android.domain.usecase.PinScaleMode
 import com.pixpin.android.domain.usecase.RecentPinStore
+import com.pixpin.android.domain.usecase.RuntimeStorageManager
+import com.pixpin.android.domain.usecase.RuntimeStorageSnapshot
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.FloatingBallService
@@ -131,6 +133,12 @@ class MainActivity : ComponentActivity() {
                             AnnotationSessionStore.clearAll(this)
                             RecentPinStore.clear(this)
                             PinHistoryStore.clear(this)
+                        },
+                        onClearImageCaches = {
+                            RuntimeStorageManager.clearImageCaches(this)
+                        },
+                        onClearAllRuntimeFiles = {
+                            RuntimeStorageManager.clearAllRuntimeFiles(this)
                         },
                         onClearPinHistory = {
                             PinHistoryStore.clear(this)
@@ -206,7 +214,8 @@ class MainActivity : ComponentActivity() {
             recentClosedPinCount = RecentPinStore.count(this),
             pinHistoryRecords = PinHistoryStore.list(this),
             recordsDirectory = AnnotationSessionStore.visibleDirectoryPath(this),
-            pinHistoryDirectory = PinHistoryStore.visibleDirectoryPath(this)
+            pinHistoryDirectory = PinHistoryStore.visibleDirectoryPath(this),
+            runtimeStorage = RuntimeStorageManager.snapshot(this)
         )
     }
 
@@ -236,7 +245,8 @@ data class MainScreenSnapshot(
     val recentClosedPinCount: Int,
     val pinHistoryRecords: List<PinHistoryRecord>,
     val recordsDirectory: String,
-    val pinHistoryDirectory: String
+    val pinHistoryDirectory: String,
+    val runtimeStorage: RuntimeStorageSnapshot
 ) {
     companion object {
         fun empty(): MainScreenSnapshot {
@@ -245,7 +255,8 @@ data class MainScreenSnapshot(
                 recentClosedPinCount = 0,
                 pinHistoryRecords = emptyList(),
                 recordsDirectory = "",
-                pinHistoryDirectory = ""
+                pinHistoryDirectory = "",
+                runtimeStorage = RuntimeStorageSnapshot(0, 0, 0, 0, 0)
             )
         }
     }
@@ -272,6 +283,8 @@ private fun MainScreen(
     onMaxPinHistoryCountChanged: (Int) -> Unit,
     onPinHistoryRetainDaysChanged: (Int) -> Unit,
     onClearAllRecords: () -> Unit,
+    onClearImageCaches: () -> Unit,
+    onClearAllRuntimeFiles: () -> Unit,
     onClearPinHistory: () -> Unit,
     onDeleteHistory: (PinHistoryRecord) -> Unit,
     onRestoreHistory: (PinHistoryRecord) -> Unit,
@@ -392,6 +405,12 @@ private fun MainScreen(
                 },
                 onClearAllRecords = {
                     runRecordsMutation { onClearAllRecords() }
+                },
+                onClearImageCaches = {
+                    runRecordsMutation { onClearImageCaches() }
+                },
+                onClearAllRuntimeFiles = {
+                    runRecordsMutation { onClearAllRuntimeFiles() }
                 },
                 onDeleteHistory = {
                     runRecordsMutation { onDeleteHistory(it) }
@@ -556,6 +575,8 @@ private fun HistoryManagementTab(
     onRetainDaysChanged: (Int) -> Unit,
     onClearPinHistory: () -> Unit,
     onClearAllRecords: () -> Unit,
+    onClearImageCaches: () -> Unit,
+    onClearAllRuntimeFiles: () -> Unit,
     onDeleteHistory: (PinHistoryRecord) -> Unit,
     onRestoreHistory: (PinHistoryRecord) -> Unit,
     onEditHistory: (PinHistoryRecord) -> Unit,
@@ -670,6 +691,45 @@ private fun HistoryManagementTab(
                 }
             }
         }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("运行缓存清理", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = "这些文件都属于应用运行时缓存，可主动删除，不会影响你的手机系统和相册里的正式图片。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text("截图缓存：${formatFileSize(snapshot.runtimeStorage.screenshotsCacheBytes)}", style = MaterialTheme.typography.bodyMedium)
+                    Text("贴图缓存：${formatFileSize(snapshot.runtimeStorage.pinnedCacheBytes)}", style = MaterialTheme.typography.bodyMedium)
+                    Text("分享缓存：${formatFileSize(snapshot.runtimeStorage.shareCacheBytes)}", style = MaterialTheme.typography.bodyMedium)
+                    Text("工程记录：${formatFileSize(snapshot.runtimeStorage.annotationSessionBytes)}", style = MaterialTheme.typography.bodyMedium)
+                    Text("历史记录：${formatFileSize(snapshot.runtimeStorage.pinHistoryBytes)}", style = MaterialTheme.typography.bodyMedium)
+                    Text("总占用：${formatFileSize(snapshot.runtimeStorage.totalBytes)}", style = MaterialTheme.typography.titleSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = onClearImageCaches,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("清理图片缓存")
+                        }
+                        OutlinedButton(
+                            onClick = onClearAllRecords,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("清理记录缓存")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onClearAllRuntimeFiles,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("清理全部运行缓存")
+                    }
+                }
+            }
+        }
+
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -889,3 +949,17 @@ private fun historySourceLabel(sourceType: PinHistorySourceType): String {
 private fun formatTimestamp(timestamp: Long): String {
     return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
 }
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0L) return "0 B"
+    val kb = 1024.0
+    val mb = kb * 1024.0
+    return when {
+        bytes >= mb -> String.format(Locale.getDefault(), "%.2f MB", bytes / mb)
+        bytes >= kb -> String.format(Locale.getDefault(), "%.1f KB", bytes / kb)
+        else -> "$bytes B"
+    }
+}
+
+
+
