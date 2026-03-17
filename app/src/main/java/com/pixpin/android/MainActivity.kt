@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,16 +15,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Slider
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -49,7 +54,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,6 +66,7 @@ import com.pixpin.android.domain.usecase.AnnotationSessionFile
 import com.pixpin.android.domain.usecase.AnnotationSessionStore
 import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.CaptureResultAction
+import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.PermissionHandler
 import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
@@ -67,6 +76,7 @@ import com.pixpin.android.domain.usecase.RecentPinStore
 import com.pixpin.android.domain.usecase.RuntimeStorageManager
 import com.pixpin.android.domain.usecase.RuntimeStorageSnapshot
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
+import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.FloatingBallService
 import com.pixpin.android.service.PinOverlayService
@@ -101,6 +111,9 @@ class MainActivity : ComponentActivity() {
                         initialMaxSessionCount = captureFlowSettings.getMaxSessionCount(),
                         initialRetainDays = captureFlowSettings.getRetainDays(),
                         initialPinShadowEnabled = captureFlowSettings.isPinShadowEnabledByDefault(),
+                        initialFloatingBallSizeDp = captureFlowSettings.getFloatingBallSizeDp(),
+                        initialFloatingBallOpacity = captureFlowSettings.getFloatingBallOpacity(),
+                        initialFloatingBallTheme = captureFlowSettings.getFloatingBallTheme(),
                         initialPinHistoryEnabled = captureFlowSettings.isPinHistoryEnabled(),
                         initialMaxPinHistoryCount = captureFlowSettings.getMaxPinHistoryCount(),
                         initialPinHistoryRetainDays = captureFlowSettings.getPinHistoryRetainDays(),
@@ -117,6 +130,18 @@ class MainActivity : ComponentActivity() {
                         },
                         onDefaultPinShadowChanged = { enabled ->
                             captureFlowSettings.setPinShadowEnabledByDefault(enabled)
+                        },
+                        onFloatingBallSizeChanged = { size ->
+                            captureFlowSettings.setFloatingBallSizeDp(size)
+                            refreshFloatingBallAppearance()
+                        },
+                        onFloatingBallOpacityChanged = { opacity ->
+                            captureFlowSettings.setFloatingBallOpacity(opacity)
+                            refreshFloatingBallAppearance()
+                        },
+                        onFloatingBallThemeChanged = { theme ->
+                            captureFlowSettings.setFloatingBallTheme(theme)
+                            refreshFloatingBallAppearance()
                         },
                         onPinHistoryEnabledChanged = { enabled ->
                             captureFlowSettings.setPinHistoryEnabled(enabled)
@@ -224,6 +249,17 @@ class MainActivity : ComponentActivity() {
         startService(intent)
     }
 
+    private fun refreshFloatingBallAppearance() {
+        if (!permissionHandler.hasOverlayPermission()) {
+            return
+        }
+        startService(
+            Intent(this, FloatingBallService::class.java).apply {
+                action = FloatingBallService.ACTION_REFRESH_FLOATING_BALL_APPEARANCE
+            }
+        )
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == PermissionHandler.REQUEST_CODE_OVERLAY_PERMISSION) {
@@ -270,6 +306,9 @@ private fun MainScreen(
     initialMaxSessionCount: Int,
     initialRetainDays: Int,
     initialPinShadowEnabled: Boolean,
+    initialFloatingBallSizeDp: Int,
+    initialFloatingBallOpacity: Float,
+    initialFloatingBallTheme: FloatingBallTheme,
     initialPinHistoryEnabled: Boolean,
     initialMaxPinHistoryCount: Int,
     initialPinHistoryRetainDays: Int,
@@ -279,6 +318,9 @@ private fun MainScreen(
     onMaxSessionCountChanged: (Int) -> Unit,
     onRetainDaysChanged: (Int) -> Unit,
     onDefaultPinShadowChanged: (Boolean) -> Unit,
+    onFloatingBallSizeChanged: (Int) -> Unit,
+    onFloatingBallOpacityChanged: (Float) -> Unit,
+    onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
     onMaxPinHistoryCountChanged: (Int) -> Unit,
     onPinHistoryRetainDaysChanged: (Int) -> Unit,
@@ -301,6 +343,9 @@ private fun MainScreen(
     var maxSessionCount by remember { mutableIntStateOf(initialMaxSessionCount) }
     var retainDays by remember { mutableIntStateOf(initialRetainDays) }
     var defaultPinShadowEnabled by remember { mutableStateOf(initialPinShadowEnabled) }
+    var floatingBallSizeDp by remember { mutableIntStateOf(initialFloatingBallSizeDp) }
+    var floatingBallOpacity by remember { mutableStateOf(initialFloatingBallOpacity) }
+    var floatingBallTheme by remember { mutableStateOf(initialFloatingBallTheme) }
     var pinHistoryEnabled by remember { mutableStateOf(initialPinHistoryEnabled) }
     var maxPinHistoryCount by remember { mutableIntStateOf(initialMaxPinHistoryCount) }
     var pinHistoryRetainDays by remember { mutableIntStateOf(initialPinHistoryRetainDays) }
@@ -356,6 +401,9 @@ private fun MainScreen(
                 selectedAction = selectedAction,
                 selectedScaleMode = selectedScaleMode,
                 defaultPinShadowEnabled = defaultPinShadowEnabled,
+                floatingBallSizeDp = floatingBallSizeDp,
+                floatingBallOpacity = floatingBallOpacity,
+                floatingBallTheme = floatingBallTheme,
                 onActionChanged = {
                     selectedAction = it
                     onActionChanged(it)
@@ -367,6 +415,18 @@ private fun MainScreen(
                 onDefaultPinShadowChanged = {
                     defaultPinShadowEnabled = it
                     onDefaultPinShadowChanged(it)
+                },
+                onFloatingBallSizeChanged = {
+                    floatingBallSizeDp = it
+                    onFloatingBallSizeChanged(it)
+                },
+                onFloatingBallOpacityChanged = {
+                    floatingBallOpacity = it
+                    onFloatingBallOpacityChanged(it)
+                },
+                onFloatingBallThemeChanged = {
+                    floatingBallTheme = it
+                    onFloatingBallThemeChanged(it)
                 },
                 onRequestPermission = onRequestPermission,
                 onStartService = onStartService
@@ -430,9 +490,15 @@ private fun BasicSettingsTab(
     selectedAction: CaptureResultAction,
     selectedScaleMode: PinScaleMode,
     defaultPinShadowEnabled: Boolean,
+    floatingBallSizeDp: Int,
+    floatingBallOpacity: Float,
+    floatingBallTheme: FloatingBallTheme,
     onActionChanged: (CaptureResultAction) -> Unit,
     onScaleModeChanged: (PinScaleMode) -> Unit,
     onDefaultPinShadowChanged: (Boolean) -> Unit,
+    onFloatingBallSizeChanged: (Int) -> Unit,
+    onFloatingBallOpacityChanged: (Float) -> Unit,
+    onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
     onRequestPermission: () -> Unit,
     onStartService: () -> Unit
 ) {
@@ -522,6 +588,52 @@ private fun BasicSettingsTab(
                             onCheckedChange = onDefaultPinShadowChanged
                         )
                     }
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("悬浮球个性化", style = MaterialTheme.typography.titleSmall)
+                    FloatingBallAppearancePreview(
+                        sizeDp = floatingBallSizeDp,
+                        opacity = floatingBallOpacity,
+                        theme = floatingBallTheme
+                    )
+                    NumberSettingRow(
+                        title = "悬浮球大小（${floatingBallSizeDp}dp）",
+                        value = floatingBallSizeDp,
+                        valueRange = 44..96,
+                        onDecrease = { onFloatingBallSizeChanged((floatingBallSizeDp - 2).coerceAtLeast(44)) },
+                        onIncrease = { onFloatingBallSizeChanged((floatingBallSizeDp + 2).coerceAtMost(96)) },
+                        onApply = { onFloatingBallSizeChanged(it.coerceIn(44, 96)) }
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("透明度（${(floatingBallOpacity * 100).toInt()}%）", style = MaterialTheme.typography.bodyMedium)
+                        Slider(
+                            value = floatingBallOpacity,
+                            onValueChange = onFloatingBallOpacityChanged,
+                            valueRange = 0.4f..1f
+                        )
+                    }
+                    Divider()
+                    Text("主题配色", style = MaterialTheme.typography.titleSmall)
+                    CaptureOptionRow(
+                        title = "蓝紫渐变",
+                        selected = floatingBallTheme == FloatingBallTheme.BLUE_PURPLE,
+                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.BLUE_PURPLE) }
+                    )
+                    CaptureOptionRow(
+                        title = "日落橙红",
+                        selected = floatingBallTheme == FloatingBallTheme.SUNSET,
+                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.SUNSET) }
+                    )
+                    CaptureOptionRow(
+                        title = "青绿渐变",
+                        selected = floatingBallTheme == FloatingBallTheme.EMERALD,
+                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.EMERALD) }
+                    )
                 }
             }
         }
@@ -859,6 +971,50 @@ private fun PinHistoryRecordCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FloatingBallAppearancePreview(
+    sizeDp: Int,
+    opacity: Float,
+    theme: FloatingBallTheme
+) {
+    val colors = floatingBallThemeColors(theme)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(
+            modifier = Modifier.size(sizeDp.dp),
+            shape = CircleShape,
+            shadowElevation = 8.dp
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(opacity)
+                    .background(
+                        brush = Brush.linearGradient(listOf(colors.start, colors.end)),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Camera,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size((sizeDp * 0.5f).dp)
+                )
+            }
+        }
+        Text(
+            text = "预览仅展示悬浮球外观，设置后会立即同步到当前悬浮球。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
     }
 }
 

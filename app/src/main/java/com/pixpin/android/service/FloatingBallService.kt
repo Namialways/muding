@@ -57,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
@@ -79,22 +80,33 @@ import com.pixpin.android.R
 import com.pixpin.android.domain.usecase.CacheImageStore
 import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.CaptureResultAction
+import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.RecentPinStore
 import com.pixpin.android.domain.usecase.ScreenshotManager
 import com.pixpin.android.presentation.crop.CaptureCropOverlay
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
-import com.pixpin.android.presentation.theme.FloatingBallGradientEnd
-import com.pixpin.android.presentation.theme.FloatingBallGradientStart
+import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
+private data class FloatingBallAppearance(
+    val sizeDp: Int,
+    val opacity: Float,
+    val expandedSizeDp: Int,
+    val iconSizeDp: Int,
+    val expandedIconSizeDp: Int,
+    val dragBoundPx: Int,
+    val theme: FloatingBallTheme
+)
+
 class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private lateinit var windowManager: WindowManager
     private var floatingView: ComposeView? = null
+    private var floatingBallParams: WindowManager.LayoutParams? = null
     private var cropOverlayView: ComposeView? = null
     private var cropOverlayBitmap: Bitmap? = null
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
@@ -130,7 +142,12 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_START_SCREENSHOT) {
+        when (intent?.action) {
+            ACTION_REFRESH_FLOATING_BALL_APPEARANCE -> {
+                recreateFloatingBall()
+            }
+
+            ACTION_START_SCREENSHOT -> {
             val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
             val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
             if (resultCode == Activity.RESULT_OK && resultData != null) {
@@ -150,13 +167,15 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 floatingView?.visibility = View.VISIBLE
             }
         }
+        }
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun showFloatingBall() {
-        val params = WindowManager.LayoutParams(
+        val appearance = loadFloatingBallAppearance()
+        val params = floatingBallParams ?: WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -172,13 +191,15 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             x = 100
             y = 100
         }
+        floatingBallParams = params
 
-        floatingView = ComposeView(this).apply {
+        val view = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@FloatingBallService)
             setViewTreeSavedStateRegistryOwner(this@FloatingBallService)
             setContent {
                 PixPinTheme {
                     FloatingBallContent(
+                        appearance = appearance,
                         onScreenshot = { handleScreenshot() },
                         onRestorePin = { restoreLastClosedPin() },
                         onManagePins = { openPinManager() },
@@ -193,8 +214,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             val size = Point()
                             display.getRealSize(size)
 
-                            params.x = params.x.coerceIn(0, size.x - 200)
-                            params.y = params.y.coerceIn(0, size.y - 200)
+                            params.x = params.x.coerceIn(0, (size.x - appearance.dragBoundPx).coerceAtLeast(0))
+                            params.y = params.y.coerceIn(0, (size.y - appearance.dragBoundPx).coerceAtLeast(0))
 
                             try {
                                 windowManager.updateViewLayout(this, params)
@@ -206,12 +227,43 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
             }
         }
+        floatingView = view
 
         try {
-            windowManager.addView(floatingView, params)
+            windowManager.addView(view, params)
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun recreateFloatingBall() {
+        cancelSnap()
+        floatingView?.let {
+            try {
+                windowManager.removeViewImmediate(it)
+            } catch (_: Exception) {
+                try {
+                    windowManager.removeView(it)
+                } catch (_: Exception) {
+                }
+            }
+        }
+        floatingView = null
+        showFloatingBall()
+    }
+
+    private fun loadFloatingBallAppearance(): FloatingBallAppearance {
+        val density = resources.displayMetrics.density
+        val sizeDp = captureFlowSettings.getFloatingBallSizeDp()
+        return FloatingBallAppearance(
+            sizeDp = sizeDp,
+            opacity = captureFlowSettings.getFloatingBallOpacity(),
+            expandedSizeDp = (sizeDp * 3.2f).roundToInt().coerceIn(140, 260),
+            iconSizeDp = (sizeDp * 0.52f).roundToInt().coerceIn(24, 42),
+            expandedIconSizeDp = (sizeDp * 1.25f).roundToInt().coerceIn(54, 96),
+            dragBoundPx = (sizeDp * density).roundToInt(),
+            theme = captureFlowSettings.getFloatingBallTheme()
+        )
     }
 
     private fun handleScreenshot() {
@@ -435,7 +487,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         display.getRealSize(size)
         val screenWidth = size.x
 
-        val viewWidth = floatingView?.width ?: params.width
+        val viewWidth = (floatingView?.width?.takeIf { it > 0 }
+            ?: params.width.takeIf { it > 0 }
+            ?: loadFloatingBallAppearance().dragBoundPx)
         val currentX = params.x
         val targetX = if (currentX < (screenWidth - viewWidth) / 2) 0 else screenWidth - viewWidth
 
@@ -481,13 +535,16 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         private const val NOTIFICATION_ID = 1
 
         const val ACTION_START_SCREENSHOT = "com.pixpin.android.action.START_SCREENSHOT"
+        const val ACTION_REFRESH_FLOATING_BALL_APPEARANCE =
+            "com.pixpin.android.action.REFRESH_FLOATING_BALL_APPEARANCE"
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
     }
 }
 
 @Composable
-fun FloatingBallContent(
+private fun FloatingBallContent(
+    appearance: FloatingBallAppearance,
     onScreenshot: () -> Unit,
     onRestorePin: () -> Unit,
     onManagePins: () -> Unit,
@@ -516,6 +573,7 @@ fun FloatingBallContent(
             }
     ) {
         FloatingBall(
+            appearance = appearance,
             isExpanded = isExpanded,
             onClick = {
                 if (!isExpanded) {
@@ -558,10 +616,15 @@ fun FloatingBallContent(
 }
 
 @Composable
-fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
+private fun FloatingBall(
+    appearance: FloatingBallAppearance,
+    isExpanded: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = floatingBallThemeColors(appearance.theme)
     Surface(
         modifier = Modifier
-            .size(if (isExpanded) 200.dp else 60.dp)
+            .size(if (isExpanded) appearance.expandedSizeDp.dp else appearance.sizeDp.dp)
             .shadow(8.dp, CircleShape),
         shape = CircleShape,
         onClick = onClick
@@ -569,9 +632,10 @@ fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .alpha(appearance.opacity)
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(FloatingBallGradientStart, FloatingBallGradientEnd)
+                        colors = listOf(colors.start, colors.end)
                     )
                 ),
             contentAlignment = Alignment.Center
@@ -580,14 +644,16 @@ fun FloatingBall(isExpanded: Boolean, onClick: () -> Unit) {
                 imageVector = Icons.Default.Camera,
                 contentDescription = "截图",
                 tint = Color.White,
-                modifier = Modifier.size(if (isExpanded) 80.dp else 32.dp)
+                modifier = Modifier.size(
+                    if (isExpanded) appearance.expandedIconSizeDp.dp else appearance.iconSizeDp.dp
+                )
             )
         }
     }
 }
 
 @Composable
-fun FloatingMenu(
+private fun FloatingMenu(
     onScreenshot: () -> Unit,
     onRestorePin: () -> Unit,
     onManagePins: () -> Unit,
@@ -631,7 +697,7 @@ fun FloatingMenu(
 }
 
 @Composable
-fun MenuButton(
+private fun MenuButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
     onClick: () -> Unit

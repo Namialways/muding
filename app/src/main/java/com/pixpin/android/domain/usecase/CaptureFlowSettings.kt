@@ -12,6 +12,12 @@ enum class PinScaleMode(val value: String) {
     FREE_SCALE("free_scale")
 }
 
+enum class FloatingBallTheme(val value: String) {
+    BLUE_PURPLE("blue_purple"),
+    SUNSET("sunset"),
+    EMERALD("emerald")
+}
+
 class CaptureFlowSettings(context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -86,6 +92,34 @@ class CaptureFlowSettings(context: Context) {
         prefs.edit().putInt(KEY_PIN_HISTORY_RETAIN_DAYS, days.coerceIn(1, 365)).apply()
     }
 
+    fun getFloatingBallSizeDp(): Int {
+        return prefs.getInt(KEY_FLOATING_BALL_SIZE_DP, 60).coerceIn(44, 96)
+    }
+
+    fun setFloatingBallSizeDp(sizeDp: Int) {
+        prefs.edit().putInt(KEY_FLOATING_BALL_SIZE_DP, sizeDp.coerceIn(44, 96)).apply()
+    }
+
+    fun getFloatingBallOpacity(): Float {
+        return prefs.getFloat(KEY_FLOATING_BALL_OPACITY, 0.92f).coerceIn(0.4f, 1f)
+    }
+
+    fun setFloatingBallOpacity(opacity: Float) {
+        prefs.edit().putFloat(KEY_FLOATING_BALL_OPACITY, opacity.coerceIn(0.4f, 1f)).apply()
+    }
+
+    fun getFloatingBallTheme(): FloatingBallTheme {
+        return when (prefs.getString(KEY_FLOATING_BALL_THEME, FloatingBallTheme.BLUE_PURPLE.value)) {
+            FloatingBallTheme.SUNSET.value -> FloatingBallTheme.SUNSET
+            FloatingBallTheme.EMERALD.value -> FloatingBallTheme.EMERALD
+            else -> FloatingBallTheme.BLUE_PURPLE
+        }
+    }
+
+    fun setFloatingBallTheme(theme: FloatingBallTheme) {
+        prefs.edit().putString(KEY_FLOATING_BALL_THEME, theme.value).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "pixpin_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"
@@ -96,5 +130,8 @@ class CaptureFlowSettings(context: Context) {
         private const val KEY_PIN_HISTORY_ENABLED = "pin_history_enabled"
         private const val KEY_MAX_PIN_HISTORY_COUNT = "max_pin_history_count"
         private const val KEY_PIN_HISTORY_RETAIN_DAYS = "pin_history_retain_days"
+        private const val KEY_FLOATING_BALL_SIZE_DP = "floating_ball_size_dp"
+        private const val KEY_FLOATING_BALL_OPACITY = "floating_ball_opacity"
+        private const val KEY_FLOATING_BALL_THEME = "floating_ball_theme"
     }
 }
