@@ -6,10 +6,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
-import android.graphics.Rect as AndroidRect
 import android.os.Build
 import android.os.IBinder
-import android.view.View
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.Image
@@ -73,9 +71,12 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pixpin.android.app.AppGraph
+import com.pixpin.android.feature.pin.runtime.PinOverlaySnapshot
+import com.pixpin.android.feature.pin.runtime.PinOverlayWindowController
 import com.pixpin.android.data.repository.PinHistoryRepository
 import com.pixpin.android.data.repository.RecentPinRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
+import com.pixpin.android.feature.pin.runtime.PinOverlayUiState
 import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.domain.usecase.PinScaleMode
@@ -92,42 +93,8 @@ import kotlin.math.roundToInt
 
 class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
-    class PinOverlayUiState(defaultShadowEnabled: Boolean) {
-        var uniformScale by mutableStateOf(1f)
-        var freeScaleX by mutableStateOf(1f)
-        var freeScaleY by mutableStateOf(1f)
-        var locked by mutableStateOf(false)
-        var controlsVisible by mutableStateOf(false)
-        var shadowEnabled by mutableStateOf(defaultShadowEnabled)
-        var cornerRadius by mutableStateOf(0f)
-        var cornerControlsVisible by mutableStateOf(false)
-    }
-
-    private data class OverlayEntry(
-        val id: String,
-        val imageView: ComposeView,
-        val imageParams: WindowManager.LayoutParams,
-        val controlsView: ComposeView,
-        val controlsParams: WindowManager.LayoutParams,
-        val bitmap: Bitmap,
-        val imageUri: String,
-        val annotationSessionId: String?,
-        val uiState: PinOverlayUiState,
-        var imageWidth: Int,
-        var imageHeight: Int,
-        var controlsWidth: Int,
-        var controlsHeight: Int,
-        var visible: Boolean
-    )
-
-    data class OverlaySnapshot(
-        val id: String,
-        val bitmap: Bitmap,
-        val visible: Boolean
-    )
-
     private lateinit var windowManager: WindowManager
-    private val overlays = LinkedHashMap<String, OverlayEntry>()
+    private val overlays = LinkedHashMap<String, PinOverlayWindowController>()
     private var managerView: ComposeView? = null
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val lifecycleRegistry = LifecycleRegistry(this)
@@ -226,265 +193,64 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         historySourceType: PinHistorySourceType
     ) {
         val overlayId = UUID.randomUUID().toString()
-        val uiState = PinOverlayUiState(settingsRepository.isPinShadowEnabledByDefault())
-        val imageParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 120 + overlays.size * 36
-            y = 220 + overlays.size * 36
-        }
-        val controlsParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = imageParams.x
-            y = imageParams.y
-        }
-
-        val imageView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(this@PinOverlayService)
-            setViewTreeSavedStateRegistryOwner(this@PinOverlayService)
-            setContent {
-                PixPinTheme {
-                    PinImageOverlayContent(
-                        bitmap = bitmap,
-                        scaleMode = scaleMode,
-                        uiState = uiState,
-                        onImageSizeChanged = { width, height ->
-                            val entry = overlays[overlayId] ?: return@PinImageOverlayContent
-                            entry.imageWidth = width
-                            entry.imageHeight = height
-                            entry.imageParams.width = width
-                            entry.imageParams.height = height
-                            val clamped = clampOverlayPosition(
-                                currentX = entry.imageParams.x,
-                                currentY = entry.imageParams.y,
-                                width = width,
-                                height = height,
-                                minVisiblePx = (resources.displayMetrics.density * 48f).roundToInt()
-                            )
-                            entry.imageParams.x = clamped.first
-                            entry.imageParams.y = clamped.second
-                            updateOverlayLayout(overlayId)
-                            updateControlsLayout(overlayId)
-                        },
-                        onMoveWindow = { dx, dy ->
-                            val entry = overlays[overlayId] ?: return@PinImageOverlayContent
-                            val clamped = clampOverlayPosition(
-                                currentX = entry.imageParams.x + dx.roundToInt(),
-                                currentY = entry.imageParams.y + dy.roundToInt(),
-                                width = entry.imageWidth.takeIf { it > 0 } ?: this.width,
-                                height = entry.imageHeight.takeIf { it > 0 } ?: this.height,
-                                minVisiblePx = (resources.displayMetrics.density * 48f).roundToInt()
-                            )
-                            entry.imageParams.x = clamped.first
-                            entry.imageParams.y = clamped.second
-                            updateOverlayLayout(overlayId)
-                            updateControlsLayout(overlayId)
-                        },
-                        onToggleControls = {
-                            val entry = overlays[overlayId] ?: return@PinImageOverlayContent
-                            entry.uiState.controlsVisible = !entry.uiState.controlsVisible
-                            if (!entry.uiState.controlsVisible) {
-                                entry.uiState.cornerControlsVisible = false
-                            }
-                            updateControlsLayout(overlayId)
-                        },
-                        onClose = {
-                            recentPinRepository.push(
-                                ClosedPinRecord(
-                                    imageUri = imageUriString,
-                                    annotationSessionId = annotationSessionId
-                                )
-                            )
-                            removeOverlay(overlayId)
-                        }
-                    )
-                }
-            }
-        }
-
-        val controlsView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(this@PinOverlayService)
-            setViewTreeSavedStateRegistryOwner(this@PinOverlayService)
-            setContent {
-                PixPinTheme {
-                    PinControlsOverlayContent(
-                        uiState = uiState,
-                        onControlsSizeChanged = { width, height ->
-                            val entry = overlays[overlayId] ?: return@PinControlsOverlayContent
-                            entry.controlsWidth = width
-                            entry.controlsHeight = height
-                            updateControlsLayout(overlayId)
-                        },
-                        onEdit = {
-                            uiState.controlsVisible = false
-                            val editorIntent = Intent(this@PinOverlayService, AnnotationEditorActivity::class.java).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                if (!annotationSessionId.isNullOrBlank()) {
-                                    putExtra(AnnotationEditorActivity.EXTRA_ANNOTATION_SESSION_ID, annotationSessionId)
-                                } else {
-                                    putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, imageUriString)
-                                }
-                            }
-                            startActivity(editorIntent)
-                            removeOverlay(overlayId)
-                        },
-                        onClose = {
-                            uiState.controlsVisible = false
-                            uiState.cornerControlsVisible = false
-                            recentPinRepository.push(
-                                ClosedPinRecord(
-                                    imageUri = imageUriString,
-                                    annotationSessionId = annotationSessionId
-                                )
-                            )
-                            removeOverlay(overlayId)
-                        }
-                    )
-                }
-            }
-        }
-
-        val entry = OverlayEntry(
+        val controller = PinOverlayWindowController(
+            context = this,
+            windowManager = windowManager,
+            lifecycleOwner = this,
+            savedStateRegistryOwner = this,
             id = overlayId,
-            imageView = imageView,
-            imageParams = imageParams,
-            controlsView = controlsView,
-            controlsParams = controlsParams,
             bitmap = bitmap,
             imageUri = imageUriString,
             annotationSessionId = annotationSessionId,
-            uiState = uiState,
-            imageWidth = 0,
-            imageHeight = 0,
-            controlsWidth = 0,
-            controlsHeight = 0,
-            visible = true
+            scaleMode = scaleMode,
+            defaultShadowEnabled = settingsRepository.isPinShadowEnabledByDefault(),
+            initialX = 120 + overlays.size * 36,
+            initialY = 220 + overlays.size * 36,
+            onEditRequested = {
+                val editorIntent = Intent(this@PinOverlayService, AnnotationEditorActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (!annotationSessionId.isNullOrBlank()) {
+                        putExtra(AnnotationEditorActivity.EXTRA_ANNOTATION_SESSION_ID, annotationSessionId)
+                    } else {
+                        putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, imageUriString)
+                    }
+                }
+                startActivity(editorIntent)
+                removeOverlay(overlayId)
+            },
+            onCloseRequested = {
+                recentPinRepository.push(
+                    ClosedPinRecord(
+                        imageUri = imageUriString,
+                        annotationSessionId = annotationSessionId
+                    )
+                )
+                removeOverlay(overlayId)
+            }
         )
-        overlays[overlayId] = entry
 
-        try {
-            windowManager.addView(imageView, imageParams)
-            windowManager.addView(controlsView, controlsParams)
-            controlsView.visibility = View.GONE
+        if (controller.attach()) {
+            overlays[overlayId] = controller
             recordPinHistoryIfNeeded(
                 imageUri = imageUriString,
                 annotationSessionId = annotationSessionId,
                 sourceType = historySourceType
             )
-        } catch (e: Exception) {
-            overlays.remove(overlayId)
-            try {
-                windowManager.removeView(imageView)
-            } catch (_: Exception) {
-            }
-            try {
-                windowManager.removeView(controlsView)
-            } catch (_: Exception) {
-            }
-            bitmap.recycle()
-            e.printStackTrace()
         }
         notifyManagerChanged()
     }
 
-    private fun updateOverlayLayout(overlayId: String) {
-        val entry = overlays[overlayId] ?: return
-        try {
-            windowManager.updateViewLayout(entry.imageView, entry.imageParams)
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun updateControlsLayout(overlayId: String) {
-        val entry = overlays[overlayId] ?: return
-        val visible = entry.visible && entry.uiState.controlsVisible
-        entry.controlsView.visibility = if (visible) View.VISIBLE else View.GONE
-        if (!visible) return
-        entry.controlsParams.width = WindowManager.LayoutParams.WRAP_CONTENT
-        entry.controlsParams.height = WindowManager.LayoutParams.WRAP_CONTENT
-
-        val screen = getScreenBounds()
-        val spacing = (resources.displayMetrics.density * 8f).roundToInt()
-        val minVisible = (resources.displayMetrics.density * 16f).roundToInt()
-        val imageLeft = entry.imageParams.x
-        val imageTop = entry.imageParams.y
-        val imageWidth = entry.imageWidth.takeIf { it > 0 } ?: 0
-        val imageHeight = entry.imageHeight.takeIf { it > 0 } ?: 0
-        val controlsWidth = entry.controlsWidth.takeIf { it > 0 } ?: 220
-        val controlsHeight = entry.controlsHeight.takeIf { it > 0 } ?: 56
-
-        val centeredX = imageLeft + ((imageWidth - controlsWidth) / 2f).roundToInt()
-        val minX = screen.left - controlsWidth + minVisible
-        val maxX = screen.right - minVisible
-        entry.controlsParams.x = centeredX.coerceIn(minX, maxX)
-
-        val belowY = imageTop + imageHeight + spacing
-        val aboveY = imageTop - controlsHeight - spacing
-        entry.controlsParams.y = if (belowY + controlsHeight <= screen.bottom - spacing) {
-            belowY
-        } else {
-            aboveY.coerceAtLeast(screen.top + spacing)
-        }
-
-        try {
-            windowManager.updateViewLayout(entry.controlsView, entry.controlsParams)
-        } catch (_: Exception) {
-        }
-    }
-
     private fun removeOverlay(overlayId: String) {
-        val entry = overlays.remove(overlayId) ?: return
-        try {
-            windowManager.removeViewImmediate(entry.imageView)
-        } catch (_: Exception) {
-            try {
-                windowManager.removeView(entry.imageView)
-            } catch (_: Exception) {
-            }
-        }
-        try {
-            windowManager.removeViewImmediate(entry.controlsView)
-        } catch (_: Exception) {
-            try {
-                windowManager.removeView(entry.controlsView)
-            } catch (_: Exception) {
-            }
-        }
-        entry.bitmap.recycle()
+        val controller = overlays.remove(overlayId) ?: return
+        controller.remove()
         notifyManagerChanged()
         if (overlays.isEmpty() && managerView == null) {
             stopSelf()
         }
     }
 
-    private fun rememberClosedOverlay(entry: OverlayEntry) {
-        recentPinRepository.push(
-            ClosedPinRecord(
-                imageUri = entry.imageUri,
-                annotationSessionId = entry.annotationSessionId
-            )
-        )
+    private fun rememberClosedOverlay(controller: PinOverlayWindowController) {
+        recentPinRepository.push(controller.toClosedPinRecord())
     }
 
     private fun recordPinHistoryIfNeeded(
@@ -507,14 +273,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun setOverlayVisible(overlayId: String, visible: Boolean) {
-        val entry = overlays[overlayId] ?: return
-        entry.visible = visible
-        entry.imageView.visibility = if (visible) View.VISIBLE else View.GONE
-        if (!visible) {
-            entry.uiState.controlsVisible = false
-            entry.uiState.cornerControlsVisible = false
-        }
-        updateControlsLayout(overlayId)
+        val controller = overlays[overlayId] ?: return
+        controller.setVisible(visible)
         notifyManagerChanged()
     }
 
@@ -523,34 +283,25 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun closeOverlayFromManager(overlayId: String) {
-        val entry = overlays[overlayId] ?: return
-        rememberClosedOverlay(entry)
+        val controller = overlays[overlayId] ?: return
+        rememberClosedOverlay(controller)
         removeOverlay(overlayId)
     }
 
     private fun closeAllOverlays() {
         overlays.keys.toList().forEach { overlayId ->
-            val entry = overlays[overlayId] ?: return@forEach
-            rememberClosedOverlay(entry)
+            val controller = overlays[overlayId] ?: return@forEach
+            rememberClosedOverlay(controller)
             removeOverlay(overlayId)
         }
         closeManagerOverlay()
     }
 
     private fun bringOverlayToFront(overlayId: String) {
-        val entry = overlays[overlayId] ?: return
-        try {
-            windowManager.removeViewImmediate(entry.imageView)
-            windowManager.addView(entry.imageView, entry.imageParams)
-            windowManager.removeViewImmediate(entry.controlsView)
-            windowManager.addView(entry.controlsView, entry.controlsParams)
-        } catch (_: Exception) {
-        }
-        entry.visible = true
-        entry.imageView.visibility = View.VISIBLE
+        val controller = overlays[overlayId] ?: return
+        controller.bringToFront()
         overlays.remove(overlayId)
-        overlays[overlayId] = entry
-        updateControlsLayout(overlayId)
+        overlays[overlayId] = controller
         notifyManagerChanged()
     }
 
@@ -580,13 +331,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             setViewTreeSavedStateRegistryOwner(this@PinOverlayService)
             setContent {
                 val refreshToken = managerRefreshToken
-                val snapshots = overlays.values.map {
-                    OverlaySnapshot(
-                        id = it.id,
-                        bitmap = it.bitmap,
-                        visible = it.visible
-                    )
-                }
+                val snapshots = overlays.values.map { it.snapshot() }
                 PixPinTheme {
                     PinManagerContent(
                         refreshToken = refreshToken,
@@ -630,35 +375,6 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         managerRefreshToken++
     }
 
-    private fun clampOverlayPosition(
-        currentX: Int,
-        currentY: Int,
-        width: Int,
-        height: Int,
-        minVisiblePx: Int
-    ): Pair<Int, Int> {
-        val screen = getScreenBounds()
-        val viewWidth = width.takeIf { it > 0 } ?: 320
-        val viewHeight = height.takeIf { it > 0 } ?: 220
-        val minX = screen.left - viewWidth + minVisiblePx
-        val maxX = screen.right - minVisiblePx
-        val minY = screen.top - viewHeight + minVisiblePx
-        val maxY = screen.bottom - minVisiblePx
-        return currentX.coerceIn(minX, maxX) to currentY.coerceIn(minY, maxY)
-    }
-
-    private fun getScreenBounds(): AndroidRect {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            windowManager.currentWindowMetrics.bounds
-        } else {
-            @Suppress("DEPRECATION")
-            AndroidRect().also { rect ->
-                @Suppress("DEPRECATION")
-                windowManager.defaultDisplay.getRectSize(rect)
-            }
-        }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
@@ -673,25 +389,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
         managerView = null
-        overlays.values.toList().forEach { entry ->
-            try {
-                windowManager.removeViewImmediate(entry.imageView)
-            } catch (_: Exception) {
-                try {
-                    windowManager.removeView(entry.imageView)
-                } catch (_: Exception) {
-                }
-            }
-            try {
-                windowManager.removeViewImmediate(entry.controlsView)
-            } catch (_: Exception) {
-                try {
-                    windowManager.removeView(entry.controlsView)
-                } catch (_: Exception) {
-                }
-            }
-            entry.bitmap.recycle()
-        }
+        overlays.values.toList().forEach { controller -> controller.remove() }
         overlays.clear()
     }
 
@@ -705,10 +403,10 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 }
 
 @Composable
-private fun PinImageOverlayContent(
+fun PinImageOverlayContent(
     bitmap: Bitmap,
     scaleMode: PinScaleMode,
-    uiState: PinOverlayService.PinOverlayUiState,
+    uiState: PinOverlayUiState,
     onImageSizeChanged: (Int, Int) -> Unit,
     onMoveWindow: (Float, Float) -> Unit,
     onToggleControls: () -> Unit,
@@ -818,8 +516,8 @@ private fun PinImageOverlayContent(
 }
 
 @Composable
-private fun PinControlsOverlayContent(
-    uiState: PinOverlayService.PinOverlayUiState,
+fun PinControlsOverlayContent(
+    uiState: PinOverlayUiState,
     onControlsSizeChanged: (Int, Int) -> Unit,
     onEdit: () -> Unit,
     onClose: () -> Unit
@@ -987,7 +685,7 @@ private fun FreeScaleHandle(
 @Composable
 private fun PinManagerContent(
     refreshToken: Int,
-    overlays: List<PinOverlayService.OverlaySnapshot>,
+    overlays: List<PinOverlaySnapshot>,
     onShowAll: () -> Unit,
     onHideAll: () -> Unit,
     onCloseAll: () -> Unit,
