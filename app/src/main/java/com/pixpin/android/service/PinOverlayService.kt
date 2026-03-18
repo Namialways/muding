@@ -72,12 +72,13 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.pixpin.android.domain.usecase.CaptureFlowSettings
+import com.pixpin.android.app.AppGraph
+import com.pixpin.android.data.repository.PinHistoryRepository
+import com.pixpin.android.data.repository.RecentPinRepository
+import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
-import com.pixpin.android.domain.usecase.PinHistoryStore
 import com.pixpin.android.domain.usecase.PinScaleMode
-import com.pixpin.android.domain.usecase.RecentPinStore
 import com.pixpin.android.domain.usecase.ClosedPinRecord
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
@@ -131,7 +132,9 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val serviceScope = CoroutineScope(Dispatchers.Main)
-    private lateinit var captureFlowSettings: CaptureFlowSettings
+    private lateinit var settingsRepository: AppSettingsRepository
+    private lateinit var pinHistoryRepository: PinHistoryRepository
+    private lateinit var recentPinRepository: RecentPinRepository
     private var managerRefreshToken by mutableIntStateOf(0)
 
     override val lifecycle: Lifecycle
@@ -144,7 +147,9 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        captureFlowSettings = CaptureFlowSettings(this)
+        settingsRepository = AppGraph.appSettingsRepository(this)
+        pinHistoryRepository = AppGraph.pinHistoryRepository(this)
+        recentPinRepository = AppGraph.recentPinRepository(this)
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
     }
@@ -175,7 +180,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             bitmap = bitmap,
                             imageUriString = imageUriString,
                             annotationSessionId = annotationSessionId,
-                            scaleMode = captureFlowSettings.getPinScaleMode(),
+                            scaleMode = settingsRepository.getPinScaleMode(),
                             historySourceType = historySourceType
                         )
                     }
@@ -190,7 +195,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun restoreLastClosedOverlay() {
-        val record = RecentPinStore.popMostRecent(this) ?: return
+        val record = recentPinRepository.popMostRecent() ?: return
         serviceScope.launch {
             try {
                 val bitmap = withContext(Dispatchers.IO) {
@@ -203,7 +208,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         bitmap = bitmap,
                         imageUriString = record.imageUri,
                         annotationSessionId = record.annotationSessionId,
-                        scaleMode = captureFlowSettings.getPinScaleMode(),
+                        scaleMode = settingsRepository.getPinScaleMode(),
                         historySourceType = PinHistorySourceType.RESTORED_PIN
                     )
                 }
@@ -221,7 +226,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         historySourceType: PinHistorySourceType
     ) {
         val overlayId = UUID.randomUUID().toString()
-        val uiState = PinOverlayUiState(captureFlowSettings.isPinShadowEnabledByDefault())
+        val uiState = PinOverlayUiState(settingsRepository.isPinShadowEnabledByDefault())
         val imageParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -305,8 +310,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             updateControlsLayout(overlayId)
                         },
                         onClose = {
-                            RecentPinStore.push(
-                                this@PinOverlayService,
+                            recentPinRepository.push(
                                 ClosedPinRecord(
                                     imageUri = imageUriString,
                                     annotationSessionId = annotationSessionId
@@ -348,8 +352,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         onClose = {
                             uiState.controlsVisible = false
                             uiState.cornerControlsVisible = false
-                            RecentPinStore.push(
-                                this@PinOverlayService,
+                            recentPinRepository.push(
                                 ClosedPinRecord(
                                     imageUri = imageUriString,
                                     annotationSessionId = annotationSessionId
@@ -476,8 +479,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun rememberClosedOverlay(entry: OverlayEntry) {
-        RecentPinStore.push(
-            this,
+        recentPinRepository.push(
             ClosedPinRecord(
                 imageUri = entry.imageUri,
                 annotationSessionId = entry.annotationSessionId
@@ -490,17 +492,16 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         annotationSessionId: String?,
         sourceType: PinHistorySourceType
     ) {
-        if (!captureFlowSettings.isPinHistoryEnabled()) return
-        PinHistoryStore.put(
-            context = this,
+        if (!settingsRepository.getPinHistorySettings().enabled) return
+        pinHistoryRepository.save(
             imageUri = imageUri,
             annotationSessionId = annotationSessionId,
             sourceType = sourceType
         )
-        PinHistoryStore.prune(
-            context = this,
-            maxCount = captureFlowSettings.getMaxPinHistoryCount(),
-            maxDays = captureFlowSettings.getPinHistoryRetainDays()
+        val pinHistorySettings = settingsRepository.getPinHistorySettings()
+        pinHistoryRepository.prune(
+            maxCount = pinHistorySettings.maxCount,
+            maxDays = pinHistorySettings.retainDays
         )
         notifyManagerChanged()
     }

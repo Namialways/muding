@@ -34,13 +34,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.R
+import com.pixpin.android.app.AppGraph
+import com.pixpin.android.data.image.CachedImageRepository
+import com.pixpin.android.data.image.ImageExportRepository
+import com.pixpin.android.data.repository.AnnotationSessionRepository
+import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.model.DrawingTool
 import com.pixpin.android.domain.usecase.AnnotationSession
-import com.pixpin.android.domain.usecase.AnnotationSessionStore
-import com.pixpin.android.domain.usecase.ImageSaver
-import com.pixpin.android.domain.usecase.CacheImageStore
 import com.pixpin.android.domain.usecase.CaptureResultAction
-import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.presentation.crop.RegionCropActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
@@ -52,9 +53,10 @@ import kotlinx.coroutines.withContext
 class AnnotationEditorActivity : ComponentActivity() {
 
     private val viewModel: AnnotationViewModel by viewModels()
-    private lateinit var imageSaver: ImageSaver
-    private lateinit var cacheImageStore: CacheImageStore
-    private lateinit var captureFlowSettings: CaptureFlowSettings
+    private lateinit var imageExportRepository: ImageExportRepository
+    private lateinit var cachedImageRepository: CachedImageRepository
+    private lateinit var settingsRepository: AppSettingsRepository
+    private lateinit var annotationSessionRepository: AnnotationSessionRepository
     private var sourceImageUriString: String? = null
     private var capturedBitmap: Bitmap? = null
     private var editorCanvasSize: Size = Size.Zero
@@ -63,12 +65,13 @@ class AnnotationEditorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        imageSaver = ImageSaver(this)
-        cacheImageStore = CacheImageStore(this)
-        captureFlowSettings = CaptureFlowSettings(this)
+        imageExportRepository = AppGraph.imageExportRepository(this)
+        cachedImageRepository = AppGraph.cachedImageRepository(this)
+        settingsRepository = AppGraph.appSettingsRepository(this)
+        annotationSessionRepository = AppGraph.annotationSessionRepository(this)
 
         val sessionId = intent.getStringExtra(EXTRA_ANNOTATION_SESSION_ID)
-        val restoredSession = sessionId?.let { AnnotationSessionStore.get(this, it) }
+        val restoredSession = sessionId?.let { annotationSessionRepository.get(it) }
         val uriString = restoredSession?.sourceImageUri ?: intent.getStringExtra(EXTRA_IMAGE_URI)
         if (uriString.isNullOrBlank()) {
             Toast.makeText(this, "无法加载截图", Toast.LENGTH_SHORT).show()
@@ -193,7 +196,7 @@ class AnnotationEditorActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val bitmap = createAnnotatedBitmap(originalBitmap)
-                imageSaver.saveToGallery(bitmap)
+                imageExportRepository.saveToGallery(bitmap)
                 Toast.makeText(this@AnnotationEditorActivity, R.string.screenshot_saved, Toast.LENGTH_SHORT).show()
                 closeScreenshotFlow()
             } catch (e: Exception) {
@@ -206,10 +209,9 @@ class AnnotationEditorActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val bitmap = createAnnotatedBitmap(originalBitmap)
-                val uri = cacheImageStore.writePngToCache(bitmap, "pinned", "pinned_image")
+                val uri = cachedImageRepository.writePngToCache(bitmap, "pinned", "pinned_image")
                 val sessionId = sourceImageUriString?.let { imageUri ->
-                    AnnotationSessionStore.put(
-                        this@AnnotationEditorActivity,
+                    annotationSessionRepository.save(
                         AnnotationSession(
                             sourceImageUri = imageUri,
                             canvasSize = editorCanvasSize,
@@ -217,10 +219,10 @@ class AnnotationEditorActivity : ComponentActivity() {
                         )
                     )
                 }
-                AnnotationSessionStore.prune(
-                    this@AnnotationEditorActivity,
-                    maxCount = captureFlowSettings.getMaxSessionCount(),
-                    maxDays = captureFlowSettings.getRetainDays()
+                val projectRecordSettings = settingsRepository.getProjectRecordSettings()
+                annotationSessionRepository.prune(
+                    maxCount = projectRecordSettings.maxSessionCount,
+                    maxDays = projectRecordSettings.retainDays
                 )
                 val intent = Intent(this@AnnotationEditorActivity, PinOverlayService::class.java).apply {
                     putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
@@ -240,7 +242,7 @@ class AnnotationEditorActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val bitmap = createAnnotatedBitmap(originalBitmap)
-                imageSaver.shareImage(bitmap)
+                imageExportRepository.shareImage(bitmap)
             } catch (e: Exception) {
                 Toast.makeText(this@AnnotationEditorActivity, "分享失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -254,7 +256,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                     createAnnotatedBitmap(originalBitmap)
                 }
                 val uri = withContext(Dispatchers.IO) {
-                    cacheImageStore.writePngToCache(current, "screenshots", "recrop")
+                    cachedImageRepository.writePngToCache(current, "screenshots", "recrop")
                 }
                 current.recycle()
 

@@ -62,18 +62,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pixpin.android.app.AppGraph
+import com.pixpin.android.data.repository.AnnotationSessionRepository
+import com.pixpin.android.data.repository.PinHistoryRepository
+import com.pixpin.android.data.repository.RecentPinRepository
+import com.pixpin.android.data.repository.RuntimeStorageRepository
+import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.AnnotationSessionFile
-import com.pixpin.android.domain.usecase.AnnotationSessionStore
-import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.PermissionHandler
 import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
-import com.pixpin.android.domain.usecase.PinHistoryStore
 import com.pixpin.android.domain.usecase.PinScaleMode
-import com.pixpin.android.domain.usecase.RecentPinStore
-import com.pixpin.android.domain.usecase.RuntimeStorageManager
 import com.pixpin.android.domain.usecase.RuntimeStorageSnapshot
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
@@ -90,13 +91,24 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
 
     private lateinit var permissionHandler: PermissionHandler
-    private lateinit var captureFlowSettings: CaptureFlowSettings
+    private lateinit var settingsRepository: AppSettingsRepository
+    private lateinit var annotationSessionRepository: AnnotationSessionRepository
+    private lateinit var pinHistoryRepository: PinHistoryRepository
+    private lateinit var recentPinRepository: RecentPinRepository
+    private lateinit var runtimeStorageRepository: RuntimeStorageRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         permissionHandler = PermissionHandler(this)
-        captureFlowSettings = CaptureFlowSettings(this)
+        settingsRepository = AppGraph.appSettingsRepository(this)
+        annotationSessionRepository = AppGraph.annotationSessionRepository(this)
+        pinHistoryRepository = AppGraph.pinHistoryRepository(this)
+        recentPinRepository = AppGraph.recentPinRepository(this)
+        runtimeStorageRepository = AppGraph.runtimeStorageRepository(this)
+        val projectRecordSettings = settingsRepository.getProjectRecordSettings()
+        val floatingBallSettings = settingsRepository.getFloatingBallSettings()
+        val pinHistorySettings = settingsRepository.getPinHistorySettings()
 
         setContent {
             PixPinTheme {
@@ -106,70 +118,70 @@ class MainActivity : ComponentActivity() {
                 ) {
                     MainScreen(
                         hasOverlayPermission = permissionHandler.hasOverlayPermission(),
-                        initialAction = captureFlowSettings.getResultAction(),
-                        initialScaleMode = captureFlowSettings.getPinScaleMode(),
-                        initialMaxSessionCount = captureFlowSettings.getMaxSessionCount(),
-                        initialRetainDays = captureFlowSettings.getRetainDays(),
-                        initialPinShadowEnabled = captureFlowSettings.isPinShadowEnabledByDefault(),
-                        initialFloatingBallSizeDp = captureFlowSettings.getFloatingBallSizeDp(),
-                        initialFloatingBallOpacity = captureFlowSettings.getFloatingBallOpacity(),
-                        initialFloatingBallTheme = captureFlowSettings.getFloatingBallTheme(),
-                        initialPinHistoryEnabled = captureFlowSettings.isPinHistoryEnabled(),
-                        initialMaxPinHistoryCount = captureFlowSettings.getMaxPinHistoryCount(),
-                        initialPinHistoryRetainDays = captureFlowSettings.getPinHistoryRetainDays(),
+                        initialAction = settingsRepository.getCaptureResultAction(),
+                        initialScaleMode = settingsRepository.getPinScaleMode(),
+                        initialMaxSessionCount = projectRecordSettings.maxSessionCount,
+                        initialRetainDays = projectRecordSettings.retainDays,
+                        initialPinShadowEnabled = settingsRepository.isPinShadowEnabledByDefault(),
+                        initialFloatingBallSizeDp = floatingBallSettings.sizeDp,
+                        initialFloatingBallOpacity = floatingBallSettings.opacity,
+                        initialFloatingBallTheme = floatingBallSettings.theme,
+                        initialPinHistoryEnabled = pinHistorySettings.enabled,
+                        initialMaxPinHistoryCount = pinHistorySettings.maxCount,
+                        initialPinHistoryRetainDays = pinHistorySettings.retainDays,
                         initialSnapshot = MainScreenSnapshot.empty(),
-                        onActionChanged = { action -> captureFlowSettings.setResultAction(action) },
-                        onScaleModeChanged = { mode -> captureFlowSettings.setPinScaleMode(mode) },
+                        onActionChanged = { action -> settingsRepository.setCaptureResultAction(action) },
+                        onScaleModeChanged = { mode -> settingsRepository.setPinScaleMode(mode) },
                         onMaxSessionCountChanged = { count ->
-                            captureFlowSettings.setMaxSessionCount(count)
+                            settingsRepository.setMaxSessionCount(count)
                             pruneRecords()
                         },
                         onRetainDaysChanged = { days ->
-                            captureFlowSettings.setRetainDays(days)
+                            settingsRepository.setRetainDays(days)
                             pruneRecords()
                         },
                         onDefaultPinShadowChanged = { enabled ->
-                            captureFlowSettings.setPinShadowEnabledByDefault(enabled)
+                            settingsRepository.setPinShadowEnabledByDefault(enabled)
                         },
                         onFloatingBallSizeChanged = { size ->
-                            captureFlowSettings.setFloatingBallSizeDp(size)
+                            settingsRepository.setFloatingBallSizeDp(size)
                             refreshFloatingBallAppearance()
                         },
                         onFloatingBallOpacityChanged = { opacity ->
-                            captureFlowSettings.setFloatingBallOpacity(opacity)
+                            settingsRepository.setFloatingBallOpacity(opacity)
                             refreshFloatingBallAppearance()
                         },
                         onFloatingBallThemeChanged = { theme ->
-                            captureFlowSettings.setFloatingBallTheme(theme)
+                            settingsRepository.setFloatingBallTheme(theme)
                             refreshFloatingBallAppearance()
                         },
                         onPinHistoryEnabledChanged = { enabled ->
-                            captureFlowSettings.setPinHistoryEnabled(enabled)
+                            settingsRepository.setPinHistoryEnabled(enabled)
                         },
                         onMaxPinHistoryCountChanged = { count ->
-                            captureFlowSettings.setMaxPinHistoryCount(count)
+                            settingsRepository.setMaxPinHistoryCount(count)
                             pruneRecords()
                         },
                         onPinHistoryRetainDaysChanged = { days ->
-                            captureFlowSettings.setPinHistoryRetainDays(days)
+                            settingsRepository.setPinHistoryRetainDays(days)
                             pruneRecords()
                         },
                         onClearAllRecords = {
-                            AnnotationSessionStore.clearAll(this)
-                            RecentPinStore.clear(this)
-                            PinHistoryStore.clear(this)
+                            annotationSessionRepository.clearAll()
+                            recentPinRepository.clear()
+                            pinHistoryRepository.clear()
                         },
                         onClearImageCaches = {
-                            RuntimeStorageManager.clearImageCaches(this)
+                            runtimeStorageRepository.clearImageCaches()
                         },
                         onClearAllRuntimeFiles = {
-                            RuntimeStorageManager.clearAllRuntimeFiles(this)
+                            runtimeStorageRepository.clearAllRuntimeFiles()
                         },
                         onClearPinHistory = {
-                            PinHistoryStore.clear(this)
+                            pinHistoryRepository.clear()
                         },
                         onDeleteHistory = { record ->
-                            PinHistoryStore.delete(this, record.id)
+                            pinHistoryRepository.delete(record.id)
                         },
                         onRestoreHistory = { record ->
                             startService(
@@ -221,26 +233,26 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun pruneRecords() {
-        AnnotationSessionStore.prune(
-            this,
-            maxCount = captureFlowSettings.getMaxSessionCount(),
-            maxDays = captureFlowSettings.getRetainDays()
+        val projectRecordSettings = settingsRepository.getProjectRecordSettings()
+        val pinHistorySettings = settingsRepository.getPinHistorySettings()
+        annotationSessionRepository.prune(
+            maxCount = projectRecordSettings.maxSessionCount,
+            maxDays = projectRecordSettings.retainDays
         )
-        PinHistoryStore.prune(
-            this,
-            maxCount = captureFlowSettings.getMaxPinHistoryCount(),
-            maxDays = captureFlowSettings.getPinHistoryRetainDays()
+        pinHistoryRepository.prune(
+            maxCount = pinHistorySettings.maxCount,
+            maxDays = pinHistorySettings.retainDays
         )
     }
 
     private fun buildSnapshot(): MainScreenSnapshot {
         return MainScreenSnapshot(
-            sessionFiles = AnnotationSessionStore.listSessionFiles(this),
-            recentClosedPinCount = RecentPinStore.count(this),
-            pinHistoryRecords = PinHistoryStore.list(this),
-            recordsDirectory = AnnotationSessionStore.visibleDirectoryPath(this),
-            pinHistoryDirectory = PinHistoryStore.visibleDirectoryPath(this),
-            runtimeStorage = RuntimeStorageManager.snapshot(this)
+            sessionFiles = annotationSessionRepository.listSessionFiles(),
+            recentClosedPinCount = recentPinRepository.count(),
+            pinHistoryRecords = pinHistoryRepository.list(),
+            recordsDirectory = annotationSessionRepository.visibleDirectoryPath(),
+            pinHistoryDirectory = pinHistoryRepository.visibleDirectoryPath(),
+            runtimeStorage = runtimeStorageRepository.snapshot()
         )
     }
 

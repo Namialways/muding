@@ -77,11 +77,12 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pixpin.android.MainActivity
 import com.pixpin.android.R
-import com.pixpin.android.domain.usecase.CacheImageStore
-import com.pixpin.android.domain.usecase.CaptureFlowSettings
+import com.pixpin.android.app.AppGraph
+import com.pixpin.android.data.image.CachedImageRepository
+import com.pixpin.android.data.repository.RecentPinRepository
+import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.FloatingBallTheme
-import com.pixpin.android.domain.usecase.RecentPinStore
 import com.pixpin.android.domain.usecase.ScreenshotManager
 import com.pixpin.android.presentation.crop.CaptureCropOverlay
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
@@ -113,8 +114,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val lifecycleRegistry = LifecycleRegistry(this)
 
     private lateinit var screenshotManager: ScreenshotManager
-    private lateinit var cacheImageStore: CacheImageStore
-    private lateinit var captureFlowSettings: CaptureFlowSettings
+    private lateinit var cachedImageRepository: CachedImageRepository
+    private lateinit var settingsRepository: AppSettingsRepository
+    private lateinit var recentPinRepository: RecentPinRepository
 
     private var snapAnimator: ValueAnimator? = null
     private var snapRunnable: Runnable? = null
@@ -132,8 +134,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenshotManager = ScreenshotManager(this)
-        cacheImageStore = CacheImageStore(this)
-        captureFlowSettings = CaptureFlowSettings(this)
+        cachedImageRepository = AppGraph.cachedImageRepository(this)
+        settingsRepository = AppGraph.appSettingsRepository(this)
+        recentPinRepository = AppGraph.recentPinRepository(this)
 
         showFloatingBall()
 
@@ -254,15 +257,16 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun loadFloatingBallAppearance(): FloatingBallAppearance {
         val density = resources.displayMetrics.density
-        val sizeDp = captureFlowSettings.getFloatingBallSizeDp()
+        val floatingBallSettings = settingsRepository.getFloatingBallSettings()
+        val sizeDp = floatingBallSettings.sizeDp
         return FloatingBallAppearance(
             sizeDp = sizeDp,
-            opacity = captureFlowSettings.getFloatingBallOpacity(),
+            opacity = floatingBallSettings.opacity,
             expandedSizeDp = (sizeDp * 3.2f).roundToInt().coerceIn(140, 260),
             iconSizeDp = (sizeDp * 0.52f).roundToInt().coerceIn(24, 42),
             expandedIconSizeDp = (sizeDp * 1.25f).roundToInt().coerceIn(54, 96),
             dragBoundPx = (sizeDp * density).roundToInt(),
-            theme = captureFlowSettings.getFloatingBallTheme()
+            theme = floatingBallSettings.theme
         )
     }
 
@@ -353,13 +357,13 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
 
                 val uri = withContext(Dispatchers.IO) {
-                    cacheImageStore.writePngToCache(cropped, "screenshots", "region_capture")
+                    cachedImageRepository.writePngToCache(cropped, "screenshots", "region_capture")
                 }
                 cropped.recycle()
 
                 dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
 
-                if (captureFlowSettings.getResultAction() == CaptureResultAction.PIN_DIRECTLY) {
+                if (settingsRepository.getCaptureResultAction() == CaptureResultAction.PIN_DIRECTLY) {
                     val pinIntent = Intent(this@FloatingBallService, PinOverlayService::class.java).apply {
                         putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
                         putExtra(PinOverlayService.EXTRA_HISTORY_SOURCE, com.pixpin.android.domain.usecase.PinHistorySourceType.SCREENSHOT.value)
@@ -410,7 +414,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun restoreLastClosedPin() {
-        if (!RecentPinStore.hasRecent(this)) {
+        if (!recentPinRepository.hasRecent()) {
             return
         }
         startService(
