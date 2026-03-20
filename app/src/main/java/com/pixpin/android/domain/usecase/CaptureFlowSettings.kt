@@ -4,7 +4,13 @@ import android.content.Context
 
 enum class CaptureResultAction(val value: String) {
     PIN_DIRECTLY("pin_directly"),
-    OPEN_EDITOR("open_editor")
+    OPEN_EDITOR("open_editor");
+
+    companion object {
+        fun fromValue(value: String?): CaptureResultAction? {
+            return entries.firstOrNull { it.value == value }
+        }
+    }
 }
 
 enum class PinScaleMode(val value: String) {

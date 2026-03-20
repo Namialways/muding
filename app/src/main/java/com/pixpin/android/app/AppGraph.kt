@@ -15,6 +15,8 @@ import com.pixpin.android.data.repository.SharedPreferencesRecentPinRepository
 import com.pixpin.android.data.repository.SystemRuntimeStorageRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.data.settings.SharedPreferencesAppSettingsRepository
+import com.pixpin.android.feature.capture.BitmapCropper
+import com.pixpin.android.feature.capture.CaptureFlowCoordinator
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 
 object AppGraph {
@@ -51,6 +53,13 @@ object AppGraph {
         return PinCreationCoordinator(
             settingsRepository = appSettingsRepository(context),
             cachedImageRepository = cachedImageRepository(context)
+        )
+    }
+
+    fun captureFlowCoordinator(context: Context): CaptureFlowCoordinator {
+        return CaptureFlowCoordinator(
+            bitmapCropper = BitmapCropper(),
+            pinCreationCoordinator = pinCreationCoordinator(context)
         )
     }
 }
