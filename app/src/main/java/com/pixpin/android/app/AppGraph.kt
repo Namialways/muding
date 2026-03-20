@@ -57,7 +57,10 @@ object AppGraph {
         val appContext = context.applicationContext
         return PinSourceAssetResolver(
             adapters = listOf(
-                ImageUriPinSourceAdapter(appContext),
+                ImageUriPinSourceAdapter(
+                    context = appContext,
+                    cachedImageRepository = cachedImageRepository(appContext)
+                ),
                 TextPinSourceAdapter(
                     cachedImageRepository = cachedImageRepository(appContext),
                     textBitmapRenderer = TextBitmapRenderer(appContext)

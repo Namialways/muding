@@ -24,7 +24,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,7 +44,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -86,6 +90,8 @@ import com.pixpin.android.domain.usecase.ScreenshotManager
 import com.pixpin.android.feature.capture.CaptureDispatchRequest
 import com.pixpin.android.feature.capture.CaptureFlowCoordinator
 import com.pixpin.android.presentation.crop.CaptureCropOverlay
+import com.pixpin.android.presentation.source.ClipboardTextPinActivity
+import com.pixpin.android.presentation.source.GalleryPinActivity
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.launch
@@ -148,6 +154,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 recreateFloatingBall()
             }
 
+            ACTION_RESTORE_FLOATING_BALL_VISIBILITY -> {
+                restoreFloatingBall()
+            }
+
             ACTION_START_SCREENSHOT -> {
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
                 val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
@@ -203,6 +213,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     FloatingBallContent(
                         appearance = appearance,
                         onScreenshot = { handleScreenshot() },
+                        onGallery = { openGalleryPicker() },
+                        onClipboardText = { openClipboardTextPin() },
                         onRestorePin = { restoreLastClosedPin() },
                         onManagePins = { openPinManager() },
                         onSettings = { openSettings() },
@@ -284,6 +296,36 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             )
         }
         startActivity(intent)
+    }
+
+    private fun openGalleryPicker() {
+        floatingView?.visibility = View.GONE
+        startActivity(
+            Intent(this, GalleryPinActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION
+                )
+                putExtra(GalleryPinActivity.EXTRA_FINISH_TO_BACKGROUND, true)
+                putExtra(GalleryPinActivity.EXTRA_RESTORE_FLOATING_BALL, true)
+            }
+        )
+    }
+
+    private fun openClipboardTextPin() {
+        floatingView?.visibility = View.GONE
+        startActivity(
+            Intent(this, ClipboardTextPinActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION
+                )
+                putExtra(ClipboardTextPinActivity.EXTRA_FINISH_TO_BACKGROUND, true)
+                putExtra(ClipboardTextPinActivity.EXTRA_RESTORE_FLOATING_BALL, true)
+            }
+        )
     }
 
     private fun captureAndShowCropOverlay() {
@@ -524,8 +566,16 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         const val ACTION_START_SCREENSHOT = "com.pixpin.android.action.START_SCREENSHOT"
         const val ACTION_REFRESH_FLOATING_BALL_APPEARANCE =
             "com.pixpin.android.action.REFRESH_FLOATING_BALL_APPEARANCE"
+        const val ACTION_RESTORE_FLOATING_BALL_VISIBILITY =
+            "com.pixpin.android.action.RESTORE_FLOATING_BALL_VISIBILITY"
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
+
+        fun createRestoreVisibilityIntent(context: Context): Intent {
+            return Intent(context, FloatingBallService::class.java).apply {
+                action = ACTION_RESTORE_FLOATING_BALL_VISIBILITY
+            }
+        }
     }
 }
 
@@ -533,6 +583,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 private fun FloatingBallContent(
     appearance: FloatingBallAppearance,
     onScreenshot: () -> Unit,
+    onGallery: () -> Unit,
+    onClipboardText: () -> Unit,
     onRestorePin: () -> Unit,
     onManagePins: () -> Unit,
     onSettings: () -> Unit,
@@ -562,12 +614,12 @@ private fun FloatingBallContent(
         FloatingBall(
             appearance = appearance,
             isExpanded = isExpanded,
+            onLongClick = { isExpanded = !isExpanded },
             onClick = {
-                if (!isExpanded) {
-                    isExpanded = true
-                } else {
-                    onScreenshot()
+                if (isExpanded) {
+                    isExpanded = false
                 }
+                onScreenshot()
             }
         )
 
@@ -580,6 +632,14 @@ private fun FloatingBallContent(
                 onScreenshot = {
                     isExpanded = false
                     onScreenshot()
+                },
+                onGallery = {
+                    isExpanded = false
+                    onGallery()
+                },
+                onClipboardText = {
+                    isExpanded = false
+                    onClipboardText()
                 },
                 onRestorePin = {
                     isExpanded = false
@@ -603,18 +663,23 @@ private fun FloatingBallContent(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun FloatingBall(
     appearance: FloatingBallAppearance,
     isExpanded: Boolean,
+    onLongClick: () -> Unit,
     onClick: () -> Unit
 ) {
     val colors = floatingBallThemeColors(appearance.theme)
     Surface(
         modifier = Modifier
             .size(if (isExpanded) appearance.expandedSizeDp.dp else appearance.sizeDp.dp)
-            .shadow(8.dp, CircleShape),
+            .shadow(8.dp, CircleShape)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         shape = CircleShape,
-        onClick = onClick
     ) {
         Box(
             modifier = Modifier
@@ -642,6 +707,8 @@ private fun FloatingBall(
 @Composable
 private fun FloatingMenu(
     onScreenshot: () -> Unit,
+    onGallery: () -> Unit,
+    onClipboardText: () -> Unit,
     onRestorePin: () -> Unit,
     onManagePins: () -> Unit,
     onSettings: () -> Unit,
@@ -658,6 +725,16 @@ private fun FloatingMenu(
                 icon = Icons.Default.Camera,
                 text = "截图",
                 onClick = onScreenshot
+            )
+            MenuButton(
+                icon = Icons.Default.PhotoLibrary,
+                text = "相册贴图",
+                onClick = onGallery
+            )
+            MenuButton(
+                icon = Icons.Default.TextFields,
+                text = "剪贴板文字贴图",
+                onClick = onClipboardText
             )
             MenuButton(
                 icon = Icons.Default.History,

@@ -27,7 +27,9 @@ import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.Slider
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
@@ -82,6 +84,8 @@ import com.pixpin.android.feature.pin.creation.EditorLaunchRequest
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import com.pixpin.android.presentation.theme.PixPinTheme
+import com.pixpin.android.presentation.source.ClipboardTextPinActivity
+import com.pixpin.android.presentation.source.GalleryPinActivity
 import com.pixpin.android.service.FloatingBallService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -220,6 +224,12 @@ class MainActivity : ComponentActivity() {
                         onRequestPermission = {
                             permissionHandler.requestOverlayPermission(this)
                         },
+                        onOpenGalleryPin = {
+                            openGalleryPinPicker()
+                        },
+                        onOpenClipboardTextPin = {
+                            openClipboardTextPin()
+                        },
                         onStartService = {
                             startFloatingBallService()
                         }
@@ -263,6 +273,18 @@ class MainActivity : ComponentActivity() {
     private fun startFloatingBallService() {
         val intent = Intent(this, FloatingBallService::class.java)
         startService(intent)
+    }
+
+    private fun openGalleryPinPicker() {
+        startActivity(
+            Intent(this, GalleryPinActivity::class.java)
+        )
+    }
+
+    private fun openClipboardTextPin() {
+        startActivity(
+            Intent(this, ClipboardTextPinActivity::class.java)
+        )
     }
 
     private fun refreshFloatingBallAppearance() {
@@ -351,6 +373,8 @@ private fun MainScreen(
     onEditHistory: (PinHistoryRecord) -> Unit,
     onRefreshRecords: () -> MainScreenSnapshot,
     onRequestPermission: () -> Unit,
+    onOpenGalleryPin: () -> Unit,
+    onOpenClipboardTextPin: () -> Unit,
     onStartService: () -> Unit
 ) {
     var currentTab by remember { mutableStateOf(SettingsTab.BASIC) }
@@ -453,6 +477,8 @@ private fun MainScreen(
                     onFloatingBallThemeChanged(it)
                 },
                 onRequestPermission = onRequestPermission,
+                onOpenGalleryPin = onOpenGalleryPin,
+                onOpenClipboardTextPin = onOpenClipboardTextPin,
                 onStartService = onStartService
             )
 
@@ -526,6 +552,8 @@ private fun BasicSettingsTab(
     onFloatingBallOpacityChanged: (Float) -> Unit,
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
     onRequestPermission: () -> Unit,
+    onOpenGalleryPin: () -> Unit,
+    onOpenClipboardTextPin: () -> Unit,
     onStartService: () -> Unit
 ) {
     LazyColumn(
@@ -559,7 +587,7 @@ private fun BasicSettingsTab(
         item {
             Text(
                 text = if (permissionGranted) {
-                    "悬浮球正在运行，点击即可截图。"
+                    "悬浮球正在运行，单击截图，长按展开创建菜单。"
                 } else {
                     "请先授予悬浮窗权限，才能使用悬浮截图。"
                 },
@@ -567,6 +595,40 @@ private fun BasicSettingsTab(
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        if (permissionGranted) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("快捷创建", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "除了悬浮球菜单，你也可以在应用内直接从相册或剪贴板创建贴图。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = onOpenGalleryPin,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("从相册贴图")
+                        }
+                        OutlinedButton(
+                            onClick = onOpenClipboardTextPin,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.TextFields, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("从剪贴板文字贴图")
+                        }
+                    }
+                }
+            }
         }
 
         item {
