@@ -87,6 +87,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -123,6 +124,7 @@ class MainActivity : ComponentActivity() {
                         initialMaxSessionCount = projectRecordSettings.maxSessionCount,
                         initialRetainDays = projectRecordSettings.retainDays,
                         initialPinShadowEnabled = settingsRepository.isPinShadowEnabledByDefault(),
+                        initialPinCornerRadiusDp = settingsRepository.getDefaultPinCornerRadiusDp(),
                         initialFloatingBallSizeDp = floatingBallSettings.sizeDp,
                         initialFloatingBallOpacity = floatingBallSettings.opacity,
                         initialFloatingBallTheme = floatingBallSettings.theme,
@@ -142,6 +144,9 @@ class MainActivity : ComponentActivity() {
                         },
                         onDefaultPinShadowChanged = { enabled ->
                             settingsRepository.setPinShadowEnabledByDefault(enabled)
+                        },
+                        onDefaultPinCornerRadiusChanged = { radiusDp ->
+                            settingsRepository.setDefaultPinCornerRadiusDp(radiusDp)
                         },
                         onFloatingBallSizeChanged = { size ->
                             settingsRepository.setFloatingBallSizeDp(size)
@@ -318,6 +323,7 @@ private fun MainScreen(
     initialMaxSessionCount: Int,
     initialRetainDays: Int,
     initialPinShadowEnabled: Boolean,
+    initialPinCornerRadiusDp: Float,
     initialFloatingBallSizeDp: Int,
     initialFloatingBallOpacity: Float,
     initialFloatingBallTheme: FloatingBallTheme,
@@ -330,6 +336,7 @@ private fun MainScreen(
     onMaxSessionCountChanged: (Int) -> Unit,
     onRetainDaysChanged: (Int) -> Unit,
     onDefaultPinShadowChanged: (Boolean) -> Unit,
+    onDefaultPinCornerRadiusChanged: (Float) -> Unit,
     onFloatingBallSizeChanged: (Int) -> Unit,
     onFloatingBallOpacityChanged: (Float) -> Unit,
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
@@ -355,6 +362,7 @@ private fun MainScreen(
     var maxSessionCount by remember { mutableIntStateOf(initialMaxSessionCount) }
     var retainDays by remember { mutableIntStateOf(initialRetainDays) }
     var defaultPinShadowEnabled by remember { mutableStateOf(initialPinShadowEnabled) }
+    var defaultPinCornerRadiusDp by remember { mutableStateOf(initialPinCornerRadiusDp) }
     var floatingBallSizeDp by remember { mutableIntStateOf(initialFloatingBallSizeDp) }
     var floatingBallOpacity by remember { mutableStateOf(initialFloatingBallOpacity) }
     var floatingBallTheme by remember { mutableStateOf(initialFloatingBallTheme) }
@@ -413,6 +421,7 @@ private fun MainScreen(
                 selectedAction = selectedAction,
                 selectedScaleMode = selectedScaleMode,
                 defaultPinShadowEnabled = defaultPinShadowEnabled,
+                defaultPinCornerRadiusDp = defaultPinCornerRadiusDp,
                 floatingBallSizeDp = floatingBallSizeDp,
                 floatingBallOpacity = floatingBallOpacity,
                 floatingBallTheme = floatingBallTheme,
@@ -427,6 +436,10 @@ private fun MainScreen(
                 onDefaultPinShadowChanged = {
                     defaultPinShadowEnabled = it
                     onDefaultPinShadowChanged(it)
+                },
+                onDefaultPinCornerRadiusChanged = {
+                    defaultPinCornerRadiusDp = it
+                    onDefaultPinCornerRadiusChanged(it)
                 },
                 onFloatingBallSizeChanged = {
                     floatingBallSizeDp = it
@@ -502,12 +515,14 @@ private fun BasicSettingsTab(
     selectedAction: CaptureResultAction,
     selectedScaleMode: PinScaleMode,
     defaultPinShadowEnabled: Boolean,
+    defaultPinCornerRadiusDp: Float,
     floatingBallSizeDp: Int,
     floatingBallOpacity: Float,
     floatingBallTheme: FloatingBallTheme,
     onActionChanged: (CaptureResultAction) -> Unit,
     onScaleModeChanged: (PinScaleMode) -> Unit,
     onDefaultPinShadowChanged: (Boolean) -> Unit,
+    onDefaultPinCornerRadiusChanged: (Float) -> Unit,
     onFloatingBallSizeChanged: (Int) -> Unit,
     onFloatingBallOpacityChanged: (Float) -> Unit,
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
@@ -598,6 +613,26 @@ private fun BasicSettingsTab(
                         Switch(
                             checked = defaultPinShadowEnabled,
                             onCheckedChange = onDefaultPinShadowChanged
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "默认圆角（${defaultPinCornerRadiusDp.roundToInt()}dp）",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = if (defaultPinCornerRadiusDp <= 0.5f) {
+                                "新贴图保持直角外观"
+                            } else {
+                                "新贴图默认使用圆角样式"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = defaultPinCornerRadiusDp,
+                            onValueChange = onDefaultPinCornerRadiusChanged,
+                            valueRange = 0f..48f
                         )
                     }
                 }

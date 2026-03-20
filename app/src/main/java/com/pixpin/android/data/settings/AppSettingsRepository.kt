@@ -21,6 +21,11 @@ data class PinHistorySettings(
     val retainDays: Int
 )
 
+data class PinAppearanceSettings(
+    val shadowEnabled: Boolean,
+    val cornerRadiusDp: Float
+)
+
 interface AppSettingsRepository {
     fun getCaptureResultAction(): CaptureResultAction
     fun setCaptureResultAction(action: CaptureResultAction)
@@ -32,8 +37,11 @@ interface AppSettingsRepository {
     fun setMaxSessionCount(count: Int)
     fun setRetainDays(days: Int)
 
+    fun getPinAppearanceSettings(): PinAppearanceSettings
     fun isPinShadowEnabledByDefault(): Boolean
     fun setPinShadowEnabledByDefault(enabled: Boolean)
+    fun getDefaultPinCornerRadiusDp(): Float
+    fun setDefaultPinCornerRadiusDp(radiusDp: Float)
 
     fun getFloatingBallSettings(): FloatingBallSettings
     fun setFloatingBallSizeDp(sizeDp: Int)

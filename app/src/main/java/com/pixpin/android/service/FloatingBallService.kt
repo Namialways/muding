@@ -151,25 +151,26 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
 
             ACTION_START_SCREENSHOT -> {
-            val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
-            val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
-            if (resultCode == Activity.RESULT_OK && resultData != null) {
-                createNotificationChannel()
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    startForeground(
-                        NOTIFICATION_ID,
-                        createNotification(),
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-                    )
+                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+                val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
+                if (resultCode == Activity.RESULT_OK && resultData != null) {
+                    floatingView?.visibility = View.GONE
+                    createNotificationChannel()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        startForeground(
+                            NOTIFICATION_ID,
+                            createNotification(),
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                        )
+                    } else {
+                        startForeground(NOTIFICATION_ID, createNotification())
+                    }
+                    screenshotManager.initMediaProjection(resultCode, resultData)
+                    captureAndShowCropOverlay()
                 } else {
-                    startForeground(NOTIFICATION_ID, createNotification())
+                    floatingView?.visibility = View.VISIBLE
                 }
-                screenshotManager.initMediaProjection(resultCode, resultData)
-                captureAndShowCropOverlay()
-            } else {
-                floatingView?.visibility = View.VISIBLE
             }
-        }
         }
         return START_STICKY
     }
@@ -271,15 +272,18 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun handleScreenshot() {
-        floatingView?.visibility = View.GONE
-
         if (screenshotManager.hasActiveProjection()) {
+            floatingView?.visibility = View.GONE
             captureAndShowCropOverlay()
             return
         }
 
         val intent = Intent(this, ScreenshotPermissionActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+            )
         }
         startActivity(intent)
     }
@@ -359,6 +363,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 val uri = withContext(Dispatchers.IO) {
                     cachedImageRepository.writePngToCache(cropped, "screenshots", "region_capture")
                 }
+                val croppedWidth = cropped.width
+                val croppedHeight = cropped.height
                 cropped.recycle()
 
                 dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
@@ -367,6 +373,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     val pinIntent = Intent(this@FloatingBallService, PinOverlayService::class.java).apply {
                         putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
                         putExtra(PinOverlayService.EXTRA_HISTORY_SOURCE, com.pixpin.android.domain.usecase.PinHistorySourceType.SCREENSHOT.value)
+                        putExtra(PinOverlayService.EXTRA_INITIAL_CONTENT_WIDTH_PX, croppedWidth)
+                        putExtra(PinOverlayService.EXTRA_INITIAL_CONTENT_HEIGHT_PX, croppedHeight)
                     }
                     startService(pinIntent)
                     restoreFloatingBall()

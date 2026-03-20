@@ -68,6 +68,14 @@ class CaptureFlowSettings(context: Context) {
         prefs.edit().putBoolean(KEY_PIN_SHADOW_ENABLED, enabled).apply()
     }
 
+    fun getDefaultPinCornerRadiusDp(): Float {
+        return prefs.getFloat(KEY_PIN_CORNER_RADIUS_DP, 0f).coerceIn(0f, 48f)
+    }
+
+    fun setDefaultPinCornerRadiusDp(radiusDp: Float) {
+        prefs.edit().putFloat(KEY_PIN_CORNER_RADIUS_DP, radiusDp.coerceIn(0f, 48f)).apply()
+    }
+
     fun isPinHistoryEnabled(): Boolean {
         return prefs.getBoolean(KEY_PIN_HISTORY_ENABLED, true)
     }
@@ -127,6 +135,7 @@ class CaptureFlowSettings(context: Context) {
         private const val KEY_MAX_SESSION_COUNT = "max_session_count"
         private const val KEY_RETAIN_DAYS = "retain_days"
         private const val KEY_PIN_SHADOW_ENABLED = "pin_shadow_enabled"
+        private const val KEY_PIN_CORNER_RADIUS_DP = "pin_corner_radius_dp"
         private const val KEY_PIN_HISTORY_ENABLED = "pin_history_enabled"
         private const val KEY_MAX_PIN_HISTORY_COUNT = "max_pin_history_count"
         private const val KEY_PIN_HISTORY_RETAIN_DAYS = "pin_history_retain_days"

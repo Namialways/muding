@@ -37,12 +37,27 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
         settings.setRetainDays(days)
     }
 
+    override fun getPinAppearanceSettings(): PinAppearanceSettings {
+        return PinAppearanceSettings(
+            shadowEnabled = settings.isPinShadowEnabledByDefault(),
+            cornerRadiusDp = settings.getDefaultPinCornerRadiusDp()
+        )
+    }
+
     override fun isPinShadowEnabledByDefault(): Boolean {
         return settings.isPinShadowEnabledByDefault()
     }
 
     override fun setPinShadowEnabledByDefault(enabled: Boolean) {
         settings.setPinShadowEnabledByDefault(enabled)
+    }
+
+    override fun getDefaultPinCornerRadiusDp(): Float {
+        return settings.getDefaultPinCornerRadiusDp()
+    }
+
+    override fun setDefaultPinCornerRadiusDp(radiusDp: Float) {
+        settings.setDefaultPinCornerRadiusDp(radiusDp)
     }
 
     override fun getFloatingBallSettings(): FloatingBallSettings {
