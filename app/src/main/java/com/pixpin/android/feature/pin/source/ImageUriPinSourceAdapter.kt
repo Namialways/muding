@@ -58,11 +58,17 @@ class ImageUriPinSourceAdapter(
     }
 
     private fun importGalleryImage(uriString: String): PinImageAsset {
-        val bitmap = context.contentResolver.openInputStream(Uri.parse(uriString))?.use { input ->
-            BitmapFactory.decodeStream(input)
-        } ?: throw IllegalStateException("Failed to decode gallery image")
+        val originalDimensions = readImageDimensions(uriString)
+        val bitmap = decodeSampledBitmap(
+            uriString = uriString,
+            targetWidth = maxImportWidthPx(),
+            targetHeight = maxImportHeightPx()
+        ) ?: throw IllegalStateException("Failed to decode gallery image")
         return try {
-            val fittedSize = fitToScreen(bitmap.width, bitmap.height)
+            val fittedSize = fitToScreen(
+                width = originalDimensions.first ?: bitmap.width,
+                height = originalDimensions.second ?: bitmap.height
+            )
             val cachedUri = cachedImageRepository.writePngToCache(bitmap, "imports", "gallery_pin")
             PinImageAsset(
                 uri = cachedUri.toString(),
@@ -72,6 +78,62 @@ class ImageUriPinSourceAdapter(
         } finally {
             bitmap.recycle()
         }
+    }
+
+    private fun decodeSampledBitmap(
+        uriString: String,
+        targetWidth: Int,
+        targetHeight: Int
+    ): Bitmap? {
+        val imageUri = Uri.parse(uriString)
+        val bounds = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        context.contentResolver.openInputStream(imageUri)?.use { input ->
+            BitmapFactory.decodeStream(input, null, bounds)
+        }
+        val sampleSize = calculateInSampleSize(
+            width = bounds.outWidth,
+            height = bounds.outHeight,
+            targetWidth = targetWidth,
+            targetHeight = targetHeight
+        )
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+        }
+        return context.contentResolver.openInputStream(imageUri)?.use { input ->
+            BitmapFactory.decodeStream(input, null, decodeOptions)
+        }
+    }
+
+    private fun calculateInSampleSize(
+        width: Int,
+        height: Int,
+        targetWidth: Int,
+        targetHeight: Int
+    ): Int {
+        if (width <= 0 || height <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+            return 1
+        }
+        var sampleSize = 1
+        var currentWidth = width
+        var currentHeight = height
+        while (currentWidth > targetWidth * 2 || currentHeight > targetHeight * 2) {
+            sampleSize *= 2
+            currentWidth /= 2
+            currentHeight /= 2
+        }
+        return sampleSize.coerceAtLeast(1)
+    }
+
+    private fun maxImportWidthPx(): Int {
+        val metrics = context.resources.displayMetrics
+        return (metrics.widthPixels * 2f).roundToInt().coerceAtLeast(2048)
+    }
+
+    private fun maxImportHeightPx(): Int {
+        val metrics = context.resources.displayMetrics
+        return (metrics.heightPixels * 2f).roundToInt().coerceAtLeast(2048)
     }
 
     private fun fitToScreen(width: Int, height: Int): Pair<Int, Int> {

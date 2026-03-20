@@ -28,6 +28,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,7 +36,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,10 +56,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -125,6 +124,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var snapAnimator: ValueAnimator? = null
     private var snapRunnable: Runnable? = null
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val floatingMenuExpanded = mutableStateOf(false)
+    private val floatingBallX = mutableIntStateOf(100)
+    private val floatingBallY = mutableIntStateOf(100)
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -187,6 +189,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun showFloatingBall() {
         val appearance = loadFloatingBallAppearance()
+        floatingMenuExpanded.value = false
         val params = floatingBallParams ?: WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -200,8 +203,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 100
-            y = 100
+            x = floatingBallX.intValue
+            y = floatingBallY.intValue
         }
         floatingBallParams = params
 
@@ -212,6 +215,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 PixPinTheme {
                     FloatingBallContent(
                         appearance = appearance,
+                        isExpanded = floatingMenuExpanded.value,
+                        onExpandedChange = { setFloatingMenuExpanded(it) },
+                        ballX = floatingBallX.intValue,
+                        ballY = floatingBallY.intValue,
                         onScreenshot = { handleScreenshot() },
                         onGallery = { openGalleryPicker() },
                         onClipboardText = { openClipboardTextPin() },
@@ -221,15 +228,23 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         onExit = { stopSelf() },
                         onPositionChange = { dx, dy ->
                             cancelSnap()
-                            params.x += dx.roundToInt()
-                            params.y += dy.roundToInt()
-
                             val display = windowManager.defaultDisplay
                             val size = Point()
                             display.getRealSize(size)
 
-                            params.x = params.x.coerceIn(0, (size.x - appearance.dragBoundPx).coerceAtLeast(0))
-                            params.y = params.y.coerceIn(0, (size.y - appearance.dragBoundPx).coerceAtLeast(0))
+                            val nextX = (floatingBallX.intValue + dx.roundToInt())
+                                .coerceIn(0, (size.x - appearance.dragBoundPx).coerceAtLeast(0))
+                            val nextY = (floatingBallY.intValue + dy.roundToInt())
+                                .coerceIn(0, (size.y - appearance.dragBoundPx).coerceAtLeast(0))
+                            floatingBallX.intValue = nextX
+                            floatingBallY.intValue = nextY
+
+                            if (floatingMenuExpanded.value) {
+                                return@FloatingBallContent
+                            }
+
+                            params.x = nextX
+                            params.y = nextY
 
                             try {
                                 windowManager.updateViewLayout(this, params)
@@ -252,6 +267,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun recreateFloatingBall() {
         cancelSnap()
+        setFloatingMenuExpanded(false)
         floatingView?.let {
             try {
                 windowManager.removeViewImmediate(it)
@@ -282,6 +298,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun handleScreenshot() {
+        setFloatingMenuExpanded(false)
         if (screenshotManager.hasActiveProjection()) {
             floatingView?.visibility = View.GONE
             captureAndShowCropOverlay()
@@ -299,6 +316,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun openGalleryPicker() {
+        setFloatingMenuExpanded(false)
         floatingView?.visibility = View.GONE
         startActivity(
             Intent(this, GalleryPinActivity::class.java).apply {
@@ -314,6 +332,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun openClipboardTextPin() {
+        setFloatingMenuExpanded(false)
         floatingView?.visibility = View.GONE
         startActivity(
             Intent(this, ClipboardTextPinActivity::class.java).apply {
@@ -434,6 +453,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun restoreFloatingBall() {
         mainHandler.post {
+            setFloatingMenuExpanded(false)
             floatingView?.visibility = View.VISIBLE
         }
     }
@@ -458,10 +478,45 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun openSettings() {
+        setFloatingMenuExpanded(false)
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
+    }
+
+    private fun setFloatingMenuExpanded(expanded: Boolean) {
+        if (floatingMenuExpanded.value == expanded) {
+            return
+        }
+        floatingMenuExpanded.value = expanded
+        val view = floatingView ?: return
+        val params = floatingBallParams ?: return
+        if (!view.isAttachedToWindow) {
+            return
+        }
+        params.flags = if (expanded) {
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        } else {
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        params.width = if (expanded) {
+            WindowManager.LayoutParams.MATCH_PARENT
+        } else {
+            WindowManager.LayoutParams.WRAP_CONTENT
+        }
+        params.height = if (expanded) {
+            WindowManager.LayoutParams.MATCH_PARENT
+        } else {
+            WindowManager.LayoutParams.WRAP_CONTENT
+        }
+        params.x = if (expanded) 0 else floatingBallX.intValue
+        params.y = if (expanded) 0 else floatingBallY.intValue
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (_: Exception) {
+        }
     }
 
     private fun createNotificationChannel() {
@@ -539,6 +594,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     override fun onDestroy() {
         super.onDestroy()
         cancelSnap()
+        setFloatingMenuExpanded(false)
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         try {
             screenshotManager.release()
@@ -582,6 +638,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 @Composable
 private fun FloatingBallContent(
     appearance: FloatingBallAppearance,
+    isExpanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    ballX: Int,
+    ballY: Int,
     onScreenshot: () -> Unit,
     onGallery: () -> Unit,
     onClipboardText: () -> Unit,
@@ -592,16 +652,34 @@ private fun FloatingBallContent(
     onPositionChange: (Float, Float) -> Unit,
     onDragEnd: () -> Unit
 ) {
-    var offsetX by remember { mutableStateOf(0f) }
-    var offsetY by remember { mutableStateOf(0f) }
-    var isExpanded by remember { mutableStateOf(false) }
-
     Box(
-        modifier = Modifier
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+        modifier = if (isExpanded) {
+            Modifier.fillMaxSize()
+        } else {
+            Modifier
+        }
+    ) {
+        if (isExpanded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { onExpandedChange(false) }
+                        )
+                    }
+            )
+        }
+
+        Box(
+            modifier = (if (isExpanded) {
+                Modifier.absoluteOffset { IntOffset(ballX, ballY) }
+            } else {
+                Modifier
+            })
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { isExpanded = false },
+                    onDragStart = { onExpandedChange(false) },
                     onDragEnd = { onDragEnd() },
                     onDragCancel = { onDragEnd() },
                     onDrag = { change, dragAmount ->
@@ -610,54 +688,55 @@ private fun FloatingBallContent(
                     }
                 )
             }
-    ) {
-        FloatingBall(
-            appearance = appearance,
-            isExpanded = isExpanded,
-            onLongClick = { isExpanded = !isExpanded },
-            onClick = {
-                if (isExpanded) {
-                    isExpanded = false
-                }
-                onScreenshot()
-            }
-        )
-
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut()
         ) {
-            FloatingMenu(
-                onScreenshot = {
-                    isExpanded = false
+            FloatingBall(
+                appearance = appearance,
+                isExpanded = isExpanded,
+                onLongClick = { onExpandedChange(!isExpanded) },
+                onClick = {
+                    if (isExpanded) {
+                        onExpandedChange(false)
+                    }
                     onScreenshot()
-                },
-                onGallery = {
-                    isExpanded = false
-                    onGallery()
-                },
-                onClipboardText = {
-                    isExpanded = false
-                    onClipboardText()
-                },
-                onRestorePin = {
-                    isExpanded = false
-                    onRestorePin()
-                },
-                onManagePins = {
-                    isExpanded = false
-                    onManagePins()
-                },
-                onSettings = {
-                    isExpanded = false
-                    onSettings()
-                },
-                onExit = {
-                    isExpanded = false
-                    onExit()
                 }
             )
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut()
+            ) {
+                FloatingMenu(
+                    onScreenshot = {
+                        onExpandedChange(false)
+                        onScreenshot()
+                    },
+                    onGallery = {
+                        onExpandedChange(false)
+                        onGallery()
+                    },
+                    onClipboardText = {
+                        onExpandedChange(false)
+                        onClipboardText()
+                    },
+                    onRestorePin = {
+                        onExpandedChange(false)
+                        onRestorePin()
+                    },
+                    onManagePins = {
+                        onExpandedChange(false)
+                        onManagePins()
+                    },
+                    onSettings = {
+                        onExpandedChange(false)
+                        onSettings()
+                    },
+                    onExit = {
+                        onExpandedChange(false)
+                        onExit()
+                    }
+                )
+            }
         }
     }
 }

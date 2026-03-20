@@ -37,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import kotlin.math.max
 
 class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
@@ -91,7 +92,11 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (!imageUriString.isNullOrBlank()) {
             val imageUri = android.net.Uri.parse(imageUriString)
             serviceScope.launch {
-                decodeBitmap(imageUri)?.let { bitmap ->
+                decodeBitmap(
+                    uri = imageUri,
+                    preferredWidth = initialContentWidthPx,
+                    preferredHeight = initialContentHeightPx
+                )?.let { bitmap ->
                     showPinOverlay(
                         bitmap = bitmap,
                         imageUriString = imageUriString,
@@ -124,16 +129,60 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
-    private suspend fun decodeBitmap(uri: android.net.Uri): Bitmap? {
+    private suspend fun decodeBitmap(
+        uri: android.net.Uri,
+        preferredWidth: Int? = null,
+        preferredHeight: Int? = null
+    ): Bitmap? {
         return try {
             withContext(Dispatchers.IO) {
+                val targetWidth = preferredWidth
+                    ?.coerceAtLeast(resources.displayMetrics.widthPixels)
+                    ?: max(resources.displayMetrics.widthPixels * 2, 1440)
+                val targetHeight = preferredHeight
+                    ?.coerceAtLeast(resources.displayMetrics.heightPixels)
+                    ?: max(resources.displayMetrics.heightPixels * 2, 1440)
+                val bounds = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
                 contentResolver.openInputStream(uri)?.use { input ->
-                    BitmapFactory.decodeStream(input)
+                    BitmapFactory.decodeStream(input, null, bounds)
+                }
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inSampleSize = calculateInSampleSize(
+                        width = bounds.outWidth,
+                        height = bounds.outHeight,
+                        targetWidth = targetWidth,
+                        targetHeight = targetHeight
+                    )
+                }
+                contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, decodeOptions)
                 }
             }
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun calculateInSampleSize(
+        width: Int,
+        height: Int,
+        targetWidth: Int,
+        targetHeight: Int
+    ): Int {
+        if (width <= 0 || height <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+            return 1
+        }
+        var sampleSize = 1
+        var currentWidth = width
+        var currentHeight = height
+        while (currentWidth > targetWidth * 2 || currentHeight > targetHeight * 2) {
+            sampleSize *= 2
+            currentWidth /= 2
+            currentHeight /= 2
+        }
+        return sampleSize.coerceAtLeast(1)
     }
 
     private fun showPinOverlay(

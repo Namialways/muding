@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 class TextBitmapRenderer(
@@ -22,7 +23,7 @@ class TextBitmapRenderer(
         val scaledDensity = displayMetrics.scaledDensity
         val horizontalPadding = (16f * density).roundToInt()
         val verticalPadding = (14f * density).roundToInt()
-        val minContentWidth = (180f * density).roundToInt()
+        val minContentWidth = (48f * density).roundToInt()
         val maxContentWidth = (displayMetrics.widthPixels * 0.78f).roundToInt().coerceAtLeast(minContentWidth)
         val content = text.trim().ifBlank { " " }
 
@@ -30,8 +31,12 @@ class TextBitmapRenderer(
             color = Color.parseColor("#111111")
             textSize = 16f * scaledDensity
         }
+        val desiredContentWidth = ceil(Layout.getDesiredWidth(content, textPaint).toDouble())
+            .roundToInt()
+            .coerceAtLeast(minContentWidth)
+            .coerceAtMost(maxContentWidth)
         val layout = StaticLayout.Builder
-            .obtain(content, 0, content.length, textPaint, maxContentWidth)
+            .obtain(content, 0, content.length, textPaint, desiredContentWidth)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setIncludePad(false)
             .build()

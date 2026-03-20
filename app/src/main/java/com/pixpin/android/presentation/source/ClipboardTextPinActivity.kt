@@ -11,11 +11,13 @@ import com.pixpin.android.core.model.PinSourceType
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.service.FloatingBallService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class ClipboardTextPinActivity : ComponentActivity() {
 
     private lateinit var pinCreationCoordinator: PinCreationCoordinator
+    private var handled = false
     private val finishToBackground: Boolean
         get() = intent.getBooleanExtra(EXTRA_FINISH_TO_BACKGROUND, false)
     private val restoreFloatingBall: Boolean
@@ -24,22 +26,30 @@ class ClipboardTextPinActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
-        val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = clipboardManager.primaryClip
-            ?.takeIf { it.itemCount > 0 }
-            ?.getItemAt(0)
-            ?.coerceToText(this)
-            ?.toString()
-            ?.trim()
-            .orEmpty()
+    }
 
-        if (text.isBlank()) {
-            Toast.makeText(this, "Clipboard has no text content", Toast.LENGTH_SHORT).show()
-            finishFlow()
+    override fun onPostResume() {
+        super.onPostResume()
+        if (handled) {
             return
         }
+        handled = true
+        processClipboardText()
+    }
 
+    private fun processClipboardText() {
         lifecycleScope.launch {
+            val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val text = awaitClipboardText(clipboardManager)
+            if (text.isNullOrBlank()) {
+                Toast.makeText(
+                    this@ClipboardTextPinActivity,
+                    "剪贴板中没有可用文本",
+                    Toast.LENGTH_SHORT
+                ).show()
+                finishFlow()
+                return@launch
+            }
             try {
                 pinCreationCoordinator.launchFromSource(
                     context = this@ClipboardTextPinActivity,
@@ -50,11 +60,44 @@ class ClipboardTextPinActivity : ComponentActivity() {
                     forcedResultAction = CaptureResultAction.PIN_DIRECTLY
                 )
             } catch (e: Exception) {
-                Toast.makeText(this@ClipboardTextPinActivity, "Create text pin failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@ClipboardTextPinActivity,
+                    "创建文字贴图失败: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             } finally {
                 finishFlow()
             }
         }
+    }
+
+    private suspend fun awaitClipboardText(clipboardManager: ClipboardManager): String? {
+        repeat(3) { attempt ->
+            readClipboardText(clipboardManager)?.let { return it }
+            if (attempt < 2) {
+                delay(120)
+            }
+        }
+        return null
+    }
+
+    private fun readClipboardText(clipboardManager: ClipboardManager): String? {
+        if (!clipboardManager.hasPrimaryClip()) {
+            return null
+        }
+        val clip = clipboardManager.primaryClip ?: return null
+        for (index in 0 until clip.itemCount) {
+            val item = clip.getItemAt(index)
+            val directText = item.text?.toString()?.trim()
+            if (!directText.isNullOrBlank()) {
+                return directText
+            }
+            val coercedText = item.coerceToText(this)?.toString()?.trim()
+            if (!coercedText.isNullOrBlank()) {
+                return coercedText
+            }
+        }
+        return null
     }
 
     private fun finishFlow() {
