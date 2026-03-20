@@ -7,6 +7,9 @@ import java.util.UUID
 
 enum class PinHistorySourceType(val value: String) {
     SCREENSHOT("screenshot"),
+    GALLERY_IMAGE("gallery_image"),
+    CLIPBOARD_TEXT("clipboard_text"),
+    OCR_TEXT("ocr_text"),
     EDITOR_EXPORT("editor_export"),
     RESTORED_PIN("restored_pin");
 

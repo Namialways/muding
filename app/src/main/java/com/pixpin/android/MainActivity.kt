@@ -63,6 +63,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pixpin.android.app.AppGraph
+import com.pixpin.android.core.model.PinImageAsset
+import com.pixpin.android.core.model.PinSourceType
 import com.pixpin.android.data.repository.AnnotationSessionRepository
 import com.pixpin.android.data.repository.PinHistoryRepository
 import com.pixpin.android.data.repository.RecentPinRepository
@@ -76,11 +78,11 @@ import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.domain.usecase.PinScaleMode
 import com.pixpin.android.domain.usecase.RuntimeStorageSnapshot
-import com.pixpin.android.presentation.editor.AnnotationEditorActivity
+import com.pixpin.android.feature.pin.creation.EditorLaunchRequest
+import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.service.FloatingBallService
-import com.pixpin.android.service.PinOverlayService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -97,6 +99,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var pinHistoryRepository: PinHistoryRepository
     private lateinit var recentPinRepository: RecentPinRepository
     private lateinit var runtimeStorageRepository: RuntimeStorageRepository
+    private lateinit var pinCreationCoordinator: PinCreationCoordinator
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -107,6 +110,7 @@ class MainActivity : ComponentActivity() {
         pinHistoryRepository = AppGraph.pinHistoryRepository(this)
         recentPinRepository = AppGraph.recentPinRepository(this)
         runtimeStorageRepository = AppGraph.runtimeStorageRepository(this)
+        pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
         val projectRecordSettings = settingsRepository.getProjectRecordSettings()
         val floatingBallSettings = settingsRepository.getFloatingBallSettings()
         val pinHistorySettings = settingsRepository.getPinHistorySettings()
@@ -189,29 +193,22 @@ class MainActivity : ComponentActivity() {
                             pinHistoryRepository.delete(record.id)
                         },
                         onRestoreHistory = { record ->
-                            startService(
-                                Intent(this, PinOverlayService::class.java).apply {
-                                    putExtra(PinOverlayService.EXTRA_IMAGE_URI, record.imageUri)
-                                    putExtra(PinOverlayService.EXTRA_ANNOTATION_SESSION_ID, record.annotationSessionId)
-                                    putExtra(
-                                        PinOverlayService.EXTRA_HISTORY_SOURCE,
-                                        PinHistorySourceType.RESTORED_PIN.value
-                                    )
-                                }
+                            pinCreationCoordinator.startPinOverlay(
+                                this,
+                                pinCreationCoordinator.createImageRequest(
+                                    sourceType = PinSourceType.HISTORY_RESTORE,
+                                    imageAsset = PinImageAsset(uri = record.imageUri),
+                                    annotationSessionId = record.annotationSessionId
+                                )
                             )
                         },
                         onEditHistory = { record ->
-                            startActivity(
-                                Intent(this, AnnotationEditorActivity::class.java).apply {
-                                    if (!record.annotationSessionId.isNullOrBlank()) {
-                                        putExtra(
-                                            AnnotationEditorActivity.EXTRA_ANNOTATION_SESSION_ID,
-                                            record.annotationSessionId
-                                        )
-                                    } else {
-                                        putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, record.imageUri)
-                                    }
-                                }
+                            pinCreationCoordinator.startEditor(
+                                this,
+                                EditorLaunchRequest(
+                                    imageUri = record.imageUri,
+                                    annotationSessionId = record.annotationSessionId
+                                )
                             )
                         },
                         onRefreshRecords = {
@@ -1144,6 +1141,9 @@ private fun CaptureOptionRow(
 private fun historySourceLabel(sourceType: PinHistorySourceType): String {
     return when (sourceType) {
         PinHistorySourceType.SCREENSHOT -> "截图直贴"
+        PinHistorySourceType.GALLERY_IMAGE -> "相册贴图"
+        PinHistorySourceType.CLIPBOARD_TEXT -> "剪贴板文字贴图"
+        PinHistorySourceType.OCR_TEXT -> "OCR 文字贴图"
         PinHistorySourceType.EDITOR_EXPORT -> "编辑后贴图"
         PinHistorySourceType.RESTORED_PIN -> "历史恢复贴图"
     }

@@ -4,6 +4,7 @@ enum class PinSourceType {
     SCREENSHOT,
     GALLERY_IMAGE,
     CLIPBOARD_TEXT,
+    OCR_TEXT,
     HISTORY_RESTORE,
     EDITOR_EXPORT
 }

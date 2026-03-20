@@ -15,6 +15,7 @@ import com.pixpin.android.data.repository.SharedPreferencesRecentPinRepository
 import com.pixpin.android.data.repository.SystemRuntimeStorageRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.data.settings.SharedPreferencesAppSettingsRepository
+import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 
 object AppGraph {
 
@@ -44,5 +45,12 @@ object AppGraph {
 
     fun imageExportRepository(context: Context): ImageExportRepository {
         return SystemImageExportRepository(context.applicationContext)
+    }
+
+    fun pinCreationCoordinator(context: Context): PinCreationCoordinator {
+        return PinCreationCoordinator(
+            settingsRepository = appSettingsRepository(context),
+            cachedImageRepository = cachedImageRepository(context)
+        )
     }
 }

@@ -45,6 +45,11 @@
             android:exported="false"
             android:theme="@style/Theme.PixPinAndroid" />
 
+        <activity
+            android:name=".presentation.crop.ImageCropActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPinAndroid" />
+
         <!-- Transparent activity used to request MediaProjection permission -->
         <activity
             android:name=".service.ScreenshotPermissionActivity"

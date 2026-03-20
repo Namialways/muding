@@ -25,11 +25,12 @@ import com.pixpin.android.app.AppGraph
 import com.pixpin.android.data.repository.PinHistoryRepository
 import com.pixpin.android.data.repository.RecentPinRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
+import com.pixpin.android.feature.pin.creation.EditorLaunchRequest
+import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.domain.usecase.ClosedPinRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.feature.pin.runtime.PinManagerContent
 import com.pixpin.android.feature.pin.runtime.PinOverlayWindowController
-import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private lateinit var settingsRepository: AppSettingsRepository
     private lateinit var pinHistoryRepository: PinHistoryRepository
     private lateinit var recentPinRepository: RecentPinRepository
+    private lateinit var pinCreationCoordinator: PinCreationCoordinator
     private var managerRefreshToken by mutableIntStateOf(0)
 
     override val lifecycle: Lifecycle
@@ -63,6 +65,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         settingsRepository = AppGraph.appSettingsRepository(this)
         pinHistoryRepository = AppGraph.pinHistoryRepository(this)
         recentPinRepository = AppGraph.recentPinRepository(this)
+        pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
     }
@@ -158,15 +161,14 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             initialX = 120 + overlays.size * 36,
             initialY = 220 + overlays.size * 36,
             onEditRequested = {
-                val editorIntent = Intent(this@PinOverlayService, AnnotationEditorActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    if (!annotationSessionId.isNullOrBlank()) {
-                        putExtra(AnnotationEditorActivity.EXTRA_ANNOTATION_SESSION_ID, annotationSessionId)
-                    } else {
-                        putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, imageUriString)
-                    }
-                }
-                startActivity(editorIntent)
+                pinCreationCoordinator.startEditor(
+                    context = this@PinOverlayService,
+                    request = EditorLaunchRequest(
+                        imageUri = imageUriString,
+                        annotationSessionId = annotationSessionId
+                    ),
+                    launchInNewTask = true
+                )
                 removeOverlay(overlayId)
             },
             onCloseRequested = {

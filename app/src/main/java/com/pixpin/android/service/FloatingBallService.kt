@@ -78,14 +78,15 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pixpin.android.MainActivity
 import com.pixpin.android.R
 import com.pixpin.android.app.AppGraph
-import com.pixpin.android.data.image.CachedImageRepository
+import com.pixpin.android.core.model.PinSourceType
 import com.pixpin.android.data.repository.RecentPinRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.ScreenshotManager
+import com.pixpin.android.feature.pin.creation.EditorLaunchRequest
+import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.presentation.crop.CaptureCropOverlay
-import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import com.pixpin.android.presentation.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
@@ -114,9 +115,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val lifecycleRegistry = LifecycleRegistry(this)
 
     private lateinit var screenshotManager: ScreenshotManager
-    private lateinit var cachedImageRepository: CachedImageRepository
     private lateinit var settingsRepository: AppSettingsRepository
     private lateinit var recentPinRepository: RecentPinRepository
+    private lateinit var pinCreationCoordinator: PinCreationCoordinator
 
     private var snapAnimator: ValueAnimator? = null
     private var snapRunnable: Runnable? = null
@@ -134,9 +135,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenshotManager = ScreenshotManager(this)
-        cachedImageRepository = AppGraph.cachedImageRepository(this)
         settingsRepository = AppGraph.appSettingsRepository(this)
         recentPinRepository = AppGraph.recentPinRepository(this)
+        pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
 
         showFloatingBall()
 
@@ -360,32 +361,26 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
                 }
 
-                val uri = withContext(Dispatchers.IO) {
-                    cachedImageRepository.writePngToCache(cropped, "screenshots", "region_capture")
-                }
-                val croppedWidth = cropped.width
-                val croppedHeight = cropped.height
+                val imageAsset = pinCreationCoordinator.persistBitmapAsset(cropped, "screenshots", "region_capture")
                 cropped.recycle()
 
                 dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
 
-                if (settingsRepository.getCaptureResultAction() == CaptureResultAction.PIN_DIRECTLY) {
-                    val pinIntent = Intent(this@FloatingBallService, PinOverlayService::class.java).apply {
-                        putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
-                        putExtra(PinOverlayService.EXTRA_HISTORY_SOURCE, com.pixpin.android.domain.usecase.PinHistorySourceType.SCREENSHOT.value)
-                        putExtra(PinOverlayService.EXTRA_INITIAL_CONTENT_WIDTH_PX, croppedWidth)
-                        putExtra(PinOverlayService.EXTRA_INITIAL_CONTENT_HEIGHT_PX, croppedHeight)
-                    }
-                    startService(pinIntent)
+                val request = pinCreationCoordinator.createImageRequest(
+                    sourceType = PinSourceType.SCREENSHOT,
+                    imageAsset = imageAsset
+                )
+                if (pinCreationCoordinator.resolveResultAction() == CaptureResultAction.PIN_DIRECTLY) {
+                    pinCreationCoordinator.startPinOverlay(this@FloatingBallService, request)
                     restoreFloatingBall()
                     return@launch
                 }
 
-                val editorIntent = Intent(this@FloatingBallService, AnnotationEditorActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    putExtra(AnnotationEditorActivity.EXTRA_IMAGE_URI, uri.toString())
-                }
-                startActivity(editorIntent)
+                pinCreationCoordinator.startEditor(
+                    context = this@FloatingBallService,
+                    request = EditorLaunchRequest(imageUri = imageAsset.uri),
+                    launchInNewTask = true
+                )
                 restoreFloatingBall()
             } catch (e: Exception) {
                 e.printStackTrace()

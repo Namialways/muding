@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.R
 import com.pixpin.android.app.AppGraph
+import com.pixpin.android.core.model.PinImageAsset
+import com.pixpin.android.core.model.PinSourceType
 import com.pixpin.android.data.image.CachedImageRepository
 import com.pixpin.android.data.image.ImageExportRepository
 import com.pixpin.android.data.repository.AnnotationSessionRepository
@@ -42,10 +44,9 @@ import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.model.DrawingTool
 import com.pixpin.android.domain.usecase.AnnotationSession
 import com.pixpin.android.domain.usecase.CaptureResultAction
-import com.pixpin.android.domain.usecase.PinHistorySourceType
-import com.pixpin.android.presentation.crop.RegionCropActivity
+import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
+import com.pixpin.android.presentation.crop.ImageCropActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
-import com.pixpin.android.service.PinOverlayService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,6 +58,7 @@ class AnnotationEditorActivity : ComponentActivity() {
     private lateinit var cachedImageRepository: CachedImageRepository
     private lateinit var settingsRepository: AppSettingsRepository
     private lateinit var annotationSessionRepository: AnnotationSessionRepository
+    private lateinit var pinCreationCoordinator: PinCreationCoordinator
     private var sourceImageUriString: String? = null
     private var capturedBitmap: Bitmap? = null
     private var editorCanvasSize: Size = Size.Zero
@@ -69,6 +71,7 @@ class AnnotationEditorActivity : ComponentActivity() {
         cachedImageRepository = AppGraph.cachedImageRepository(this)
         settingsRepository = AppGraph.appSettingsRepository(this)
         annotationSessionRepository = AppGraph.annotationSessionRepository(this)
+        pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
 
         val sessionId = intent.getStringExtra(EXTRA_ANNOTATION_SESSION_ID)
         val restoredSession = sessionId?.let { annotationSessionRepository.get(it) }
@@ -224,12 +227,14 @@ class AnnotationEditorActivity : ComponentActivity() {
                     maxCount = projectRecordSettings.maxSessionCount,
                     maxDays = projectRecordSettings.retainDays
                 )
-                val intent = Intent(this@AnnotationEditorActivity, PinOverlayService::class.java).apply {
-                    putExtra(PinOverlayService.EXTRA_IMAGE_URI, uri.toString())
-                    putExtra(PinOverlayService.EXTRA_ANNOTATION_SESSION_ID, sessionId)
-                    putExtra(PinOverlayService.EXTRA_HISTORY_SOURCE, PinHistorySourceType.EDITOR_EXPORT.value)
-                }
-                startService(intent)
+                pinCreationCoordinator.startPinOverlay(
+                    this@AnnotationEditorActivity,
+                    pinCreationCoordinator.createImageRequest(
+                        sourceType = PinSourceType.EDITOR_EXPORT,
+                        imageAsset = PinImageAsset(uri = uri.toString()),
+                        annotationSessionId = sessionId
+                    )
+                )
                 Toast.makeText(this@AnnotationEditorActivity, R.string.image_pinned, Toast.LENGTH_SHORT).show()
                 closeScreenshotFlow()
             } catch (e: Exception) {
@@ -260,9 +265,9 @@ class AnnotationEditorActivity : ComponentActivity() {
                 }
                 current.recycle()
 
-                val intent = Intent(this@AnnotationEditorActivity, RegionCropActivity::class.java).apply {
-                    putExtra(RegionCropActivity.EXTRA_IMAGE_URI, uri.toString())
-                    putExtra(RegionCropActivity.EXTRA_FORCE_RESULT_ACTION, CaptureResultAction.OPEN_EDITOR.value)
+                val intent = Intent(this@AnnotationEditorActivity, ImageCropActivity::class.java).apply {
+                    putExtra(ImageCropActivity.EXTRA_IMAGE_URI, uri.toString())
+                    putExtra(ImageCropActivity.EXTRA_FORCE_RESULT_ACTION, CaptureResultAction.OPEN_EDITOR.value)
                 }
                 startActivity(intent)
                 finish()
