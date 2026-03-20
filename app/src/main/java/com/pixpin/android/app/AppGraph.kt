@@ -18,6 +18,10 @@ import com.pixpin.android.data.settings.SharedPreferencesAppSettingsRepository
 import com.pixpin.android.feature.capture.BitmapCropper
 import com.pixpin.android.feature.capture.CaptureFlowCoordinator
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
+import com.pixpin.android.feature.pin.source.ImageUriPinSourceAdapter
+import com.pixpin.android.feature.pin.source.PinSourceAssetResolver
+import com.pixpin.android.feature.pin.source.TextBitmapRenderer
+import com.pixpin.android.feature.pin.source.TextPinSourceAdapter
 
 object AppGraph {
 
@@ -49,10 +53,24 @@ object AppGraph {
         return SystemImageExportRepository(context.applicationContext)
     }
 
+    fun pinSourceAssetResolver(context: Context): PinSourceAssetResolver {
+        val appContext = context.applicationContext
+        return PinSourceAssetResolver(
+            adapters = listOf(
+                ImageUriPinSourceAdapter(appContext),
+                TextPinSourceAdapter(
+                    cachedImageRepository = cachedImageRepository(appContext),
+                    textBitmapRenderer = TextBitmapRenderer(appContext)
+                )
+            )
+        )
+    }
+
     fun pinCreationCoordinator(context: Context): PinCreationCoordinator {
         return PinCreationCoordinator(
             settingsRepository = appSettingsRepository(context),
-            cachedImageRepository = cachedImageRepository(context)
+            cachedImageRepository = cachedImageRepository(context),
+            pinSourceAssetResolver = pinSourceAssetResolver(context)
         )
     }
 

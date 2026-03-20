@@ -45,9 +45,12 @@ class CaptureFlowCoordinator(
                 subDir = request.cacheSubDir,
                 prefix = request.cachePrefix
             )
-            val pinRequest = pinCreationCoordinator.createImageRequest(
-                sourceType = request.sourceType,
-                imageAsset = imageAsset
+            val pinRequest = pinCreationCoordinator.createRequest(
+                source = pinCreationCoordinator.createImageSource(
+                    sourceType = request.sourceType,
+                    uri = imageAsset.uri
+                ),
+                preferredImageAsset = imageAsset
             )
             return PreparedCaptureResult(
                 resolvedAction = pinCreationCoordinator.resolveResultAction(request.forcedResultAction),

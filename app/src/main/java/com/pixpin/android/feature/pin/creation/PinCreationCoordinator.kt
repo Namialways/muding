@@ -11,6 +11,7 @@ import com.pixpin.android.data.image.CachedImageRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.PinHistorySourceType
+import com.pixpin.android.feature.pin.source.PinSourceAssetResolver
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.service.PinOverlayService
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +19,8 @@ import kotlinx.coroutines.withContext
 
 class PinCreationCoordinator(
     private val settingsRepository: AppSettingsRepository,
-    private val cachedImageRepository: CachedImageRepository
+    private val cachedImageRepository: CachedImageRepository,
+    private val pinSourceAssetResolver: PinSourceAssetResolver
 ) {
 
     suspend fun persistBitmapAsset(bitmap: Bitmap, subDir: String, prefix: String): PinImageAsset {
@@ -38,18 +40,70 @@ class PinCreationCoordinator(
         return forcedResultAction ?: settingsRepository.getCaptureResultAction()
     }
 
+    suspend fun resolveImageAsset(source: PinSource): PinImageAsset {
+        return pinSourceAssetResolver.resolve(source)
+    }
+
+    suspend fun createRequest(
+        source: PinSource,
+        annotationSessionId: String? = null,
+        preferredImageAsset: PinImageAsset? = null
+    ): ImagePinCreationRequest {
+        val imageAsset = preferredImageAsset ?: resolveImageAsset(source)
+        return ImagePinCreationRequest(
+            source = source,
+            imageAsset = imageAsset,
+            annotationSessionId = annotationSessionId
+        )
+    }
+
+    fun createImageSource(sourceType: PinSourceType, uri: String): PinSource {
+        return PinSource(
+            type = sourceType,
+            payload = PinSourcePayload.ImageUri(uri)
+        )
+    }
+
     fun createImageRequest(
         sourceType: PinSourceType,
         imageAsset: PinImageAsset,
         annotationSessionId: String? = null
     ): ImagePinCreationRequest {
         return ImagePinCreationRequest(
-            source = PinSource(
-                type = sourceType,
-                payload = PinSourcePayload.ImageUri(imageAsset.uri)
-            ),
+            source = createImageSource(sourceType, imageAsset.uri),
             imageAsset = imageAsset,
             annotationSessionId = annotationSessionId
+        )
+    }
+
+    fun createTextSource(sourceType: PinSourceType, text: String): PinSource {
+        require(sourceType == PinSourceType.CLIPBOARD_TEXT || sourceType == PinSourceType.OCR_TEXT) {
+            "Text sources are only supported for clipboard or OCR inputs."
+        }
+        return PinSource(
+            type = sourceType,
+            payload = PinSourcePayload.Text(text)
+        )
+    }
+
+    suspend fun launchFromSource(
+        context: Context,
+        source: PinSource,
+        annotationSessionId: String? = null,
+        forcedResultAction: CaptureResultAction? = null,
+        launchEditorInNewTask: Boolean = false,
+        preferredImageAsset: PinImageAsset? = null
+    ) {
+        val request = createRequest(
+            source = source,
+            annotationSessionId = annotationSessionId,
+            preferredImageAsset = preferredImageAsset
+        )
+        launchFromImageRequest(
+            context = context,
+            request = request,
+            forcedResultAction = forcedResultAction,
+            launchEditorInNewTask = launchEditorInNewTask
         )
     }
 

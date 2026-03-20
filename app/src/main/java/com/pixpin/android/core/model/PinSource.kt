@@ -11,7 +11,7 @@ enum class PinSourceType {
 
 sealed interface PinSourcePayload {
     data class ImageUri(val uri: String) : PinSourcePayload
-    data class ClipboardText(val text: String) : PinSourcePayload
+    data class Text(val text: String) : PinSourcePayload
 }
 
 data class PinSource(

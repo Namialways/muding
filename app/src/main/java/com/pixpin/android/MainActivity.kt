@@ -62,8 +62,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.app.AppGraph
-import com.pixpin.android.core.model.PinImageAsset
 import com.pixpin.android.core.model.PinSourceType
 import com.pixpin.android.data.repository.AnnotationSessionRepository
 import com.pixpin.android.data.repository.PinHistoryRepository
@@ -193,14 +193,16 @@ class MainActivity : ComponentActivity() {
                             pinHistoryRepository.delete(record.id)
                         },
                         onRestoreHistory = { record ->
-                            pinCreationCoordinator.startPinOverlay(
-                                this,
-                                pinCreationCoordinator.createImageRequest(
-                                    sourceType = PinSourceType.HISTORY_RESTORE,
-                                    imageAsset = PinImageAsset(uri = record.imageUri),
+                            lifecycleScope.launch {
+                                val request = pinCreationCoordinator.createRequest(
+                                    source = pinCreationCoordinator.createImageSource(
+                                        sourceType = PinSourceType.HISTORY_RESTORE,
+                                        uri = record.imageUri
+                                    ),
                                     annotationSessionId = record.annotationSessionId
                                 )
-                            )
+                                pinCreationCoordinator.startPinOverlay(this@MainActivity, request)
+                            }
                         },
                         onEditHistory = { record ->
                             pinCreationCoordinator.startEditor(
