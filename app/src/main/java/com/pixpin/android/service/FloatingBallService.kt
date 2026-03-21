@@ -63,6 +63,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
+import androidx.core.animation.doOnEnd
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -520,6 +521,17 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         mainHandler.post {
             setFloatingMenuExpanded(false)
             floatingView?.visibility = View.VISIBLE
+            floatingBallParams?.let { params ->
+                params.x = floatingBallX.intValue
+                params.y = floatingBallY.intValue
+                try {
+                    floatingView?.let { view ->
+                        windowManager.updateViewLayout(view, params)
+                    }
+                } catch (_: Exception) {
+                }
+                scheduleSnapToEdge(params)
+            }
         }
     }
 
@@ -553,6 +565,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun setFloatingMenuExpanded(expanded: Boolean) {
         if (floatingMenuExpanded.value == expanded) {
             return
+        }
+        if (expanded) {
+            cancelSnap()
         }
         floatingMenuExpanded.value = expanded
         if (expanded) {
@@ -605,13 +620,25 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
 
+        val appearance = loadFloatingBallAppearance()
+        val marginPx = (12 * resources.displayMetrics.density).roundToInt()
+        menuParams.x = floatingBallX.intValue + appearance.dragBoundPx + marginPx
+        menuParams.y = floatingBallY.intValue
+        menuView.alpha = 0f
+
         try {
             windowManager.addView(dismissView, dismissParams)
             floatingMenuDismissView = dismissView
             windowManager.addView(menuView, menuParams)
             floatingMenuView = menuView
             floatingMenuParams = menuParams
-            menuView.post { updateFloatingMenuPosition() }
+            menuView.post {
+                updateFloatingMenuPosition()
+                menuView.animate()
+                    .alpha(1f)
+                    .setDuration(120)
+                    .start()
+            }
         } catch (_: Exception) {
             dismissFloatingMenuOverlay()
             floatingMenuExpanded.value = false
@@ -656,8 +683,30 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val screenHeight = size.y
         val menuWidth = menuView.width.takeIf { it > 0 } ?: menuView.measuredWidth
         val menuHeight = menuView.height.takeIf { it > 0 } ?: menuView.measuredHeight
+        val targetPosition = computeFloatingMenuPosition(
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            menuWidth = menuWidth,
+            menuHeight = menuHeight,
+            ballSizePx = appearance.dragBoundPx
+        )
+
+        menuParams.x = targetPosition.x
+        menuParams.y = targetPosition.y
+        try {
+            windowManager.updateViewLayout(menuView, menuParams)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun computeFloatingMenuPosition(
+        screenWidth: Int,
+        screenHeight: Int,
+        menuWidth: Int,
+        menuHeight: Int,
+        ballSizePx: Int
+    ): Point {
         val marginPx = (12 * resources.displayMetrics.density).roundToInt()
-        val ballSizePx = appearance.dragBoundPx
 
         val preferredRightX = floatingBallX.intValue + ballSizePx + marginPx
         val preferredLeftX = floatingBallX.intValue - menuWidth - marginPx
@@ -678,13 +727,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 (screenHeight - menuHeight - marginPx).coerceAtLeast(marginPx)
             )
         }
-
-        menuParams.x = targetX
-        menuParams.y = targetY
-        try {
-            windowManager.updateViewLayout(menuView, menuParams)
-        } catch (_: Exception) {
-        }
+        return Point(targetX, targetY)
     }
 
     private fun createOverlayLayoutParams(
@@ -743,6 +786,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun scheduleSnapToEdge(params: WindowManager.LayoutParams) {
+        if (floatingMenuExpanded.value) {
+            return
+        }
         cancelSnap()
         val runnable = Runnable { animateToEdge(params) }
         snapRunnable = runnable
@@ -757,6 +803,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun animateToEdge(params: WindowManager.LayoutParams) {
+        if (floatingMenuExpanded.value) {
+            return
+        }
         val display = windowManager.defaultDisplay
         val size = Point()
         display.getRealSize(size)
@@ -773,10 +822,14 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             interpolator = DecelerateInterpolator()
             addUpdateListener { animation ->
                 params.x = animation.animatedValue as Int
+                floatingBallX.intValue = params.x
                 try {
                     windowManager.updateViewLayout(floatingView, params)
                 } catch (_: Exception) {
                 }
+            }
+            doOnEnd {
+                snapAnimator = null
             }
         }
         snapAnimator?.start()
