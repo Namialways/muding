@@ -15,28 +15,34 @@ enum class EraserMode {
 class AnnotationViewModel : ViewModel() {
 
     val currentTool = mutableStateOf(DrawingTool.PEN)
-    val currentColor = mutableStateOf(Color.Red)
-    val strokeWidth = mutableStateOf(5f)
+    val currentColor = mutableStateOf(Color(0xFFF44336))
+    val strokeWidth = mutableStateOf(6f)
     val eraserSize = mutableStateOf(28f)
     val eraserMode = mutableStateOf(EraserMode.OBJECT)
     val textSize = mutableStateOf(28f)
     val textOutlineEnabled = mutableStateOf(false)
-    val selectedTextIndex = mutableStateOf<Int?>(null)
+    val shapeFilled = mutableStateOf(false)
+    val selectedPathIndex = mutableStateOf<Int?>(null)
 
     val paths = mutableStateListOf<DrawingPath>()
     private val undoPaths = mutableStateListOf<DrawingPath>()
 
     val availableColors = listOf(
-        Color.Red,
-        Color(0xFFFF6B00),
-        Color(0xFFFFD700),
-        Color(0xFF00FF00),
-        Color(0xFF00BFFF),
-        Color.Blue,
-        Color(0xFF9370DB),
-        Color.Black,
+        Color(0xFFF44336),
+        Color(0xFFFF7A00),
+        Color(0xFFFFC107),
+        Color(0xFF4CAF50),
+        Color(0xFF00BCD4),
+        Color(0xFF3F51B5),
+        Color(0xFF7E57C2),
+        Color(0xFF263238),
         Color.White
     )
+
+    val selectedTextIndex: Int?
+        get() = selectedPathIndex.value?.takeIf { paths.getOrNull(it) is DrawingPath.TextPath }
+
+    fun selectedPath(): DrawingPath? = selectedPathIndex.value?.let(paths::getOrNull)
 
     fun addPath(path: DrawingPath): Int {
         paths.add(path)
@@ -48,13 +54,16 @@ class AnnotationViewModel : ViewModel() {
         paths.clear()
         paths.addAll(newPaths)
         undoPaths.clear()
-        selectedTextIndex.value = null
+        selectedPathIndex.value = null
     }
 
     fun updatePath(index: Int, path: DrawingPath) {
         if (index !in paths.indices) return
         paths[index] = path
         undoPaths.clear()
+        if (selectedPathIndex.value == index) {
+            syncControlsFromPath(path)
+        }
     }
 
     fun replacePath(index: Int, replacements: List<DrawingPath>) {
@@ -62,33 +71,33 @@ class AnnotationViewModel : ViewModel() {
         paths.removeAt(index)
         paths.addAll(index, replacements)
         undoPaths.clear()
+        selectedPathIndex.value = null
     }
 
     fun removePath(index: Int) {
         if (index !in paths.indices) return
         paths.removeAt(index)
         undoPaths.clear()
-        if (selectedTextIndex.value == index) {
-            selectedTextIndex.value = null
-        } else if ((selectedTextIndex.value ?: -1) > index) {
-            selectedTextIndex.value = selectedTextIndex.value?.minus(1)
+        val selected = selectedPathIndex.value
+        selectedPathIndex.value = when {
+            selected == null -> null
+            selected == index -> null
+            selected > index -> selected - 1
+            else -> selected
         }
     }
 
     fun undo() {
         if (paths.isNotEmpty()) {
-            val lastPath = paths.removeLast()
-            undoPaths.add(lastPath)
-            if (selectedTextIndex.value == paths.size) {
-                selectedTextIndex.value = null
-            }
+            undoPaths.add(paths.removeLast())
+            selectedPathIndex.value = null
         }
     }
 
     fun redo() {
         if (undoPaths.isNotEmpty()) {
-            val path = undoPaths.removeLast()
-            paths.add(path)
+            paths.add(undoPaths.removeLast())
+            selectedPathIndex.value = null
         }
     }
 
@@ -97,16 +106,25 @@ class AnnotationViewModel : ViewModel() {
 
     fun selectTool(tool: DrawingTool) {
         currentTool.value = tool
+        val selected = selectedPath()
+        if (selected != null && toolFor(selected) != tool) {
+            selectedPathIndex.value = null
+        }
     }
 
     fun selectColor(color: Color) {
         currentColor.value = color
-        applyCurrentStyleToSelectedText()
+        applyCurrentStyleToSelectedPath()
+    }
+
+    fun selectStrokeWidth(width: Float) {
+        strokeWidth.value = width.coerceIn(2f, 32f)
+        applyCurrentStyleToSelectedPath()
     }
 
     fun selectTextSize(size: Float) {
         textSize.value = size.coerceIn(14f, 72f)
-        applyCurrentStyleToSelectedText()
+        applyCurrentStyleToSelectedPath()
     }
 
     fun selectEraserSize(size: Float) {
@@ -119,34 +137,105 @@ class AnnotationViewModel : ViewModel() {
 
     fun selectTextOutlineEnabled(enabled: Boolean) {
         textOutlineEnabled.value = enabled
-        applyCurrentStyleToSelectedText()
+        applyCurrentStyleToSelectedPath()
     }
 
-    fun selectTextPath(index: Int?, path: DrawingPath.TextPath?) {
-        selectedTextIndex.value = index
+    fun selectShapeFilled(enabled: Boolean) {
+        shapeFilled.value = enabled
+        applyCurrentStyleToSelectedPath()
+    }
+
+    fun selectPath(index: Int?, path: DrawingPath?) {
+        selectedPathIndex.value = index
         if (path != null) {
-            currentColor.value = path.color
-            textSize.value = path.fontSize
-            textOutlineEnabled.value = path.outlineEnabled
+            currentTool.value = toolFor(path)
+            syncControlsFromPath(path)
         }
     }
 
-    fun clearTextSelection() {
-        selectedTextIndex.value = null
+    fun clearSelection() {
+        selectedPathIndex.value = null
     }
 
-    private fun applyCurrentStyleToSelectedText() {
-        val index = selectedTextIndex.value ?: return
-        val path = paths.getOrNull(index) as? DrawingPath.TextPath ?: return
-        paths[index] = path.copy(
-            color = currentColor.value,
-            fontSize = textSize.value,
-            outlineEnabled = textOutlineEnabled.value
-        )
+    private fun syncControlsFromPath(path: DrawingPath) {
+        when (path) {
+            is DrawingPath.PenPath -> {
+                currentColor.value = path.color
+                strokeWidth.value = path.strokeWidth.coerceIn(2f, 32f)
+            }
+
+            is DrawingPath.ArrowPath -> {
+                currentColor.value = path.color
+                strokeWidth.value = path.strokeWidth.coerceIn(2f, 32f)
+            }
+
+            is DrawingPath.RectanglePath -> {
+                currentColor.value = path.color
+                strokeWidth.value = path.strokeWidth.coerceIn(2f, 32f)
+                shapeFilled.value = path.filled
+            }
+
+            is DrawingPath.CirclePath -> {
+                currentColor.value = path.color
+                strokeWidth.value = path.strokeWidth.coerceIn(2f, 32f)
+                shapeFilled.value = path.filled
+            }
+
+            is DrawingPath.TextPath -> {
+                currentColor.value = path.color
+                textSize.value = path.fontSize.coerceIn(14f, 72f)
+                textOutlineEnabled.value = path.outlineEnabled
+            }
+        }
+    }
+
+    private fun applyCurrentStyleToSelectedPath() {
+        val index = selectedPathIndex.value ?: return
+        val path = paths.getOrNull(index) ?: return
+        paths[index] = when (path) {
+            is DrawingPath.PenPath -> path.copy(
+                color = currentColor.value,
+                strokeWidth = strokeWidth.value
+            )
+
+            is DrawingPath.ArrowPath -> path.copy(
+                color = currentColor.value,
+                strokeWidth = strokeWidth.value
+            )
+
+            is DrawingPath.RectanglePath -> path.copy(
+                color = currentColor.value,
+                strokeWidth = strokeWidth.value,
+                filled = shapeFilled.value
+            )
+
+            is DrawingPath.CirclePath -> path.copy(
+                color = currentColor.value,
+                strokeWidth = strokeWidth.value,
+                filled = shapeFilled.value
+            )
+
+            is DrawingPath.TextPath -> path.copy(
+                color = currentColor.value,
+                fontSize = textSize.value,
+                outlineEnabled = textOutlineEnabled.value
+            )
+        }
+    }
+
+    private fun toolFor(path: DrawingPath): DrawingTool {
+        return when (path) {
+            is DrawingPath.PenPath -> DrawingTool.PEN
+            is DrawingPath.ArrowPath -> DrawingTool.ARROW
+            is DrawingPath.RectanglePath -> DrawingTool.RECTANGLE
+            is DrawingPath.CirclePath -> DrawingTool.CIRCLE
+            is DrawingPath.TextPath -> DrawingTool.TEXT
+        }
     }
 
     fun clear() {
         paths.clear()
         undoPaths.clear()
+        selectedPathIndex.value = null
     }
 }
