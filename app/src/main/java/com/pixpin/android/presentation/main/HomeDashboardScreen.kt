@@ -107,7 +107,7 @@ fun HomeDashboardScreen(
                             }
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    text = "PixPin 工作台",
+                                    text = "幕钉工作台",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

@@ -25,14 +25,14 @@ class ImageSaver(private val context: Context) {
      * 保存图片到相册
      */
     suspend fun saveToGallery(bitmap: Bitmap): Uri? = withContext(Dispatchers.IO) {
-        val filename = "PixPin_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.png"
+        val filename = "幕钉_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.png"
 
         return@withContext if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Android 10+ 使用 MediaStore
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/PixPin")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/幕钉")
             }
 
             val resolver = context.contentResolver
@@ -48,7 +48,7 @@ class ImageSaver(private val context: Context) {
             // Android 9 及以下使用传统方式
             @Suppress("DEPRECATION")
             val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            val pixpinDir = File(imagesDir, "PixPin")
+            val pixpinDir = File(imagesDir, "幕钉")
             if (!pixpinDir.exists()) {
                 pixpinDir.mkdirs()
             }

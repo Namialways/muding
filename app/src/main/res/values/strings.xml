@@ -1,18 +1,18 @@
 <resources>
-    <string name="app_name">PixPin</string>
+    <string name="app_name">幕钉</string>
     
     <!-- Permission related -->
     <string name="permission_overlay_title">需要悬浮窗权限</string>
-    <string name="permission_overlay_message">PixPin 需要悬浮窗权限来显示快捷截图按钮</string>
+    <string name="permission_overlay_message">幕钉需要悬浮窗权限来显示快捷截图按钮</string>
     <string name="permission_screenshot_title">需要截图权限</string>
-    <string name="permission_screenshot_message">允许 PixPin 捕获屏幕内容</string>
+    <string name="permission_screenshot_message">允许幕钉捕获屏幕内容</string>
     <string name="permission_storage_title">需要存储权限</string>
-    <string name="permission_storage_message">PixPin 需要存储权限来保存截图</string>
+    <string name="permission_storage_message">幕钉需要存储权限来保存截图</string>
     <string name="btn_grant_permission">授予权限</string>
     <string name="btn_settings">去设置</string>
     
     <!-- Floating ball -->
-    <string name="floating_ball_notification_title">PixPin 正在运行</string>
+    <string name="floating_ball_notification_title">幕钉正在运行</string>
     <string name="floating_ball_notification_message">点击悬浮球快速截图</string>
     <string name="action_screenshot">截图</string>
     <string name="action_settings">设置</string>

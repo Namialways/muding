@@ -764,10 +764,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "PixPin Service",
+                "幕钉服务",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "PixPin floating capture service"
+                description = "幕钉悬浮截图服务"
             }
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager.createNotificationChannel(channel)
