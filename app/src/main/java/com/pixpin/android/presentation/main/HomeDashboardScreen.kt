@@ -4,14 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -38,6 +38,7 @@ import com.pixpin.android.domain.usecase.PinScaleMode
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeDashboardScreen(
     modifier: Modifier = Modifier,
@@ -75,14 +76,14 @@ fun HomeDashboardScreen(
                         .background(
                             brush = Brush.linearGradient(
                                 listOf(
-                                    colors.start.copy(alpha = 0.18f),
-                                    colors.end.copy(alpha = 0.08f)
+                                    colors.start.copy(alpha = 0.20f),
+                                    colors.end.copy(alpha = 0.10f)
                                 )
                             )
                         )
                         .padding(20.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -106,14 +107,23 @@ fun HomeDashboardScreen(
                             }
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    text = if (permissionGranted) "PixPin 已就绪" else "还差一步授权",
+                                    text = "PixPin 工作台",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = if (permissionGranted) {
+                                        "悬浮工作流已就绪"
+                                    } else {
+                                        "先完成悬浮窗授权"
+                                    },
                                     style = MaterialTheme.typography.headlineSmall
                                 )
                                 Text(
                                     text = if (permissionGranted) {
-                                        "悬浮球单击截图，长按展开创建菜单。"
+                                        "悬浮球单击截图，长按展开创建菜单。主页只保留高频动作和关键状态。"
                                     } else {
-                                        "授予悬浮窗权限后，截图和贴图入口才会完整可用。"
+                                        "授权后截图、贴图、OCR 和翻译入口才会完整可用。"
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -121,9 +131,13 @@ fun HomeDashboardScreen(
                             }
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             SummaryPill(
-                                text = if (permissionGranted) "悬浮权限已开启" else "等待悬浮权限"
+                                text = if (permissionGranted) "悬浮权限已开启" else "等待悬浮权限",
+                                emphasized = true
                             )
                             SummaryPill(
                                 text = if (selectedAction == CaptureResultAction.PIN_DIRECTLY) {
@@ -132,21 +146,11 @@ fun HomeDashboardScreen(
                                     "截图后进入编辑"
                                 }
                             )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             SummaryPill(
                                 text = if (selectedScaleMode == PinScaleMode.LOCK_ASPECT) {
                                     "默认等比例缩放"
                                 } else {
                                     "默认自由缩放"
-                                }
-                            )
-                            SummaryPill(
-                                text = if (defaultPinShadowEnabled) {
-                                    "贴图默认带阴影"
-                                } else {
-                                    "贴图默认无阴影"
                                 }
                             )
                         }
@@ -157,7 +161,7 @@ fun HomeDashboardScreen(
                                     onClick = onRequestPermission,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("授予权限")
+                                    Text("去授权")
                                 }
                             } else {
                                 Button(
@@ -182,7 +186,7 @@ fun HomeDashboardScreen(
         item {
             SectionHeader(
                 title = "快速创建",
-                description = "把常用入口集中在主页，减少回到设置里找按钮。"
+                description = "保留在主页的都是高频入口，复杂配置放到设置页。"
             )
         }
 
@@ -193,14 +197,14 @@ fun HomeDashboardScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.PhotoLibrary,
                         title = "相册贴图",
-                        description = "选图后直接生成贴图",
+                        description = "从相册选图后直接生成贴图。",
                         onClick = onOpenGalleryPin
                     )
                     HomeActionTile(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.TextFields,
                         title = "相册 OCR",
-                        description = "选图识别后进入结果页",
+                        description = "从相册选图后识别文字并进入结果页。",
                         onClick = onOpenGalleryOcr
                     )
                 }
@@ -209,14 +213,14 @@ fun HomeDashboardScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.TextFields,
                         title = "文字贴图",
-                        description = "直接从剪贴板生成文字贴图",
+                        description = "直接把剪贴板文本渲染成贴图。",
                         onClick = onOpenClipboardTextPin
                     )
                     HomeActionTile(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Translate,
                         title = "翻译设置",
-                        description = "本地模型和云翻译密钥",
+                        description = "管理本地模型和百度、有道云翻译密钥。",
                         onClick = onOpenTranslationSettings
                     )
                 }
@@ -224,19 +228,61 @@ fun HomeDashboardScreen(
         }
 
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            SectionHeader(
+                title = "当前默认体验",
+                description = "这里展示当前常用配置摘要，具体细项已经拆到设置页。"
+            )
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricsCard(
+                    modifier = Modifier.weight(1f),
+                    title = "缩放模型",
+                    value = if (selectedScaleMode == PinScaleMode.LOCK_ASPECT) "等比例" else "自由",
+                    hint = "贴图运行时默认行为"
+                )
+                MetricsCard(
+                    modifier = Modifier.weight(1f),
+                    title = "圆角",
+                    value = "${defaultPinCornerRadiusDp.roundToInt()}dp",
+                    hint = if (defaultPinCornerRadiusDp <= 0.5f) "当前接近直角" else "当前使用圆角"
+                )
+            }
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricsCard(
+                    modifier = Modifier.weight(1f),
+                    title = "悬浮球",
+                    value = "${floatingBallSizeDp}dp",
+                    hint = floatingBallThemeLabel(floatingBallTheme)
+                )
+                MetricsCard(
+                    modifier = Modifier.weight(1f),
+                    title = "贴图阴影",
+                    value = if (defaultPinShadowEnabled) "开启" else "关闭",
+                    hint = "新贴图的默认外观"
+                )
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)
+                )
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("当前贴图风格摘要", style = MaterialTheme.typography.titleMedium)
+                    Text("为什么主页更简单了？", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = "圆角 ${defaultPinCornerRadiusDp.roundToInt()}dp  ·  悬浮球 ${floatingBallSizeDp}dp",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = "真正的细项配置已拆到设置页里，主页只保留高频动作和状态摘要。",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "主页现在只负责状态摘要和快速创建，低频配置被拆进设置中心，记录查看被拆进记录中心。这样后续继续加 OCR、翻译或新的贴图来源时，首页不会再长成一个大杂烩页面。",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

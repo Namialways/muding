@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Card
@@ -27,9 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,13 +46,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
-import kotlin.math.roundToInt
 
 @Composable
 fun SectionHeader(
@@ -79,7 +80,7 @@ fun HomeActionTile(
     Card(
         modifier = modifier.clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
         )
     ) {
         Column(
@@ -89,7 +90,7 @@ fun HomeActionTile(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Surface(
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(42.dp),
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
@@ -111,6 +112,7 @@ fun HomeActionTile(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsCategoryCard(
     icon: ImageVector,
@@ -121,18 +123,21 @@ fun SettingsCategoryCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
+        )
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Surface(
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(44.dp),
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.secondaryContainer
                 ) {
@@ -144,7 +149,10 @@ fun SettingsCategoryCard(
                         )
                     }
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(section.title, style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = section.description,
@@ -152,13 +160,22 @@ fun SettingsCategoryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-            summary.forEach { line ->
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                Icon(
+                    imageVector = Icons.Default.ArrowOutward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                summary.forEachIndexed { index, line ->
+                    SummaryPill(
+                        text = line,
+                        emphasized = index == 0
+                    )
+                }
             }
         }
     }
@@ -171,7 +188,12 @@ fun MetricsCard(
     value: String,
     hint: String
 ) {
-    Card(modifier = modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
+        )
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -193,16 +215,56 @@ fun MetricsCard(
 
 @Composable
 fun SummaryPill(
-    text: String
+    text: String,
+    emphasized: Boolean = false
 ) {
+    val containerColor = if (emphasized) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (emphasized) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Surface(
         shape = CircleShape,
-        tonalElevation = 2.dp
+        color = containerColor
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelMedium
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = contentColor
+        )
+    }
+}
+
+@Composable
+fun SelectablePill(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = CircleShape,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        },
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
         )
     }
 }
@@ -235,13 +297,15 @@ fun EmptyStateCard(
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PinHistoryRecordCard(
     item: PinHistoryRecord,
@@ -249,39 +313,57 @@ fun PinHistoryRecordCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    val canResumeEditing = !item.annotationSessionId.isNullOrBlank()
+    val fileName = item.imageUri.substringAfterLast('/').ifBlank { item.imageUri }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(historySourceLabel(item.sourceType), style = MaterialTheme.typography.titleSmall)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(fileName, style = MaterialTheme.typography.titleSmall)
                     Text(
                         text = formatTimestamp(item.createdAt),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = if (item.annotationSessionId.isNullOrBlank()) "图片历史" else "可继续编辑",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (item.annotationSessionId.isNullOrBlank()) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    }
+                SummaryPill(
+                    text = if (canResumeEditing) "可继续编辑" else "仅图片记录",
+                    emphasized = canResumeEditing
+                )
+            }
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SummaryPill(text = historySourceLabel(item.sourceType), emphasized = true)
+                SummaryPill(
+                    text = if (canResumeEditing) "含工程信息" else "无工程信息"
                 )
             }
 
             Text(
                 text = item.imageUri,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
             Row(
@@ -289,10 +371,10 @@ fun PinHistoryRecordCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(onClick = onRestore, modifier = Modifier.weight(1f)) {
-                    Text("重新贴图")
+                    Text("恢复贴图")
                 }
                 OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                    Text("继续编辑")
+                    Text(if (canResumeEditing) "继续编辑" else "进入编辑")
                 }
                 OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
                     Text("删除")
@@ -338,7 +420,7 @@ fun FloatingBallAppearancePreview(
             }
         }
         Text(
-            text = "预览仅展示悬浮球外观，设置后会立即同步到当前悬浮球。",
+            text = "这里只做外观预览。修改后会立即同步到当前悬浮球。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -393,11 +475,11 @@ fun NumberSettingRow(
                     focusManager.clearFocus()
                 }
             ) {
-                Text("设置")
+                Text("应用")
             }
         }
         Text(
-            "支持直接输入具体数字",
+            "支持直接输入具体数字。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -430,7 +512,7 @@ fun floatingBallThemeLabel(theme: FloatingBallTheme): String {
     }
 }
 
-private fun historySourceLabel(sourceType: PinHistorySourceType): String {
+fun historySourceLabel(sourceType: PinHistorySourceType): String {
     return when (sourceType) {
         PinHistorySourceType.SCREENSHOT -> "截图直贴"
         PinHistorySourceType.GALLERY_IMAGE -> "相册贴图"
