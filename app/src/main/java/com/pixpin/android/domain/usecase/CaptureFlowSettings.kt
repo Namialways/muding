@@ -1,6 +1,7 @@
 ﻿package com.pixpin.android.domain.usecase
 
 import android.content.Context
+import com.pixpin.android.data.settings.CloudTranslationProvider
 
 enum class CaptureResultAction(val value: String) {
     PIN_DIRECTLY("pin_directly"),
@@ -134,6 +135,64 @@ class CaptureFlowSettings(context: Context) {
         prefs.edit().putString(KEY_FLOATING_BALL_THEME, theme.value).apply()
     }
 
+    fun getLocalTranslationTargetLanguageTag(): String {
+        return prefs.getString(KEY_LOCAL_TRANSLATION_TARGET_LANGUAGE, "en") ?: "en"
+    }
+
+    fun setLocalTranslationTargetLanguageTag(languageTag: String) {
+        prefs.edit().putString(KEY_LOCAL_TRANSLATION_TARGET_LANGUAGE, languageTag.ifBlank { "en" }).apply()
+    }
+
+    fun isLocalTranslationDownloadOnWifiOnly(): Boolean {
+        return prefs.getBoolean(KEY_LOCAL_TRANSLATION_WIFI_ONLY, true)
+    }
+
+    fun setLocalTranslationDownloadOnWifiOnly(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_LOCAL_TRANSLATION_WIFI_ONLY, enabled).apply()
+    }
+
+    fun getCloudTranslationProvider(): CloudTranslationProvider {
+        return when (prefs.getString(KEY_CLOUD_TRANSLATION_PROVIDER, CloudTranslationProvider.NONE.name)) {
+            CloudTranslationProvider.BAIDU.name -> CloudTranslationProvider.BAIDU
+            CloudTranslationProvider.YOUDAO.name -> CloudTranslationProvider.YOUDAO
+            else -> CloudTranslationProvider.NONE
+        }
+    }
+
+    fun setCloudTranslationProvider(provider: CloudTranslationProvider) {
+        prefs.edit().putString(KEY_CLOUD_TRANSLATION_PROVIDER, provider.name).apply()
+    }
+
+    fun getBaiduTranslationAppId(): String {
+        return prefs.getString(KEY_BAIDU_TRANSLATION_APP_ID, "") ?: ""
+    }
+
+    fun getBaiduTranslationSecretKey(): String {
+        return prefs.getString(KEY_BAIDU_TRANSLATION_SECRET_KEY, "") ?: ""
+    }
+
+    fun setBaiduTranslationCredentials(appId: String, secretKey: String) {
+        prefs.edit()
+            .putString(KEY_BAIDU_TRANSLATION_APP_ID, appId.trim())
+            .putString(KEY_BAIDU_TRANSLATION_SECRET_KEY, secretKey.trim())
+            .apply()
+    }
+
+    fun getYoudaoTranslationAppKey(): String {
+        return prefs.getString(KEY_YOUDAO_TRANSLATION_APP_KEY, "") ?: ""
+    }
+
+    fun getYoudaoTranslationAppSecret(): String {
+        return prefs.getString(KEY_YOUDAO_TRANSLATION_APP_SECRET, "") ?: ""
+    }
+
+    fun setYoudaoTranslationCredentials(appKey: String, appSecret: String) {
+        prefs.edit()
+            .putString(KEY_YOUDAO_TRANSLATION_APP_KEY, appKey.trim())
+            .putString(KEY_YOUDAO_TRANSLATION_APP_SECRET, appSecret.trim())
+            .apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "pixpin_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"
@@ -148,5 +207,12 @@ class CaptureFlowSettings(context: Context) {
         private const val KEY_FLOATING_BALL_SIZE_DP = "floating_ball_size_dp"
         private const val KEY_FLOATING_BALL_OPACITY = "floating_ball_opacity"
         private const val KEY_FLOATING_BALL_THEME = "floating_ball_theme"
+        private const val KEY_LOCAL_TRANSLATION_TARGET_LANGUAGE = "local_translation_target_language"
+        private const val KEY_LOCAL_TRANSLATION_WIFI_ONLY = "local_translation_wifi_only"
+        private const val KEY_CLOUD_TRANSLATION_PROVIDER = "cloud_translation_provider"
+        private const val KEY_BAIDU_TRANSLATION_APP_ID = "baidu_translation_app_id"
+        private const val KEY_BAIDU_TRANSLATION_SECRET_KEY = "baidu_translation_secret_key"
+        private const val KEY_YOUDAO_TRANSLATION_APP_KEY = "youdao_translation_app_key"
+        private const val KEY_YOUDAO_TRANSLATION_APP_SECRET = "youdao_translation_app_secret"
     }
 }

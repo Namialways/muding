@@ -99,4 +99,36 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
     override fun setPinHistoryRetainDays(days: Int) {
         settings.setPinHistoryRetainDays(days)
     }
+
+    override fun getTranslationSettings(): TranslationSettings {
+        return TranslationSettings(
+            localTargetLanguageTag = settings.getLocalTranslationTargetLanguageTag(),
+            localDownloadOnWifiOnly = settings.isLocalTranslationDownloadOnWifiOnly(),
+            cloudProvider = settings.getCloudTranslationProvider(),
+            baiduAppId = settings.getBaiduTranslationAppId(),
+            baiduSecretKey = settings.getBaiduTranslationSecretKey(),
+            youdaoAppKey = settings.getYoudaoTranslationAppKey(),
+            youdaoAppSecret = settings.getYoudaoTranslationAppSecret()
+        )
+    }
+
+    override fun setLocalTranslationTargetLanguageTag(languageTag: String) {
+        settings.setLocalTranslationTargetLanguageTag(languageTag)
+    }
+
+    override fun setLocalTranslationDownloadOnWifiOnly(enabled: Boolean) {
+        settings.setLocalTranslationDownloadOnWifiOnly(enabled)
+    }
+
+    override fun setCloudTranslationProvider(provider: CloudTranslationProvider) {
+        settings.setCloudTranslationProvider(provider)
+    }
+
+    override fun setBaiduTranslationCredentials(appId: String, secretKey: String) {
+        settings.setBaiduTranslationCredentials(appId, secretKey)
+    }
+
+    override fun setYoudaoTranslationCredentials(appKey: String, appSecret: String) {
+        settings.setYoudaoTranslationCredentials(appKey, appSecret)
+    }
 }

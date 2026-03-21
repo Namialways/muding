@@ -26,6 +26,22 @@ data class PinAppearanceSettings(
     val cornerRadiusDp: Float
 )
 
+enum class CloudTranslationProvider {
+    NONE,
+    BAIDU,
+    YOUDAO
+}
+
+data class TranslationSettings(
+    val localTargetLanguageTag: String,
+    val localDownloadOnWifiOnly: Boolean,
+    val cloudProvider: CloudTranslationProvider,
+    val baiduAppId: String,
+    val baiduSecretKey: String,
+    val youdaoAppKey: String,
+    val youdaoAppSecret: String
+)
+
 interface AppSettingsRepository {
     fun getCaptureResultAction(): CaptureResultAction
     fun setCaptureResultAction(action: CaptureResultAction)
@@ -52,4 +68,11 @@ interface AppSettingsRepository {
     fun setPinHistoryEnabled(enabled: Boolean)
     fun setMaxPinHistoryCount(count: Int)
     fun setPinHistoryRetainDays(days: Int)
+
+    fun getTranslationSettings(): TranslationSettings
+    fun setLocalTranslationTargetLanguageTag(languageTag: String)
+    fun setLocalTranslationDownloadOnWifiOnly(enabled: Boolean)
+    fun setCloudTranslationProvider(provider: CloudTranslationProvider)
+    fun setBaiduTranslationCredentials(appId: String, secretKey: String)
+    fun setYoudaoTranslationCredentials(appKey: String, appSecret: String)
 }
