@@ -38,6 +38,7 @@ import com.pixpin.android.core.model.PinSourceType
 import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
+import com.pixpin.android.feature.translation.TranslationErrorMessages
 import com.pixpin.android.feature.translation.TranslationEngine
 import com.pixpin.android.feature.translation.TranslationLanguageCatalog
 import com.pixpin.android.presentation.theme.PixPinTheme
@@ -148,7 +149,7 @@ class OcrResultActivity : ComponentActivity() {
             } catch (e: Exception) {
                 Toast.makeText(
                     this@OcrResultActivity,
-                    "翻译失败：${e.message}",
+                    TranslationErrorMessages.resolve(e),
                     Toast.LENGTH_SHORT
                 ).show()
             }

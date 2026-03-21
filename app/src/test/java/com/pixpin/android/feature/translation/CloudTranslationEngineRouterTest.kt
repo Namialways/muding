@@ -64,7 +64,9 @@ class CloudTranslationEngineRouterTest {
         }
 
         assertTrue(result.isFailure)
-        assertEquals("请先在设置中选择云翻译服务商", result.exceptionOrNull()?.message)
+        val exception = result.exceptionOrNull() as? TranslationException
+        assertEquals(TranslationFailureType.CLOUD_PROVIDER_NOT_SELECTED, exception?.type)
+        assertEquals("请先在翻译设置中选择云翻译服务商", TranslationErrorMessages.resolve(exception!!))
     }
 
     private class RecordingEngine(

@@ -17,13 +17,22 @@ class BaiduCloudTranslationEngine(
 ) : TranslationEngine {
 
     override suspend fun translate(text: String, targetLanguageTag: String): TranslationResult {
+        val providerLabel = "百度翻译"
         val settings = settingsRepository.getTranslationSettings()
-        require(settings.baiduAppId.isNotBlank() && settings.baiduSecretKey.isNotBlank()) {
-            "请先配置百度翻译 AppId 和 SecretKey"
+        if (settings.baiduAppId.isBlank() || settings.baiduSecretKey.isBlank()) {
+            throw TranslationException(
+                type = TranslationFailureType.MISSING_CREDENTIALS,
+                providerLabel = providerLabel
+            )
         }
         val targetLanguage = TranslationLanguageCatalog.findByAppTag(targetLanguageTag)
         val query = text.trim()
-        require(query.isNotBlank()) { "没有可翻译的文本" }
+        if (query.isBlank()) {
+            throw TranslationException(
+                type = TranslationFailureType.EMPTY_TEXT,
+                providerLabel = providerLabel
+            )
+        }
         val salt = UUID.randomUUID().toString().replace("-", "")
         val sign = TranslationSigning.buildBaiduSign(
             appId = settings.baiduAppId,
@@ -41,25 +50,38 @@ class BaiduCloudTranslationEngine(
             append("&sign=").append(urlEncode(sign))
         }
 
-        return withContext(Dispatchers.IO) {
-            val response = httpGet(requestUrl)
-            val json = JSONObject(response)
-            if (json.has("error_code")) {
-                throw IllegalStateException(json.optString("error_msg", "百度翻译失败"))
-            }
-            val resultArray = json.optJSONArray("trans_result") ?: JSONArray()
-            val translated = buildString {
-                for (index in 0 until resultArray.length()) {
-                    val item = resultArray.optJSONObject(index) ?: continue
-                    if (isNotEmpty()) append('\n')
-                    append(item.optString("dst"))
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = httpGet(requestUrl)
+                val json = JSONObject(response)
+                if (json.has("error_code")) {
+                    throw TranslationException(
+                        type = TranslationFailureType.SERVICE_REJECTED,
+                        providerLabel = providerLabel,
+                        message = "百度翻译服务返回错误，请检查密钥配置或稍后重试"
+                    )
                 }
-            }.trim()
-            require(translated.isNotBlank()) { "百度翻译返回了空结果" }
-            TranslationResult(
-                translatedText = translated,
-                providerLabel = "百度翻译"
-            )
+                val resultArray = json.optJSONArray("trans_result") ?: JSONArray()
+                val translated = buildString {
+                    for (index in 0 until resultArray.length()) {
+                        val item = resultArray.optJSONObject(index) ?: continue
+                        if (isNotEmpty()) append('\n')
+                        append(item.optString("dst"))
+                    }
+                }.trim()
+                if (translated.isBlank()) {
+                    throw TranslationException(
+                        type = TranslationFailureType.EMPTY_RESULT,
+                        providerLabel = providerLabel
+                    )
+                }
+                TranslationResult(
+                    translatedText = translated,
+                    providerLabel = providerLabel
+                )
+            }
+        } catch (e: Exception) {
+            throw TranslationErrorMessages.mapGenericThrowable(e, providerLabel = providerLabel)
         }
     }
 }
@@ -69,13 +91,22 @@ class YoudaoCloudTranslationEngine(
 ) : TranslationEngine {
 
     override suspend fun translate(text: String, targetLanguageTag: String): TranslationResult {
+        val providerLabel = "有道智云"
         val settings = settingsRepository.getTranslationSettings()
-        require(settings.youdaoAppKey.isNotBlank() && settings.youdaoAppSecret.isNotBlank()) {
-            "请先配置有道 AppKey 和 AppSecret"
+        if (settings.youdaoAppKey.isBlank() || settings.youdaoAppSecret.isBlank()) {
+            throw TranslationException(
+                type = TranslationFailureType.MISSING_CREDENTIALS,
+                providerLabel = providerLabel
+            )
         }
         val targetLanguage = TranslationLanguageCatalog.findByAppTag(targetLanguageTag)
         val query = text.trim()
-        require(query.isNotBlank()) { "没有可翻译的文本" }
+        if (query.isBlank()) {
+            throw TranslationException(
+                type = TranslationFailureType.EMPTY_TEXT,
+                providerLabel = providerLabel
+            )
+        }
         val salt = UUID.randomUUID().toString()
         val curtime = (System.currentTimeMillis() / 1000L).toString()
         val sign = TranslationSigning.buildYoudaoSign(
@@ -95,29 +126,40 @@ class YoudaoCloudTranslationEngine(
             append("&signType=v3")
             append("&curtime=").append(urlEncode(curtime))
         }
-        return withContext(Dispatchers.IO) {
-            val response = httpPostForm("https://openapi.youdao.com/api", body)
-            val json = JSONObject(response)
-            val errorCode = json.optString("errorCode", "0")
-            if (errorCode != "0") {
-                throw IllegalStateException(
-                    json.optString("msg", "有道翻译失败，错误码: $errorCode")
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = httpPostForm("https://openapi.youdao.com/api", body)
+                val json = JSONObject(response)
+                val errorCode = json.optString("errorCode", "0")
+                if (errorCode != "0") {
+                    throw TranslationException(
+                        type = TranslationFailureType.SERVICE_REJECTED,
+                        providerLabel = providerLabel,
+                        message = "有道翻译服务返回错误，请检查密钥配置或稍后重试"
+                    )
+                }
+                val translationArray = json.optJSONArray("translation") ?: JSONArray()
+                val translated = buildString {
+                    for (index in 0 until translationArray.length()) {
+                        val item = translationArray.optString(index)
+                        if (item.isBlank()) continue
+                        if (isNotEmpty()) append('\n')
+                        append(item)
+                    }
+                }.trim()
+                if (translated.isBlank()) {
+                    throw TranslationException(
+                        type = TranslationFailureType.EMPTY_RESULT,
+                        providerLabel = providerLabel
+                    )
+                }
+                TranslationResult(
+                    translatedText = translated,
+                    providerLabel = providerLabel
                 )
             }
-            val translationArray = json.optJSONArray("translation") ?: JSONArray()
-            val translated = buildString {
-                for (index in 0 until translationArray.length()) {
-                    val item = translationArray.optString(index)
-                    if (item.isBlank()) continue
-                    if (isNotEmpty()) append('\n')
-                    append(item)
-                }
-            }.trim()
-            require(translated.isNotBlank()) { "有道翻译返回了空结果" }
-            TranslationResult(
-                translatedText = translated,
-                providerLabel = "有道智云"
-            )
+        } catch (e: Exception) {
+            throw TranslationErrorMessages.mapGenericThrowable(e, providerLabel = providerLabel)
         }
     }
 }
@@ -132,7 +174,9 @@ class CloudTranslationEngineRouter(
         return when (settingsRepository.getTranslationSettings().cloudProvider) {
             CloudTranslationProvider.BAIDU -> baiduEngine.translate(text, targetLanguageTag)
             CloudTranslationProvider.YOUDAO -> youdaoEngine.translate(text, targetLanguageTag)
-            CloudTranslationProvider.NONE -> throw IllegalStateException("请先在设置中选择云翻译服务商")
+            CloudTranslationProvider.NONE -> throw TranslationException(
+                type = TranslationFailureType.CLOUD_PROVIDER_NOT_SELECTED
+            )
         }
     }
 }

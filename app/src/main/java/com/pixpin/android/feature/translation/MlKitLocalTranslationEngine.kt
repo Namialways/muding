@@ -13,19 +13,28 @@ class MlKitLocalTranslationEngine(
 
     override suspend fun translate(text: String, targetLanguageTag: String): TranslationResult {
         val normalizedText = text.trim()
-        require(normalizedText.isNotBlank()) {
-            "没有可翻译的文本"
+        if (normalizedText.isBlank()) {
+            throw TranslationException(
+                type = TranslationFailureType.EMPTY_TEXT,
+                providerLabel = "本地翻译"
+            )
         }
         val targetOption = TranslationLanguageCatalog.findByAppTag(targetLanguageTag)
         val targetMlKitTag = targetOption.mlKitTag
-            ?: throw IllegalArgumentException("当前目标语言不支持本地翻译")
+            ?: throw TranslationException(
+                type = TranslationFailureType.UNSUPPORTED_TARGET_LANGUAGE,
+                providerLabel = "本地翻译"
+            )
         val sourceMlKitTag = detectSourceLanguage(normalizedText)
         val sourceAppTag = TranslationLanguageCatalog.options
             .firstOrNull { it.mlKitTag == sourceMlKitTag }
             ?.appTag
             ?: "zh"
         if (!modelManager.isDownloaded(sourceAppTag) || !modelManager.isDownloaded(targetLanguageTag)) {
-            throw IllegalStateException("请先在翻译设置中下载源语言和目标语言模型")
+            throw TranslationException(
+                type = TranslationFailureType.LOCAL_MODEL_MISSING,
+                providerLabel = "本地翻译"
+            )
         }
         if (sourceMlKitTag == targetMlKitTag) {
             return TranslationResult(
@@ -47,6 +56,8 @@ class MlKitLocalTranslationEngine(
                 translatedText = translated,
                 providerLabel = "本地翻译"
             )
+        } catch (e: Exception) {
+            throw TranslationErrorMessages.mapGenericThrowable(e, providerLabel = "本地翻译")
         } finally {
             translator.close()
         }
