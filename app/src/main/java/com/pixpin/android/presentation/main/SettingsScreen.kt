@@ -164,11 +164,6 @@ private fun SettingsOverviewScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text("设置中心", style = MaterialTheme.typography.headlineSmall)
-                    Text(
-                        text = "把高频工作流留在主页，把记录查看留在记录页，把低频配置拆成分类入口。后面继续加新能力时，这里仍然能保持清晰。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -277,8 +272,7 @@ private fun CaptureAndFloatingSettingsSection(
     ) {
         item {
             SectionHeader(
-                title = "截图与悬浮球",
-                description = "这一组只处理截图后的默认去向、悬浮球权限和悬浮球外观。"
+                title = "截图与悬浮球"
             )
         }
 
@@ -312,9 +306,9 @@ private fun CaptureAndFloatingSettingsSection(
                     Text("权限与运行状态", style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = if (permissionGranted) {
-                            "悬浮窗权限已经开启。修改外观后可随时重启悬浮球刷新状态。"
+                            "悬浮窗权限已开启。"
                         } else {
-                            "请先完成悬浮窗授权，否则悬浮球和截图入口无法正常工作。"
+                            "请先完成悬浮窗授权。"
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -406,8 +400,7 @@ private fun PinAndInteractionSettingsSection(
     ) {
         item {
             SectionHeader(
-                title = "贴图与交互",
-                description = "运行时尽量只保留简单、稳定的交互；复杂操作统一交给编辑器。"
+                title = "贴图与交互"
             )
         }
 
@@ -427,11 +420,6 @@ private fun PinAndInteractionSettingsSection(
                         title = "自由缩放（宽高独立）",
                         selected = selectedScaleMode == PinScaleMode.FREE_SCALE,
                         onSelect = { onScaleModeChanged(PinScaleMode.FREE_SCALE) }
-                    )
-                    Text(
-                        text = "当前运行时已经尽量收敛成极简模型，复杂编辑继续交给编辑器，避免日常贴图被过多控制按钮打断。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -505,8 +493,7 @@ private fun OcrAndTranslationSettingsSection(
     ) {
         item {
             SectionHeader(
-                title = "OCR 与翻译",
-                description = "识别入口在主页和悬浮球里，高级配置统一放在这里管理。"
+                title = "OCR 与翻译"
             )
         }
 
@@ -516,12 +503,7 @@ private fun OcrAndTranslationSettingsSection(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("能力说明", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = "OCR 结果页已经统一承接文字贴图、复制、搜索和翻译。后续继续补 OCR 结果增强时，不需要再把按钮堆回主页。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("翻译设置", style = MaterialTheme.typography.titleMedium)
                     OutlinedButton(
                         onClick = onOpenTranslationSettings,
                         modifier = Modifier.fillMaxWidth()
@@ -564,8 +546,7 @@ private fun StorageAndRecordsSettingsSection(
     ) {
         item {
             SectionHeader(
-                title = "存储与记录",
-                description = "把保留策略和缓存维护都集中到这里，记录页只负责查看和操作记录本身。"
+                title = "存储与记录"
             )
         }
 
@@ -582,9 +563,9 @@ private fun StorageAndRecordsSettingsSection(
                             Text("启用贴图历史", style = MaterialTheme.typography.bodyMedium)
                             Text(
                                 text = if (pinHistoryEnabled) {
-                                    "新的贴图会继续写入历史记录。"
+                                    "已开启"
                                 } else {
-                                    "历史当前只读，不再写入新的记录。"
+                                    "已关闭"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -610,11 +591,6 @@ private fun StorageAndRecordsSettingsSection(
                         onDecrease = { onPinHistoryRetainDaysChanged((pinHistoryRetainDays - 1).coerceAtLeast(1)) },
                         onIncrease = { onPinHistoryRetainDaysChanged((pinHistoryRetainDays + 1).coerceAtMost(365)) },
                         onApply = onPinHistoryRetainDaysChanged
-                    )
-                    Text(
-                        text = "贴图历史目录：${snapshot.pinHistoryDirectory.ifBlank { "暂未生成" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedButton(
                         onClick = onClearPinHistory,
@@ -646,11 +622,6 @@ private fun StorageAndRecordsSettingsSection(
                         onIncrease = { onRetainDaysChanged((retainDays + 1).coerceAtMost(365)) },
                         onApply = onRetainDaysChanged
                     )
-                    Text(
-                        text = "工程目录：${snapshot.recordsDirectory.ifBlank { "暂未生成" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     OutlinedButton(
                         onClick = onClearAllRecords,
                         modifier = Modifier.fillMaxWidth()
@@ -667,11 +638,6 @@ private fun StorageAndRecordsSettingsSection(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("运行缓存清理", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = "这些文件都属于应用运行时缓存，可以主动删除，不会影响系统相册里的正式图片。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     Text("截图缓存：${formatFileSize(snapshot.runtimeStorage.screenshotsCacheBytes)}", style = MaterialTheme.typography.bodyMedium)
                     Text("贴图缓存：${formatFileSize(snapshot.runtimeStorage.pinnedCacheBytes)}", style = MaterialTheme.typography.bodyMedium)
                     Text("分享缓存：${formatFileSize(snapshot.runtimeStorage.shareCacheBytes)}", style = MaterialTheme.typography.bodyMedium)

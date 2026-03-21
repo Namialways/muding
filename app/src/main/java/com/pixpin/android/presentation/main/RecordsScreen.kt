@@ -60,8 +60,7 @@ fun RecordsScreen(
     ) {
         item {
             SectionHeader(
-                title = "记录中心",
-                description = "这里专门处理查看、恢复、继续编辑和删除记录，不再混入低频设置。"
+                title = "记录中心"
             )
         }
 
@@ -105,17 +104,7 @@ fun RecordsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("记录目录与维护", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = "贴图历史目录：${snapshot.pinHistoryDirectory.ifBlank { "暂未生成" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "工程记录目录：${snapshot.recordsDirectory.ifBlank { "暂未生成" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("记录操作", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(onClick = onRefreshRecords, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Refresh, contentDescription = null)
@@ -139,11 +128,6 @@ fun RecordsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("筛选记录", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = selectedFilter.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -164,7 +148,7 @@ fun RecordsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("贴图历史", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    text = "当前筛选下共有 ${filteredRecords.size} 条记录。",
+                    text = "${filteredRecords.size} 条",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

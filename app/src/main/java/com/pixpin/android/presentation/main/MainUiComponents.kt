@@ -57,15 +57,17 @@ import com.pixpin.android.presentation.theme.floatingBallThemeColors
 @Composable
 fun SectionHeader(
     title: String,
-    description: String
+    description: String? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = MaterialTheme.typography.headlineSmall)
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        if (!description.isNullOrBlank()) {
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -154,11 +156,13 @@ fun SettingsCategoryCard(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(section.title, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = section.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (section.description.isNotBlank()) {
+                        Text(
+                            text = section.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 Icon(
                     imageVector = Icons.Default.ArrowOutward,
@@ -419,12 +423,6 @@ fun FloatingBallAppearancePreview(
                 )
             }
         }
-        Text(
-            text = "这里只做外观预览。修改后会立即同步到当前悬浮球。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
@@ -478,11 +476,6 @@ fun NumberSettingRow(
                 Text("应用")
             }
         }
-        Text(
-            "支持直接输入具体数字。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 

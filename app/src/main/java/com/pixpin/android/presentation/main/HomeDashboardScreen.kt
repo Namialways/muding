@@ -121,9 +121,9 @@ fun HomeDashboardScreen(
                                 )
                                 Text(
                                     text = if (permissionGranted) {
-                                        "悬浮球单击截图，长按展开创建菜单。主页只保留高频动作和关键状态。"
+                                        "单击截图，长按展开菜单。"
                                     } else {
-                                        "授权后截图、贴图、OCR 和翻译入口才会完整可用。"
+                                        "授权后可使用悬浮球。"
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -185,8 +185,7 @@ fun HomeDashboardScreen(
 
         item {
             SectionHeader(
-                title = "快速创建",
-                description = "保留在主页的都是高频入口，复杂配置放到设置页。"
+                title = "快速创建"
             )
         }
 
@@ -229,8 +228,7 @@ fun HomeDashboardScreen(
 
         item {
             SectionHeader(
-                title = "当前默认体验",
-                description = "这里展示当前常用配置摘要，具体细项已经拆到设置页。"
+                title = "当前默认"
             )
         }
 
@@ -268,25 +266,5 @@ fun HomeDashboardScreen(
             }
         }
 
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("为什么主页更简单了？", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = "主页现在只负责状态摘要和快速创建，低频配置被拆进设置中心，记录查看被拆进记录中心。这样后续继续加 OCR、翻译或新的贴图来源时，首页不会再长成一个大杂烩页面。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
     }
 }

@@ -21,19 +21,19 @@ enum class SettingsSection(
 ) {
     CAPTURE_AND_FLOATING(
         title = "截图与悬浮球",
-        description = "管理截图后的默认动作、悬浮球外观和权限状态。"
+        description = ""
     ),
     PIN_AND_INTERACTION(
         title = "贴图与交互",
-        description = "管理贴图的缩放模型、阴影、圆角和默认交互体验。"
+        description = ""
     ),
     OCR_AND_TRANSLATION(
         title = "OCR 与翻译",
-        description = "管理 OCR 入口、本地模型和云翻译配置。"
+        description = ""
     ),
     STORAGE_AND_RECORDS(
         title = "存储与记录",
-        description = "管理历史保留策略、工程记录和运行时缓存。"
+        description = ""
     )
 }
 
@@ -41,10 +41,10 @@ enum class RecordsFilter(
     val title: String,
     val description: String
 ) {
-    ALL("全部", "查看所有贴图历史"),
-    IMAGES("图片", "截图、相册和恢复后的图片贴图"),
-    TEXT("文字", "剪贴板文字和 OCR 文字贴图"),
-    EDITABLE("可继续编辑", "包含编辑工程的贴图记录")
+    ALL("全部", ""),
+    IMAGES("图片", ""),
+    TEXT("文字", ""),
+    EDITABLE("可继续编辑", "")
 }
 
 data class MainScreenSnapshot(
