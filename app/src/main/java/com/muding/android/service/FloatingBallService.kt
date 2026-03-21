@@ -786,7 +786,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.floating_ball_notification_title))
             .setContentText(getString(R.string.floating_ball_notification_message))
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_muding)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
