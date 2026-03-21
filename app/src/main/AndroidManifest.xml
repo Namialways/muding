@@ -21,14 +21,14 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.PixPinAndroid"
+        android:theme="@style/Theme.MudingAndroid"
         tools:targetApi="31">
 
         <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.PixPinAndroid">
+            android:theme="@style/Theme.MudingAndroid">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -39,7 +39,7 @@
         <activity
             android:name=".presentation.editor.AnnotationEditorActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPinAndroid" />
+            android:theme="@style/Theme.MudingAndroid" />
 
         <activity
             android:name=".presentation.bridge.ForegroundLaunchBridgeActivity"
@@ -51,22 +51,22 @@
         <activity
             android:name=".presentation.crop.RegionCropActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPinAndroid" />
+            android:theme="@style/Theme.MudingAndroid" />
 
         <activity
             android:name=".presentation.crop.ImageCropActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPinAndroid" />
+            android:theme="@style/Theme.MudingAndroid" />
 
         <activity
             android:name=".presentation.source.GalleryPinActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPinAndroid" />
+            android:theme="@style/Theme.MudingAndroid" />
 
         <activity
             android:name=".presentation.source.GalleryOcrActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPinAndroid" />
+            android:theme="@style/Theme.MudingAndroid" />
 
         <activity
             android:name=".presentation.source.ClipboardTextPinActivity"
@@ -76,12 +76,12 @@
         <activity
             android:name=".presentation.ocr.OcrResultActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPinAndroid" />
+            android:theme="@style/Theme.MudingAndroid" />
 
         <activity
             android:name=".presentation.translation.TranslationSettingsActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPinAndroid" />
+            android:theme="@style/Theme.MudingAndroid" />
 
         <!-- Transparent activity used to request MediaProjection permission -->
         <activity

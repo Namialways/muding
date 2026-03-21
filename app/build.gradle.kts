@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.pixpin.android"
+    namespace = "com.muding.android"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.pixpin.android"
+        applicationId = "com.muding.android"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
