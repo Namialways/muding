@@ -1,5 +1,6 @@
 package com.pixpin.android.presentation.crop
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -13,18 +14,29 @@ import com.pixpin.android.app.AppGraph
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.feature.capture.CaptureDispatchRequest
 import com.pixpin.android.feature.capture.CaptureFlowCoordinator
+import com.pixpin.android.feature.ocr.OcrFlowCoordinator
+import com.pixpin.android.presentation.ocr.OcrResultActivity
 import com.pixpin.android.presentation.theme.PixPinTheme
+import com.pixpin.android.service.FloatingBallService
 import kotlinx.coroutines.launch
 
 class ImageCropActivity : ComponentActivity() {
 
     private lateinit var captureFlowCoordinator: CaptureFlowCoordinator
+    private lateinit var ocrFlowCoordinator: OcrFlowCoordinator
     private var sourceBitmap: Bitmap? = null
     private var forcedResultAction: CaptureResultAction? = null
+    private val flowMode: String
+        get() = intent.getStringExtra(EXTRA_FLOW_MODE) ?: FLOW_MODE_PIN
+    private val finishToBackground: Boolean
+        get() = intent.getBooleanExtra(EXTRA_FINISH_TO_BACKGROUND, false)
+    private val restoreFloatingBall: Boolean
+        get() = intent.getBooleanExtra(EXTRA_RESTORE_FLOATING_BALL, false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         captureFlowCoordinator = AppGraph.captureFlowCoordinator(this)
+        ocrFlowCoordinator = AppGraph.ocrFlowCoordinator(this)
         forcedResultAction = intent.getStringExtra(EXTRA_FORCE_RESULT_ACTION)?.let {
             CaptureResultAction.fromValue(it)
         }
@@ -54,9 +66,12 @@ class ImageCropActivity : ComponentActivity() {
             PixPinTheme {
                 CaptureCropOverlay(
                     bitmap = sourceBitmap!!,
-                    onCancel = { finish() },
+                    onCancel = { finishFlow(restoreBall = true) },
                     onConfirm = { cropRect ->
-                        cropAndContinue(cropRect)
+                        when (flowMode) {
+                            FLOW_MODE_OCR -> ocrAndContinue(cropRect)
+                            else -> cropAndContinue(cropRect)
+                        }
                     }
                 )
             }
@@ -76,7 +91,7 @@ class ImageCropActivity : ComponentActivity() {
                 )
                 captureFlowCoordinator.dispatchPreparedResult(this@ImageCropActivity, preparedResult)
                 if (preparedResult.resolvedAction == CaptureResultAction.PIN_DIRECTLY) {
-                    closeFlow()
+                    finishFlow(restoreBall = true)
                     return@launch
                 }
                 finish()
@@ -86,13 +101,44 @@ class ImageCropActivity : ComponentActivity() {
         }
     }
 
-    private fun closeFlow() {
-        moveTaskToBack(true)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            finishAndRemoveTask()
-        } else {
-            finish()
+    private fun ocrAndContinue(cropRectInBitmap: Rect) {
+        val bitmap = sourceBitmap ?: return
+        lifecycleScope.launch {
+            try {
+                val preparedResult = ocrFlowCoordinator.prepareTextPin(
+                    bitmap = bitmap,
+                    cropRectInBitmap = cropRectInBitmap
+                )
+                startActivity(
+                    Intent(this@ImageCropActivity, OcrResultActivity::class.java).apply {
+                        putExtra(OcrResultActivity.EXTRA_RECOGNIZED_TEXT, preparedResult.recognizedText)
+                        putExtra(OcrResultActivity.EXTRA_FINISH_TO_BACKGROUND, finishToBackground)
+                        putExtra(OcrResultActivity.EXTRA_RESTORE_FLOATING_BALL, restoreFloatingBall)
+                    }
+                )
+                finish()
+            } catch (e: Exception) {
+                Toast.makeText(this@ImageCropActivity, "OCR failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
+    }
+
+    private fun finishFlow(restoreBall: Boolean) {
+        if (restoreBall && restoreFloatingBall) {
+            startService(
+                FloatingBallService.createRestoreVisibilityIntent(this)
+            )
+        }
+        if (finishToBackground) {
+            moveTaskToBack(true)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                finishAndRemoveTask()
+            } else {
+                finish()
+            }
+            return
+        }
+        finish()
     }
 
     override fun onDestroy() {
@@ -103,5 +149,10 @@ class ImageCropActivity : ComponentActivity() {
     companion object {
         const val EXTRA_IMAGE_URI = "extra_image_uri"
         const val EXTRA_FORCE_RESULT_ACTION = "extra_force_result_action"
+        const val EXTRA_FLOW_MODE = "extra_flow_mode"
+        const val EXTRA_FINISH_TO_BACKGROUND = "extra_finish_to_background"
+        const val EXTRA_RESTORE_FLOATING_BALL = "extra_restore_floating_ball"
+        const val FLOW_MODE_PIN = "flow_mode_pin"
+        const val FLOW_MODE_OCR = "flow_mode_ocr"
     }
 }

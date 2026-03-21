@@ -81,6 +81,10 @@ dependencies {
     // Material Design Components (for XML themes)
     implementation("com.google.android.material:material:1.11.0")
 
+    // ML Kit OCR
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

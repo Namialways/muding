@@ -56,9 +56,19 @@
             android:theme="@style/Theme.PixPinAndroid" />
 
         <activity
+            android:name=".presentation.source.GalleryOcrActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPinAndroid" />
+
+        <activity
             android:name=".presentation.source.ClipboardTextPinActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
+            android:name=".presentation.ocr.OcrResultActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPinAndroid" />
 
         <!-- Transparent activity used to request MediaProjection permission -->
         <activity

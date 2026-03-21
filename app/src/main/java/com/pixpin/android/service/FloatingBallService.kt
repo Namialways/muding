@@ -19,6 +19,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -88,8 +89,11 @@ import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.ScreenshotManager
 import com.pixpin.android.feature.capture.CaptureDispatchRequest
 import com.pixpin.android.feature.capture.CaptureFlowCoordinator
+import com.pixpin.android.feature.ocr.OcrFlowCoordinator
 import com.pixpin.android.presentation.crop.CaptureCropOverlay
+import com.pixpin.android.presentation.ocr.OcrResultActivity
 import com.pixpin.android.presentation.source.ClipboardTextPinActivity
+import com.pixpin.android.presentation.source.GalleryOcrActivity
 import com.pixpin.android.presentation.source.GalleryPinActivity
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import com.pixpin.android.presentation.theme.PixPinTheme
@@ -106,6 +110,11 @@ private data class FloatingBallAppearance(
     val theme: FloatingBallTheme
 )
 
+private enum class CaptureEntryMode {
+    PIN,
+    OCR
+}
+
 class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private lateinit var windowManager: WindowManager
@@ -120,6 +129,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private lateinit var settingsRepository: AppSettingsRepository
     private lateinit var recentPinRepository: RecentPinRepository
     private lateinit var captureFlowCoordinator: CaptureFlowCoordinator
+    private lateinit var ocrFlowCoordinator: OcrFlowCoordinator
 
     private var snapAnimator: ValueAnimator? = null
     private var snapRunnable: Runnable? = null
@@ -127,6 +137,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val floatingMenuExpanded = mutableStateOf(false)
     private val floatingBallX = mutableIntStateOf(100)
     private val floatingBallY = mutableIntStateOf(100)
+    private var pendingCaptureMode: CaptureEntryMode = CaptureEntryMode.PIN
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -143,6 +154,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         settingsRepository = AppGraph.appSettingsRepository(this)
         recentPinRepository = AppGraph.recentPinRepository(this)
         captureFlowCoordinator = AppGraph.captureFlowCoordinator(this)
+        ocrFlowCoordinator = AppGraph.ocrFlowCoordinator(this)
 
         showFloatingBall()
 
@@ -219,8 +231,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         onExpandedChange = { setFloatingMenuExpanded(it) },
                         ballX = floatingBallX.intValue,
                         ballY = floatingBallY.intValue,
-                        onScreenshot = { handleScreenshot() },
+                        onScreenshot = { startStandardScreenshot() },
+                        onScreenshotOcr = { startScreenshotOcr() },
                         onGallery = { openGalleryPicker() },
+                        onGalleryOcr = { openGalleryOcr() },
                         onClipboardText = { openClipboardTextPin() },
                         onRestorePin = { restoreLastClosedPin() },
                         onManagePins = { openPinManager() },
@@ -315,6 +329,16 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         startActivity(intent)
     }
 
+    private fun startStandardScreenshot() {
+        pendingCaptureMode = CaptureEntryMode.PIN
+        handleScreenshot()
+    }
+
+    private fun startScreenshotOcr() {
+        pendingCaptureMode = CaptureEntryMode.OCR
+        handleScreenshot()
+    }
+
     private fun openGalleryPicker() {
         setFloatingMenuExpanded(false)
         floatingView?.visibility = View.GONE
@@ -327,6 +351,22 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 )
                 putExtra(GalleryPinActivity.EXTRA_FINISH_TO_BACKGROUND, true)
                 putExtra(GalleryPinActivity.EXTRA_RESTORE_FLOATING_BALL, true)
+            }
+        )
+    }
+
+    private fun openGalleryOcr() {
+        setFloatingMenuExpanded(false)
+        floatingView?.visibility = View.GONE
+        startActivity(
+            Intent(this, GalleryOcrActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION
+                )
+                putExtra(GalleryOcrActivity.EXTRA_FINISH_TO_BACKGROUND, true)
+                putExtra(GalleryOcrActivity.EXTRA_RESTORE_FLOATING_BALL, true)
             }
         )
     }
@@ -389,10 +429,11 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     CaptureCropOverlay(
                         bitmap = bitmap,
                         onCancel = {
+                            pendingCaptureMode = CaptureEntryMode.PIN
                             dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = true)
                         },
                         onConfirm = { cropRect ->
-                            cropAndContinue(cropRect)
+                            completeCaptureSelection(cropRect)
                         }
                     )
                 }
@@ -404,6 +445,13 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         } catch (e: Exception) {
             e.printStackTrace()
             dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = true)
+        }
+    }
+
+    private fun completeCaptureSelection(cropRectInBitmap: Rect) {
+        when (pendingCaptureMode) {
+            CaptureEntryMode.PIN -> cropAndContinue(cropRectInBitmap)
+            CaptureEntryMode.OCR -> ocrAndContinue(cropRectInBitmap)
         }
     }
 
@@ -426,6 +474,42 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             } catch (e: Exception) {
                 e.printStackTrace()
                 dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = true)
+            } finally {
+                pendingCaptureMode = CaptureEntryMode.PIN
+            }
+        }
+    }
+
+    private fun ocrAndContinue(cropRectInBitmap: Rect) {
+        val bitmap = cropOverlayBitmap ?: return
+        lifecycleScope.launch {
+            try {
+                val preparedResult = ocrFlowCoordinator.prepareTextPin(
+                    bitmap = bitmap,
+                    cropRectInBitmap = cropRectInBitmap
+                )
+                dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
+                startActivity(
+                    Intent(this@FloatingBallService, OcrResultActivity::class.java).apply {
+                        addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                                Intent.FLAG_ACTIVITY_NO_ANIMATION
+                        )
+                        putExtra(OcrResultActivity.EXTRA_RECOGNIZED_TEXT, preparedResult.recognizedText)
+                        putExtra(OcrResultActivity.EXTRA_FINISH_TO_BACKGROUND, true)
+                        putExtra(OcrResultActivity.EXTRA_RESTORE_FLOATING_BALL, true)
+                    }
+                )
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@FloatingBallService,
+                    "OCR failed: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = true)
+            } finally {
+                pendingCaptureMode = CaptureEntryMode.PIN
             }
         }
     }
@@ -643,7 +727,9 @@ private fun FloatingBallContent(
     ballX: Int,
     ballY: Int,
     onScreenshot: () -> Unit,
+    onScreenshotOcr: () -> Unit,
     onGallery: () -> Unit,
+    onGalleryOcr: () -> Unit,
     onClipboardText: () -> Unit,
     onRestorePin: () -> Unit,
     onManagePins: () -> Unit,
@@ -711,9 +797,17 @@ private fun FloatingBallContent(
                         onExpandedChange(false)
                         onScreenshot()
                     },
+                    onScreenshotOcr = {
+                        onExpandedChange(false)
+                    onScreenshotOcr()
+                    },
                     onGallery = {
                         onExpandedChange(false)
                         onGallery()
+                    },
+                    onGalleryOcr = {
+                        onExpandedChange(false)
+                        onGalleryOcr()
                     },
                     onClipboardText = {
                         onExpandedChange(false)
@@ -786,7 +880,9 @@ private fun FloatingBall(
 @Composable
 private fun FloatingMenu(
     onScreenshot: () -> Unit,
+    onScreenshotOcr: () -> Unit,
     onGallery: () -> Unit,
+    onGalleryOcr: () -> Unit,
     onClipboardText: () -> Unit,
     onRestorePin: () -> Unit,
     onManagePins: () -> Unit,
@@ -806,9 +902,19 @@ private fun FloatingMenu(
                 onClick = onScreenshot
             )
             MenuButton(
+                icon = Icons.Default.TextFields,
+                text = "截图 OCR",
+                onClick = onScreenshotOcr
+            )
+            MenuButton(
                 icon = Icons.Default.PhotoLibrary,
                 text = "相册贴图",
                 onClick = onGallery
+            )
+            MenuButton(
+                icon = Icons.Default.PhotoLibrary,
+                text = "相册 OCR",
+                onClick = onGalleryOcr
             )
             MenuButton(
                 icon = Icons.Default.TextFields,

@@ -17,6 +17,9 @@ import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.data.settings.SharedPreferencesAppSettingsRepository
 import com.pixpin.android.feature.capture.BitmapCropper
 import com.pixpin.android.feature.capture.CaptureFlowCoordinator
+import com.pixpin.android.feature.ocr.MlKitOcrEngine
+import com.pixpin.android.feature.ocr.OcrEngine
+import com.pixpin.android.feature.ocr.OcrFlowCoordinator
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.feature.pin.source.ImageUriPinSourceAdapter
 import com.pixpin.android.feature.pin.source.PinSourceAssetResolver
@@ -74,6 +77,18 @@ object AppGraph {
             settingsRepository = appSettingsRepository(context),
             cachedImageRepository = cachedImageRepository(context),
             pinSourceAssetResolver = pinSourceAssetResolver(context)
+        )
+    }
+
+    fun ocrEngine(): OcrEngine {
+        return MlKitOcrEngine()
+    }
+
+    fun ocrFlowCoordinator(context: Context): OcrFlowCoordinator {
+        return OcrFlowCoordinator(
+            bitmapCropper = BitmapCropper(),
+            ocrEngine = ocrEngine(),
+            pinCreationCoordinator = pinCreationCoordinator(context)
         )
     }
 

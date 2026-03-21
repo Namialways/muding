@@ -85,6 +85,7 @@ import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.presentation.theme.floatingBallThemeColors
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.presentation.source.ClipboardTextPinActivity
+import com.pixpin.android.presentation.source.GalleryOcrActivity
 import com.pixpin.android.presentation.source.GalleryPinActivity
 import com.pixpin.android.service.FloatingBallService
 import kotlinx.coroutines.Dispatchers
@@ -227,6 +228,9 @@ class MainActivity : ComponentActivity() {
                         onOpenGalleryPin = {
                             openGalleryPinPicker()
                         },
+                        onOpenGalleryOcr = {
+                            openGalleryOcr()
+                        },
                         onOpenClipboardTextPin = {
                             openClipboardTextPin()
                         },
@@ -278,6 +282,12 @@ class MainActivity : ComponentActivity() {
     private fun openGalleryPinPicker() {
         startActivity(
             Intent(this, GalleryPinActivity::class.java)
+        )
+    }
+
+    private fun openGalleryOcr() {
+        startActivity(
+            Intent(this, GalleryOcrActivity::class.java)
         )
     }
 
@@ -374,6 +384,7 @@ private fun MainScreen(
     onRefreshRecords: () -> MainScreenSnapshot,
     onRequestPermission: () -> Unit,
     onOpenGalleryPin: () -> Unit,
+    onOpenGalleryOcr: () -> Unit,
     onOpenClipboardTextPin: () -> Unit,
     onStartService: () -> Unit
 ) {
@@ -478,6 +489,7 @@ private fun MainScreen(
                 },
                 onRequestPermission = onRequestPermission,
                 onOpenGalleryPin = onOpenGalleryPin,
+                onOpenGalleryOcr = onOpenGalleryOcr,
                 onOpenClipboardTextPin = onOpenClipboardTextPin,
                 onStartService = onStartService
             )
@@ -553,6 +565,7 @@ private fun BasicSettingsTab(
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
     onRequestPermission: () -> Unit,
     onOpenGalleryPin: () -> Unit,
+    onOpenGalleryOcr: () -> Unit,
     onOpenClipboardTextPin: () -> Unit,
     onStartService: () -> Unit
 ) {
@@ -606,7 +619,7 @@ private fun BasicSettingsTab(
                     ) {
                         Text("快捷创建", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            text = "除了悬浮球菜单，你也可以在应用内直接从相册或剪贴板创建贴图。",
+                            text = "除了悬浮球菜单，你也可以在应用内直接从相册、OCR 或剪贴板创建内容。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -617,6 +630,14 @@ private fun BasicSettingsTab(
                             Icon(Icons.Default.PhotoLibrary, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("从相册贴图")
+                        }
+                        OutlinedButton(
+                            onClick = onOpenGalleryOcr,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.TextFields, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("从相册 OCR")
                         }
                         OutlinedButton(
                             onClick = onOpenClipboardTextPin,
