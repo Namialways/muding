@@ -1,5 +1,6 @@
 package com.pixpin.android.feature.pin.runtime
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
@@ -8,6 +9,7 @@ import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import androidx.core.animation.doOnEnd
 import com.pixpin.android.domain.usecase.ClosedPinRecord
 import com.pixpin.android.domain.usecase.PinScaleMode
 import com.pixpin.android.service.PinnedImageRenderView
@@ -51,6 +53,7 @@ class PinOverlayWindowController(
     private var overlayHeight: Int = 0
         private set
     private var layoutUpdateScheduled = false
+    private var shakeAnimator: ValueAnimator? = null
 
     val overlayParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
@@ -127,6 +130,8 @@ class PinOverlayWindowController(
 
     fun remove() {
         attached = false
+        shakeAnimator?.cancel()
+        shakeAnimator = null
         overlayView.removeCallbacks(layoutUpdateRunnable)
         detachWithoutRecycle()
         bitmap.recycle()
@@ -161,6 +166,47 @@ class PinOverlayWindowController(
         }
         visible = true
         overlayView.visibility = View.VISIBLE
+    }
+
+    fun matches(imageUri: String, annotationSessionId: String?): Boolean {
+        return this.imageUri == imageUri && this.annotationSessionId == annotationSessionId
+    }
+
+    fun shakeToHintRestore() {
+        if (!attached || !overlayView.isAttachedToWindow) {
+            return
+        }
+        shakeAnimator?.cancel()
+        val baseX = overlayParams.x
+        val densityOffset = (12f * density).roundToInt().coerceAtLeast(8)
+        shakeAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 320L
+            addUpdateListener { animator ->
+                val progress = animator.animatedValue as Float
+                val offset = when {
+                    progress < 0.16f -> densityOffset
+                    progress < 0.33f -> -densityOffset
+                    progress < 0.5f -> (densityOffset * 0.75f).roundToInt()
+                    progress < 0.66f -> -(densityOffset * 0.75f).roundToInt()
+                    progress < 0.83f -> (densityOffset * 0.4f).roundToInt()
+                    else -> 0
+                }
+                overlayParams.x = baseX + offset
+                try {
+                    windowManager.updateViewLayout(overlayView, overlayParams)
+                } catch (_: Exception) {
+                }
+            }
+            doOnEnd {
+                overlayParams.x = baseX
+                try {
+                    windowManager.updateViewLayout(overlayView, overlayParams)
+                } catch (_: Exception) {
+                }
+                shakeAnimator = null
+            }
+            start()
+        }
     }
 
     private fun moveBy(dx: Float, dy: Float) {

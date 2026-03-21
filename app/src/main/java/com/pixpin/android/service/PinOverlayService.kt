@@ -212,6 +212,18 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         historySourceType: PinHistorySourceType,
         historyMetadata: PinHistoryMetadata
     ) {
+        if (historySourceType == PinHistorySourceType.RESTORED_PIN) {
+            val existingOverlayId = overlays.entries.firstOrNull { (_, controller) ->
+                controller.matches(imageUriString, annotationSessionId)
+            }?.key
+            if (existingOverlayId != null) {
+                bitmap.recycle()
+                bringOverlayToFront(existingOverlayId)
+                overlays[existingOverlayId]?.shakeToHintRestore()
+                return
+            }
+        }
+
         val overlayId = UUID.randomUUID().toString()
         val appearanceSettings = settingsRepository.getPinAppearanceSettings()
         val controller = PinOverlayWindowController(
