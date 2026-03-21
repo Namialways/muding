@@ -101,7 +101,7 @@ object AppGraph {
         return LocalTranslationModelManager()
     }
 
-    fun localTranslationEngine(context: Context): MlKitLocalTranslationEngine {
+    fun localTranslationEngine(): MlKitLocalTranslationEngine {
         return MlKitLocalTranslationEngine(
             modelManager = localTranslationModelManager()
         )

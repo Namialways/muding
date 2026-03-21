@@ -18,7 +18,7 @@ data class TranslationResult(
 object TranslationLanguageCatalog {
     val options = listOf(
         TranslationLanguageOption("en", "英语", "en", "en", "en"),
-        TranslationLanguageOption("zh", "中文简体", "zh", "zh", "zh-CHS"),
+        TranslationLanguageOption("zh", "中文", "zh", "zh", "zh-CHS"),
         TranslationLanguageOption("ja", "日语", "ja", "jp", "ja"),
         TranslationLanguageOption("ko", "韩语", "ko", "kor", "ko"),
         TranslationLanguageOption("fr", "法语", "fr", "fra", "fr"),

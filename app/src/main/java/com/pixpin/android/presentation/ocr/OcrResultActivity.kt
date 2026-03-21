@@ -35,11 +35,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.pixpin.android.app.AppGraph
 import com.pixpin.android.core.model.PinSourceType
+import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.feature.translation.TranslationEngine
 import com.pixpin.android.feature.translation.TranslationLanguageCatalog
-import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.presentation.translation.TranslationSettingsActivity
 import com.pixpin.android.service.FloatingBallService
@@ -60,7 +60,7 @@ class OcrResultActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
         settingsRepository = AppGraph.appSettingsRepository(this)
-        localTranslationEngine = AppGraph.localTranslationEngine(this)
+        localTranslationEngine = AppGraph.localTranslationEngine()
         cloudTranslationEngine = AppGraph.cloudTranslationEngine(this)
         val initialText = intent.getStringExtra(EXTRA_RECOGNIZED_TEXT).orEmpty()
         val targetLanguageDisplayName = TranslationLanguageCatalog.findByAppTag(
@@ -112,7 +112,7 @@ class OcrResultActivity : ComponentActivity() {
             } catch (e: Exception) {
                 Toast.makeText(
                     this@OcrResultActivity,
-                    "创建 OCR 文字贴图失败: ${e.message}",
+                    "创建 OCR 文字贴图失败：${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -121,9 +121,7 @@ class OcrResultActivity : ComponentActivity() {
 
     private fun copyText(text: String) {
         val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboardManager.setPrimaryClip(
-            ClipData.newPlainText("ocr_text", text)
-        )
+        clipboardManager.setPrimaryClip(ClipData.newPlainText("ocr_text", text))
         Toast.makeText(this, "已复制 OCR 文本", Toast.LENGTH_SHORT).show()
     }
 
@@ -132,10 +130,15 @@ class OcrResultActivity : ComponentActivity() {
         engine: TranslationEngine,
         onComplete: (String) -> Unit
     ) {
+        val normalizedText = text.trim()
+        if (normalizedText.isBlank()) {
+            Toast.makeText(this, "没有可翻译的文本", Toast.LENGTH_SHORT).show()
+            return
+        }
         val targetLanguage = settingsRepository.getTranslationSettings().localTargetLanguageTag
         lifecycleScope.launch {
             try {
-                val result = engine.translate(text, targetLanguage)
+                val result = engine.translate(normalizedText, targetLanguage)
                 onComplete(result.translatedText)
                 Toast.makeText(
                     this@OcrResultActivity,
@@ -145,7 +148,7 @@ class OcrResultActivity : ComponentActivity() {
             } catch (e: Exception) {
                 Toast.makeText(
                     this@OcrResultActivity,
-                    "翻译失败: ${e.message}",
+                    "翻译失败：${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -158,9 +161,7 @@ class OcrResultActivity : ComponentActivity() {
 
     private fun finishFlow() {
         if (restoreFloatingBall) {
-            startService(
-                FloatingBallService.createRestoreVisibilityIntent(this)
-            )
+            startService(FloatingBallService.createRestoreVisibilityIntent(this))
         }
         if (finishToBackground) {
             moveTaskToBack(true)
@@ -243,18 +244,14 @@ private fun OcrResultScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedButton(
-                onClick = {
-                    onTranslateLocally(text.trim()) { translatedText = it }
-                },
+                onClick = { onTranslateLocally(text.trim()) { translatedText = it } },
                 modifier = Modifier.weight(1f),
                 enabled = text.isNotBlank()
             ) {
                 Text("本地翻译")
             }
             OutlinedButton(
-                onClick = {
-                    onTranslateInCloud(text.trim()) { translatedText = it }
-                },
+                onClick = { onTranslateInCloud(text.trim()) { translatedText = it } },
                 modifier = Modifier.weight(1f),
                 enabled = text.isNotBlank()
             ) {

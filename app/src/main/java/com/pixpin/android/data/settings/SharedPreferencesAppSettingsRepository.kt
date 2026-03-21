@@ -5,10 +5,30 @@ import com.pixpin.android.domain.usecase.CaptureFlowSettings
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.PinScaleMode
+import com.pixpin.android.feature.translation.AndroidKeystoreSecretStore
+import com.pixpin.android.feature.translation.LegacyTranslationSecretSource
+import com.pixpin.android.feature.translation.TranslationCredentialStore
 
 class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepository {
 
     private val settings = CaptureFlowSettings(context)
+    private val credentialStore = TranslationCredentialStore(
+        AndroidKeystoreSecretStore(context.applicationContext)
+    )
+
+    init {
+        credentialStore.migrateFromLegacy(
+            object : LegacyTranslationSecretSource {
+                override fun readBaiduAppId(): String = settings.getBaiduTranslationAppId()
+                override fun readBaiduSecretKey(): String = settings.getBaiduTranslationSecretKey()
+                override fun readYoudaoAppKey(): String = settings.getYoudaoTranslationAppKey()
+                override fun readYoudaoAppSecret(): String = settings.getYoudaoTranslationAppSecret()
+                override fun clearLegacySecrets() {
+                    settings.clearLegacyTranslationCredentials()
+                }
+            }
+        )
+    }
 
     override fun getCaptureResultAction(): CaptureResultAction = settings.getResultAction()
 
@@ -101,14 +121,15 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
     }
 
     override fun getTranslationSettings(): TranslationSettings {
+        val credentials = credentialStore.getCredentials()
         return TranslationSettings(
             localTargetLanguageTag = settings.getLocalTranslationTargetLanguageTag(),
             localDownloadOnWifiOnly = settings.isLocalTranslationDownloadOnWifiOnly(),
             cloudProvider = settings.getCloudTranslationProvider(),
-            baiduAppId = settings.getBaiduTranslationAppId(),
-            baiduSecretKey = settings.getBaiduTranslationSecretKey(),
-            youdaoAppKey = settings.getYoudaoTranslationAppKey(),
-            youdaoAppSecret = settings.getYoudaoTranslationAppSecret()
+            baiduAppId = credentials.baiduAppId,
+            baiduSecretKey = credentials.baiduSecretKey,
+            youdaoAppKey = credentials.youdaoAppKey,
+            youdaoAppSecret = credentials.youdaoAppSecret
         )
     }
 
@@ -125,10 +146,12 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
     }
 
     override fun setBaiduTranslationCredentials(appId: String, secretKey: String) {
-        settings.setBaiduTranslationCredentials(appId, secretKey)
+        credentialStore.saveBaiduCredentials(appId, secretKey)
+        settings.clearLegacyTranslationCredentials()
     }
 
     override fun setYoudaoTranslationCredentials(appKey: String, appSecret: String) {
-        settings.setYoudaoTranslationCredentials(appKey, appSecret)
+        credentialStore.saveYoudaoCredentials(appKey, appSecret)
+        settings.clearLegacyTranslationCredentials()
     }
 }

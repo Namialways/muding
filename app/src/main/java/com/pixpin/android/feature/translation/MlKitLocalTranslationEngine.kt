@@ -14,11 +14,11 @@ class MlKitLocalTranslationEngine(
     override suspend fun translate(text: String, targetLanguageTag: String): TranslationResult {
         val normalizedText = text.trim()
         require(normalizedText.isNotBlank()) {
-            "No text to translate"
+            "没有可翻译的文本"
         }
         val targetOption = TranslationLanguageCatalog.findByAppTag(targetLanguageTag)
         val targetMlKitTag = targetOption.mlKitTag
-            ?: throw IllegalArgumentException("Target language is not supported locally")
+            ?: throw IllegalArgumentException("当前目标语言不支持本地翻译")
         val sourceMlKitTag = detectSourceLanguage(normalizedText)
         val sourceAppTag = TranslationLanguageCatalog.options
             .firstOrNull { it.mlKitTag == sourceMlKitTag }

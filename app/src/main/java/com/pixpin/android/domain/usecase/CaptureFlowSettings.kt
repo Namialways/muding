@@ -193,6 +193,15 @@ class CaptureFlowSettings(context: Context) {
             .apply()
     }
 
+    fun clearLegacyTranslationCredentials() {
+        prefs.edit()
+            .remove(KEY_BAIDU_TRANSLATION_APP_ID)
+            .remove(KEY_BAIDU_TRANSLATION_SECRET_KEY)
+            .remove(KEY_YOUDAO_TRANSLATION_APP_KEY)
+            .remove(KEY_YOUDAO_TRANSLATION_APP_SECRET)
+            .apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "pixpin_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"

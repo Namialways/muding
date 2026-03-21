@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -159,16 +158,21 @@ private fun TranslationSettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("仅 Wi-Fi 下载", modifier = Modifier.weight(1f))
+                    Text("仅在 Wi‑Fi 下下载", modifier = Modifier.weight(1f))
                     Switch(
                         checked = wifiOnly,
                         onCheckedChange = { wifiOnly = it }
                     )
                 }
                 Text(
-                    text = "已下载模型: ${
-                        if (downloadedModels.isEmpty()) "无"
-                        else downloadedModels.joinToString { TranslationLanguageCatalog.findByAppTag(it).displayName }
+                    text = "已下载模型：${
+                        if (downloadedModels.isEmpty()) {
+                            "无"
+                        } else {
+                            downloadedModels.joinToString {
+                                TranslationLanguageCatalog.findByAppTag(it).displayName
+                            }
+                        }
                     }",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -186,7 +190,7 @@ private fun TranslationSettingsScreen(
                                     refreshDownloaded()
                                     message = "本地翻译模型下载完成"
                                 }.onFailure {
-                                    message = "下载失败: ${it.message}"
+                                    message = "下载失败：${it.message}"
                                 }
                                 localBusy = false
                             }
@@ -205,7 +209,7 @@ private fun TranslationSettingsScreen(
                                     refreshDownloaded()
                                     message = "本地翻译模型已删除"
                                 }.onFailure {
-                                    message = "删除失败: ${it.message}"
+                                    message = "删除失败：${it.message}"
                                 }
                                 localBusy = false
                             }
@@ -241,25 +245,29 @@ private fun TranslationSettingsScreen(
                     value = baiduAppId,
                     onValueChange = { baiduAppId = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("百度 AppId") }
+                    label = { Text("百度 AppId") },
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = baiduSecretKey,
                     onValueChange = { baiduSecretKey = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("百度 SecretKey") }
+                    label = { Text("百度 SecretKey") },
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = youdaoAppKey,
                     onValueChange = { youdaoAppKey = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("有道 AppKey") }
+                    label = { Text("有道 AppKey") },
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = youdaoAppSecret,
                     onValueChange = { youdaoAppSecret = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("有道 AppSecret") }
+                    label = { Text("有道 AppSecret") },
+                    singleLine = true
                 )
             }
         }

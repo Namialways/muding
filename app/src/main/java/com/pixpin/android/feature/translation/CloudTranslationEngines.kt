@@ -6,10 +6,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
-import java.security.MessageDigest
 import java.util.UUID
 
 class BaiduCloudTranslationEngine(
@@ -19,13 +19,18 @@ class BaiduCloudTranslationEngine(
     override suspend fun translate(text: String, targetLanguageTag: String): TranslationResult {
         val settings = settingsRepository.getTranslationSettings()
         require(settings.baiduAppId.isNotBlank() && settings.baiduSecretKey.isNotBlank()) {
-            "请先配置百度翻译 AppId 和密钥"
+            "请先配置百度翻译 AppId 和 SecretKey"
         }
         val targetLanguage = TranslationLanguageCatalog.findByAppTag(targetLanguageTag)
         val query = text.trim()
-        require(query.isNotBlank()) { "No text to translate" }
+        require(query.isNotBlank()) { "没有可翻译的文本" }
         val salt = UUID.randomUUID().toString().replace("-", "")
-        val sign = md5("${settings.baiduAppId}$query$salt${settings.baiduSecretKey}")
+        val sign = TranslationSigning.buildBaiduSign(
+            appId = settings.baiduAppId,
+            query = query,
+            salt = salt,
+            secretKey = settings.baiduSecretKey
+        )
         val requestUrl = buildString {
             append("https://fanyi-api.baidu.com/api/trans/vip/translate")
             append("?q=").append(urlEncode(query))
@@ -50,7 +55,7 @@ class BaiduCloudTranslationEngine(
                     append(item.optString("dst"))
                 }
             }.trim()
-            require(translated.isNotBlank()) { "百度翻译返回空结果" }
+            require(translated.isNotBlank()) { "百度翻译返回了空结果" }
             TranslationResult(
                 translatedText = translated,
                 providerLabel = "百度翻译"
@@ -66,15 +71,20 @@ class YoudaoCloudTranslationEngine(
     override suspend fun translate(text: String, targetLanguageTag: String): TranslationResult {
         val settings = settingsRepository.getTranslationSettings()
         require(settings.youdaoAppKey.isNotBlank() && settings.youdaoAppSecret.isNotBlank()) {
-            "请先配置有道 AppKey 和密钥"
+            "请先配置有道 AppKey 和 AppSecret"
         }
         val targetLanguage = TranslationLanguageCatalog.findByAppTag(targetLanguageTag)
         val query = text.trim()
-        require(query.isNotBlank()) { "No text to translate" }
+        require(query.isNotBlank()) { "没有可翻译的文本" }
         val salt = UUID.randomUUID().toString()
         val curtime = (System.currentTimeMillis() / 1000L).toString()
-        val input = buildYoudaoInput(query)
-        val sign = sha256("${settings.youdaoAppKey}$input$salt$curtime${settings.youdaoAppSecret}")
+        val sign = TranslationSigning.buildYoudaoSign(
+            appKey = settings.youdaoAppKey,
+            query = query,
+            salt = salt,
+            curtime = curtime,
+            appSecret = settings.youdaoAppSecret
+        )
         val body = buildString {
             append("q=").append(urlEncode(query))
             append("&from=auto")
@@ -90,7 +100,9 @@ class YoudaoCloudTranslationEngine(
             val json = JSONObject(response)
             val errorCode = json.optString("errorCode", "0")
             if (errorCode != "0") {
-                throw IllegalStateException(json.optString("msg", "有道翻译失败，错误码: $errorCode"))
+                throw IllegalStateException(
+                    json.optString("msg", "有道翻译失败，错误码: $errorCode")
+                )
             }
             val translationArray = json.optJSONArray("translation") ?: JSONArray()
             val translated = buildString {
@@ -101,7 +113,7 @@ class YoudaoCloudTranslationEngine(
                     append(item)
                 }
             }.trim()
-            require(translated.isNotBlank()) { "有道翻译返回空结果" }
+            require(translated.isNotBlank()) { "有道翻译返回了空结果" }
             TranslationResult(
                 translatedText = translated,
                 providerLabel = "有道智云"
@@ -112,8 +124,8 @@ class YoudaoCloudTranslationEngine(
 
 class CloudTranslationEngineRouter(
     private val settingsRepository: AppSettingsRepository,
-    private val baiduEngine: BaiduCloudTranslationEngine,
-    private val youdaoEngine: YoudaoCloudTranslationEngine
+    private val baiduEngine: TranslationEngine,
+    private val youdaoEngine: TranslationEngine
 ) : TranslationEngine {
 
     override suspend fun translate(text: String, targetLanguageTag: String): TranslationResult {
@@ -125,20 +137,12 @@ class CloudTranslationEngineRouter(
     }
 }
 
-private fun buildYoudaoInput(query: String): String {
-    return if (query.length <= 20) {
-        query
-    } else {
-        query.take(10) + query.length + query.takeLast(10)
-    }
-}
-
 private fun httpGet(urlString: String): String {
     val connection = URL(urlString).openConnection() as HttpURLConnection
     connection.requestMethod = "GET"
     connection.connectTimeout = 12000
     connection.readTimeout = 12000
-    return connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+    return connection.readResponseBody()
 }
 
 private fun httpPostForm(urlString: String, body: String): String {
@@ -151,22 +155,22 @@ private fun httpPostForm(urlString: String, body: String): String {
     connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
         writer.write(body)
     }
-    return connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+    return connection.readResponseBody()
+}
+
+private fun HttpURLConnection.readResponseBody(): String {
+    val stream = if (responseCode in 200..299) {
+        inputStream
+    } else {
+        errorStream ?: inputStream
+    }
+    return stream.useUtf8Text()
+}
+
+private fun InputStream.useUtf8Text(): String {
+    return bufferedReader(Charsets.UTF_8).use { it.readText() }
 }
 
 private fun urlEncode(value: String): String {
     return URLEncoder.encode(value, Charsets.UTF_8.name())
-}
-
-private fun md5(value: String): String {
-    return digest("MD5", value)
-}
-
-private fun sha256(value: String): String {
-    return digest("SHA-256", value)
-}
-
-private fun digest(algorithm: String, value: String): String {
-    val bytes = MessageDigest.getInstance(algorithm).digest(value.toByteArray(Charsets.UTF_8))
-    return bytes.joinToString("") { "%02x".format(it) }
 }
