@@ -36,6 +36,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -510,7 +511,7 @@ fun NumberSettingRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(onClick = onDecrease) { Text("-") }
+            CompactStepButton(label = "-", onClick = onDecrease)
             OutlinedTextField(
                 value = input,
                 onValueChange = { next ->
@@ -518,7 +519,7 @@ fun NumberSettingRow(
                         input = next
                     }
                 },
-                modifier = Modifier.widthIn(min = 88.dp),
+                modifier = Modifier.weight(1f),
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -529,15 +530,39 @@ fun NumberSettingRow(
                     }
                 )
             )
-            OutlinedButton(onClick = onIncrease) { Text("+") }
-            OutlinedButton(
-                onClick = {
-                    input.toIntOrNull()?.coerceIn(valueRange)?.let(onApply)
-                    focusManager.clearFocus()
-                }
-            ) {
-                Text("应用")
-            }
+            CompactStepButton(label = "+", onClick = onIncrease)
+        }
+        TextButton(
+            onClick = {
+                input.toIntOrNull()?.coerceIn(valueRange)?.let(onApply)
+                focusManager.clearFocus()
+            },
+            modifier = Modifier.align(Alignment.End)
+        ) {
+            Text("保存")
+        }
+    }
+}
+
+@Composable
+private fun CompactStepButton(
+    label: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier.size(40.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

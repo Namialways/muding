@@ -1,5 +1,7 @@
 package com.pixpin.android.presentation.main
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -173,9 +176,9 @@ private fun SettingsOverviewScreen(
                             emphasized = true
                         )
                         SummaryPill(
-                            text = if (pinHistoryEnabled) "贴图历史写入中" else "贴图历史暂停写入"
+                            text = if (pinHistoryEnabled) "贴图历史写入中" else "贴图历史已暂停"
                         )
-                        SummaryPill(text = "缓存占用 ${formatFileSize(snapshot.runtimeStorage.totalBytes)}")
+                        SummaryPill(text = "缓存 ${formatFileSize(snapshot.runtimeStorage.totalBytes)}")
                     }
                 }
             }
@@ -185,15 +188,15 @@ private fun SettingsOverviewScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 MetricsCard(
                     modifier = Modifier.weight(1f),
-                    title = "记录数",
+                    title = "贴图记录",
                     value = snapshot.pinHistoryRecords.size.toString(),
-                    hint = "当前贴图历史"
+                    hint = "当前历史"
                 )
                 MetricsCard(
                     modifier = Modifier.weight(1f),
-                    title = "工程数",
+                    title = "工程记录",
                     value = snapshot.sessionFiles.size.toString(),
-                    hint = "当前工程记录"
+                    hint = "当前工程"
                 )
             }
         }
@@ -203,7 +206,7 @@ private fun SettingsOverviewScreen(
                 icon = Icons.Default.Camera,
                 section = SettingsSection.CAPTURE_AND_FLOATING,
                 summary = listOf(
-                    if (permissionGranted) "悬浮球已可用" else "需要先授权",
+                    if (permissionGranted) "悬浮球可用" else "需要先授权",
                     if (selectedAction == CaptureResultAction.PIN_DIRECTLY) "截图后直接贴图" else "截图后进入编辑"
                 ),
                 onClick = { onOpenSection(SettingsSection.CAPTURE_AND_FLOATING) }
@@ -227,8 +230,8 @@ private fun SettingsOverviewScreen(
                 icon = Icons.Default.Translate,
                 section = SettingsSection.OCR_AND_TRANSLATION,
                 summary = listOf(
-                    "OCR 入口集中在主页和悬浮球",
-                    "本地模型与百度、有道云翻译分开管理"
+                    "OCR 与翻译设置",
+                    "本地模型和云翻译分开管理"
                 ),
                 onClick = { onOpenSection(SettingsSection.OCR_AND_TRANSLATION) }
             )
@@ -239,8 +242,8 @@ private fun SettingsOverviewScreen(
                 icon = Icons.Default.Storage,
                 section = SettingsSection.STORAGE_AND_RECORDS,
                 summary = listOf(
-                    if (pinHistoryEnabled) "历史保留策略生效中" else "历史功能当前已暂停",
-                    "运行缓存 ${formatFileSize(snapshot.runtimeStorage.totalBytes)}"
+                    if (pinHistoryEnabled) "历史策略已开启" else "历史策略已暂停",
+                    "总占用 ${formatFileSize(snapshot.runtimeStorage.totalBytes)}"
                 ),
                 onClick = { onOpenSection(SettingsSection.STORAGE_AND_RECORDS) }
             )
@@ -271,9 +274,7 @@ private fun CaptureAndFloatingSettingsSection(
         contentPadding = PaddingValues(vertical = 20.dp)
     ) {
         item {
-            SectionHeader(
-                title = "截图与悬浮球"
-            )
+            SectionHeader(title = "截图与悬浮球")
         }
 
         item {
@@ -305,11 +306,7 @@ private fun CaptureAndFloatingSettingsSection(
                 ) {
                     Text("权限与运行状态", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = if (permissionGranted) {
-                            "悬浮窗权限已开启。"
-                        } else {
-                            "请先完成悬浮窗授权。"
-                        },
+                        text = if (permissionGranted) "悬浮窗权限已开启。" else "请先完成悬浮窗授权。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -399,9 +396,7 @@ private fun PinAndInteractionSettingsSection(
         contentPadding = PaddingValues(vertical = 20.dp)
     ) {
         item {
-            SectionHeader(
-                title = "贴图与交互"
-            )
+            SectionHeader(title = "贴图与交互")
         }
 
         item {
@@ -439,11 +434,7 @@ private fun PinAndInteractionSettingsSection(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("贴图默认阴影", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                text = if (defaultPinShadowEnabled) {
-                                    "新贴图默认带阴影。"
-                                } else {
-                                    "新贴图默认不带阴影。"
-                                },
+                                text = if (defaultPinShadowEnabled) "新贴图默认带阴影。" else "新贴图默认不带阴影。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -459,11 +450,7 @@ private fun PinAndInteractionSettingsSection(
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = if (defaultPinCornerRadiusDp <= 0.5f) {
-                                "新贴图当前接近直角外观。"
-                            } else {
-                                "新贴图当前默认使用圆角外观。"
-                            },
+                            text = if (defaultPinCornerRadiusDp <= 0.5f) "当前接近直角外观。" else "当前默认使用圆角外观。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -492,9 +479,7 @@ private fun OcrAndTranslationSettingsSection(
         contentPadding = PaddingValues(vertical = 20.dp)
     ) {
         item {
-            SectionHeader(
-                title = "OCR 与翻译"
-            )
+            SectionHeader(title = "OCR 与翻译")
         }
 
         item {
@@ -518,6 +503,7 @@ private fun OcrAndTranslationSettingsSection(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StorageAndRecordsSettingsSection(
     modifier: Modifier = Modifier,
@@ -545,28 +531,72 @@ private fun StorageAndRecordsSettingsSection(
         contentPadding = PaddingValues(vertical = 20.dp)
     ) {
         item {
-            SectionHeader(
-                title = "存储与记录"
-            )
+            SectionHeader(title = "存储与记录")
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricsCard(
+                    modifier = Modifier.weight(1f),
+                    title = "截图缓存",
+                    value = formatFileSize(snapshot.runtimeStorage.screenshotsCacheBytes),
+                    hint = "临时截图"
+                )
+                MetricsCard(
+                    modifier = Modifier.weight(1f),
+                    title = "贴图缓存",
+                    value = formatFileSize(snapshot.runtimeStorage.pinnedCacheBytes),
+                    hint = "运行贴图"
+                )
+            }
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricsCard(
+                    modifier = Modifier.weight(1f),
+                    title = "分享缓存",
+                    value = formatFileSize(snapshot.runtimeStorage.shareCacheBytes),
+                    hint = "导出与分享"
+                )
+                MetricsCard(
+                    modifier = Modifier.weight(1f),
+                    title = "记录文件",
+                    value = formatFileSize(
+                        snapshot.runtimeStorage.annotationSessionBytes + snapshot.runtimeStorage.pinHistoryBytes
+                    ),
+                    hint = "历史与工程"
+                )
+            }
         }
 
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("贴图历史策略", style = MaterialTheme.typography.titleMedium)
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text("记录保留", style = MaterialTheme.typography.titleMedium)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SummaryPill(
+                            text = if (pinHistoryEnabled) "贴图历史开启" else "贴图历史关闭",
+                            emphasized = true
+                        )
+                        SummaryPill(text = "贴图记录 ${snapshot.pinHistoryRecords.size}")
+                        SummaryPill(text = "工程记录 ${snapshot.sessionFiles.size}")
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("启用贴图历史", style = MaterialTheme.typography.bodyMedium)
+                            Text("贴图历史写入", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = if (pinHistoryEnabled) {
-                                    "已开启"
-                                } else {
-                                    "已关闭"
-                                },
+                                text = if (pinHistoryEnabled) "新贴图会继续进入历史。" else "暂停写入，只保留已有记录。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -577,7 +607,7 @@ private fun StorageAndRecordsSettingsSection(
                         )
                     }
                     NumberSettingRow(
-                        title = "最多保留 $maxPinHistoryCount 条贴图历史",
+                        title = "贴图历史最多保留 $maxPinHistoryCount 条",
                         value = maxPinHistoryCount,
                         valueRange = 1..500,
                         onDecrease = { onMaxPinHistoryCountChanged((maxPinHistoryCount - 1).coerceAtLeast(1)) },
@@ -585,29 +615,16 @@ private fun StorageAndRecordsSettingsSection(
                         onApply = onMaxPinHistoryCountChanged
                     )
                     NumberSettingRow(
-                        title = "只保留最近 $pinHistoryRetainDays 天的贴图历史",
+                        title = "贴图历史保留最近 $pinHistoryRetainDays 天",
                         value = pinHistoryRetainDays,
                         valueRange = 1..365,
                         onDecrease = { onPinHistoryRetainDaysChanged((pinHistoryRetainDays - 1).coerceAtLeast(1)) },
                         onIncrease = { onPinHistoryRetainDaysChanged((pinHistoryRetainDays + 1).coerceAtMost(365)) },
                         onApply = onPinHistoryRetainDaysChanged
                     )
-                    OutlinedButton(
-                        onClick = onClearPinHistory,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("清空贴图历史")
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("工程记录策略", style = MaterialTheme.typography.titleMedium)
+                    Divider()
                     NumberSettingRow(
-                        title = "最多保留 $maxSessionCount 个工程",
+                        title = "工程记录最多保留 $maxSessionCount 个",
                         value = maxSessionCount,
                         valueRange = 1..500,
                         onDecrease = { onMaxSessionCountChanged((maxSessionCount - 1).coerceAtLeast(1)) },
@@ -615,57 +632,94 @@ private fun StorageAndRecordsSettingsSection(
                         onApply = onMaxSessionCountChanged
                     )
                     NumberSettingRow(
-                        title = "只保留最近 $retainDays 天",
+                        title = "工程记录保留最近 $retainDays 天",
                         value = retainDays,
                         valueRange = 1..365,
                         onDecrease = { onRetainDaysChanged((retainDays - 1).coerceAtLeast(1)) },
                         onIncrease = { onRetainDaysChanged((retainDays + 1).coerceAtMost(365)) },
                         onApply = onRetainDaysChanged
                     )
-                    OutlinedButton(
-                        onClick = onClearAllRecords,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.DeleteSweep, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("清空全部记录")
-                    }
                 }
             }
         }
 
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("运行缓存清理", style = MaterialTheme.typography.titleMedium)
-                    Text("截图缓存：${formatFileSize(snapshot.runtimeStorage.screenshotsCacheBytes)}", style = MaterialTheme.typography.bodyMedium)
-                    Text("贴图缓存：${formatFileSize(snapshot.runtimeStorage.pinnedCacheBytes)}", style = MaterialTheme.typography.bodyMedium)
-                    Text("分享缓存：${formatFileSize(snapshot.runtimeStorage.shareCacheBytes)}", style = MaterialTheme.typography.bodyMedium)
-                    Text("工程记录：${formatFileSize(snapshot.runtimeStorage.annotationSessionBytes)}", style = MaterialTheme.typography.bodyMedium)
-                    Text("历史记录：${formatFileSize(snapshot.runtimeStorage.pinHistoryBytes)}", style = MaterialTheme.typography.bodyMedium)
-                    Text("总占用：${formatFileSize(snapshot.runtimeStorage.totalBytes)}", style = MaterialTheme.typography.titleSmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = onClearImageCaches,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("清理图片缓存")
-                        }
-                        OutlinedButton(
-                            onClick = onClearAllRecords,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("清理记录缓存")
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = onClearAllRuntimeFiles,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("清理全部运行缓存")
-                    }
-                }
+            Text("清理操作", style = MaterialTheme.typography.titleMedium)
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StorageActionCard(
+                    modifier = Modifier.weight(1f),
+                    title = "清理图片缓存",
+                    description = "截图、贴图、分享缓存",
+                    onClick = onClearImageCaches
+                )
+                StorageActionCard(
+                    modifier = Modifier.weight(1f),
+                    title = "清空贴图历史",
+                    description = "只删除历史记录",
+                    onClick = onClearPinHistory
+                )
             }
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StorageActionCard(
+                    modifier = Modifier.weight(1f),
+                    title = "清空全部记录",
+                    description = "删除历史和工程",
+                    onClick = onClearAllRecords,
+                    danger = true
+                )
+                StorageActionCard(
+                    modifier = Modifier.weight(1f),
+                    title = "清理全部缓存",
+                    description = "删除运行时文件",
+                    onClick = onClearAllRuntimeFiles,
+                    danger = true
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun StorageActionCard(
+    modifier: Modifier = Modifier,
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+    danger: Boolean = false
+) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (danger) {
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (danger) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
         }
     }
 }
