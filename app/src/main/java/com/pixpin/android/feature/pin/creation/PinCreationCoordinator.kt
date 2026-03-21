@@ -3,6 +3,8 @@ package com.pixpin.android.feature.pin.creation
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.provider.OpenableColumns
 import com.pixpin.android.core.model.PinImageAsset
 import com.pixpin.android.core.model.PinSource
 import com.pixpin.android.core.model.PinSourcePayload
@@ -10,6 +12,7 @@ import com.pixpin.android.core.model.PinSourceType
 import com.pixpin.android.data.image.CachedImageRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.CaptureResultAction
+import com.pixpin.android.domain.usecase.PinHistoryMetadata
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.feature.pin.source.PinSourceAssetResolver
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
@@ -18,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class PinCreationCoordinator(
+    private val appContext: Context,
     private val settingsRepository: AppSettingsRepository,
     private val cachedImageRepository: CachedImageRepository,
     private val pinSourceAssetResolver: PinSourceAssetResolver
@@ -47,13 +51,15 @@ class PinCreationCoordinator(
     suspend fun createRequest(
         source: PinSource,
         annotationSessionId: String? = null,
-        preferredImageAsset: PinImageAsset? = null
+        preferredImageAsset: PinImageAsset? = null,
+        preferredHistoryMetadata: PinHistoryMetadata? = null
     ): ImagePinCreationRequest {
         val imageAsset = preferredImageAsset ?: resolveImageAsset(source)
         return ImagePinCreationRequest(
             source = source,
             imageAsset = imageAsset,
-            annotationSessionId = annotationSessionId
+            annotationSessionId = annotationSessionId,
+            historyMetadata = preferredHistoryMetadata ?: buildHistoryMetadata(source, imageAsset)
         )
     }
 
@@ -67,12 +73,17 @@ class PinCreationCoordinator(
     fun createImageRequest(
         sourceType: PinSourceType,
         imageAsset: PinImageAsset,
-        annotationSessionId: String? = null
+        annotationSessionId: String? = null,
+        historyMetadata: PinHistoryMetadata = buildHistoryMetadata(
+            source = createImageSource(sourceType, imageAsset.uri),
+            imageAsset = imageAsset
+        )
     ): ImagePinCreationRequest {
         return ImagePinCreationRequest(
             source = createImageSource(sourceType, imageAsset.uri),
             imageAsset = imageAsset,
-            annotationSessionId = annotationSessionId
+            annotationSessionId = annotationSessionId,
+            historyMetadata = historyMetadata
         )
     }
 
@@ -92,12 +103,14 @@ class PinCreationCoordinator(
         annotationSessionId: String? = null,
         forcedResultAction: CaptureResultAction? = null,
         launchEditorInNewTask: Boolean = false,
-        preferredImageAsset: PinImageAsset? = null
+        preferredImageAsset: PinImageAsset? = null,
+        preferredHistoryMetadata: PinHistoryMetadata? = null
     ) {
         val request = createRequest(
             source = source,
             annotationSessionId = annotationSessionId,
-            preferredImageAsset = preferredImageAsset
+            preferredImageAsset = preferredImageAsset,
+            preferredHistoryMetadata = preferredHistoryMetadata
         )
         launchFromImageRequest(
             context = context,
@@ -136,6 +149,8 @@ class PinCreationCoordinator(
                 PinOverlayService.EXTRA_HISTORY_SOURCE,
                 request.source.type.toHistorySourceType().value
             )
+            putExtra(PinOverlayService.EXTRA_HISTORY_DISPLAY_NAME, request.historyMetadata.displayName)
+            putExtra(PinOverlayService.EXTRA_HISTORY_TEXT_PREVIEW, request.historyMetadata.textPreview)
             putExtra(
                 PinOverlayService.EXTRA_INITIAL_CONTENT_WIDTH_PX,
                 request.imageAsset.initialDisplayWidthPx ?: 0
@@ -174,6 +189,83 @@ class PinCreationCoordinator(
         launchInNewTask: Boolean = false
     ) {
         context.startActivity(createEditorIntent(context, request, launchInNewTask))
+    }
+
+    private fun buildHistoryMetadata(
+        source: PinSource,
+        imageAsset: PinImageAsset
+    ): PinHistoryMetadata {
+        return PinHistoryMetadata(
+            displayName = resolveDisplayName(source, imageAsset),
+            textPreview = (source.payload as? PinSourcePayload.Text)?.text
+                ?.trim()
+                ?.replace(Regex("\\s+"), " ")
+                ?.take(120),
+            widthPx = imageAsset.initialDisplayWidthPx,
+            heightPx = imageAsset.initialDisplayHeightPx
+        )
+    }
+
+    private fun resolveDisplayName(source: PinSource, imageAsset: PinImageAsset): String {
+        val payload = source.payload
+        return when (source.type) {
+            PinSourceType.SCREENSHOT -> "截图贴图"
+            PinSourceType.GALLERY_IMAGE -> {
+                val originalUri = (payload as? PinSourcePayload.ImageUri)?.uri
+                resolveUriDisplayName(originalUri)
+                    ?: fileNameFromUri(imageAsset.uri)
+                    ?: "相册贴图"
+            }
+
+            PinSourceType.CLIPBOARD_TEXT -> buildTextDisplayName(
+                prefix = "剪贴板",
+                text = (payload as? PinSourcePayload.Text)?.text
+            )
+
+            PinSourceType.OCR_TEXT -> buildTextDisplayName(
+                prefix = "OCR",
+                text = (payload as? PinSourcePayload.Text)?.text
+            )
+
+            PinSourceType.HISTORY_RESTORE -> fileNameFromUri(imageAsset.uri) ?: "恢复贴图"
+            PinSourceType.EDITOR_EXPORT -> "编辑后贴图"
+        }
+    }
+
+    private fun buildTextDisplayName(prefix: String, text: String?): String {
+        val normalized = text
+            ?.trim()
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(18)
+            .takeUnless { it.isNullOrBlank() }
+        return normalized?.let { "$prefix：$it" } ?: "$prefix 文字"
+    }
+
+    private fun resolveUriDisplayName(uriString: String?): String? {
+        if (uriString.isNullOrBlank()) return null
+        return runCatching {
+            appContext.contentResolver.query(
+                Uri.parse(uriString),
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val columnIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (columnIndex >= 0 && cursor.moveToFirst()) {
+                    cursor.getString(columnIndex)
+                } else {
+                    null
+                }
+            }
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun fileNameFromUri(uriString: String?): String? {
+        return uriString
+            ?.substringAfterLast('/')
+            ?.substringBefore('?')
+            ?.takeIf { it.isNotBlank() }
     }
 }
 

@@ -47,6 +47,15 @@ enum class RecordsFilter(
     EDITABLE("可继续编辑", "")
 }
 
+enum class RecordsSortOrder(
+    val title: String
+) {
+    NEWEST("最新"),
+    OLDEST("最早"),
+    SOURCE("来源"),
+    EDITABLE("可编辑优先")
+}
+
 data class MainScreenSnapshot(
     val sessionFiles: List<AnnotationSessionFile>,
     val recentClosedPinCount: Int,

@@ -1,12 +1,18 @@
 package com.pixpin.android.data.repository
 
 import android.content.Context
+import com.pixpin.android.domain.usecase.PinHistoryMetadata
 import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.domain.usecase.PinHistoryStore
 
 interface PinHistoryRepository {
-    fun save(imageUri: String, annotationSessionId: String?, sourceType: PinHistorySourceType): String
+    fun save(
+        imageUri: String,
+        annotationSessionId: String?,
+        sourceType: PinHistorySourceType,
+        metadata: PinHistoryMetadata = PinHistoryMetadata()
+    ): String
     fun list(): List<PinHistoryRecord>
     fun get(id: String): PinHistoryRecord?
     fun delete(id: String)
@@ -19,8 +25,13 @@ class FilePinHistoryRepository(
     private val context: Context
 ) : PinHistoryRepository {
 
-    override fun save(imageUri: String, annotationSessionId: String?, sourceType: PinHistorySourceType): String {
-        return PinHistoryStore.put(context, imageUri, annotationSessionId, sourceType)
+    override fun save(
+        imageUri: String,
+        annotationSessionId: String?,
+        sourceType: PinHistorySourceType,
+        metadata: PinHistoryMetadata
+    ): String {
+        return PinHistoryStore.put(context, imageUri, annotationSessionId, sourceType, metadata)
     }
 
     override fun list(): List<PinHistoryRecord> = PinHistoryStore.list(context)

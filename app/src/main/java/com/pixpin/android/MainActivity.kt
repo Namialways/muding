@@ -13,6 +13,7 @@ import com.pixpin.android.data.repository.RecentPinRepository
 import com.pixpin.android.data.repository.RuntimeStorageRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.PermissionHandler
+import com.pixpin.android.domain.usecase.PinHistoryMetadata
 import com.pixpin.android.feature.pin.creation.EditorLaunchRequest
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.presentation.main.MainScreen
@@ -129,7 +130,13 @@ class MainActivity : ComponentActivity() {
                                     sourceType = PinSourceType.HISTORY_RESTORE,
                                     uri = record.imageUri
                                 ),
-                                annotationSessionId = record.annotationSessionId
+                                annotationSessionId = record.annotationSessionId,
+                                preferredHistoryMetadata = PinHistoryMetadata(
+                                    displayName = record.displayName,
+                                    textPreview = record.textPreview,
+                                    widthPx = record.widthPx,
+                                    heightPx = record.heightPx
+                                )
                             )
                             pinCreationCoordinator.startPinOverlay(this@MainActivity, request)
                         }

@@ -78,10 +78,12 @@ object AppGraph {
     }
 
     fun pinCreationCoordinator(context: Context): PinCreationCoordinator {
+        val appContext = context.applicationContext
         return PinCreationCoordinator(
-            settingsRepository = appSettingsRepository(context),
-            cachedImageRepository = cachedImageRepository(context),
-            pinSourceAssetResolver = pinSourceAssetResolver(context)
+            appContext = appContext,
+            settingsRepository = appSettingsRepository(appContext),
+            cachedImageRepository = cachedImageRepository(appContext),
+            pinSourceAssetResolver = pinSourceAssetResolver(appContext)
         )
     }
 

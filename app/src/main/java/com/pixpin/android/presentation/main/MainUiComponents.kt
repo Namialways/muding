@@ -1,5 +1,7 @@
 package com.pixpin.android.presentation.main
 
+import android.net.Uri
+import android.widget.ImageView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,10 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Card
@@ -40,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -49,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
@@ -151,19 +157,11 @@ fun SettingsCategoryCard(
                         )
                     }
                 }
-                Column(
+                Text(
+                    text = section.title,
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(section.title, style = MaterialTheme.typography.titleMedium)
-                    if (section.description.isNotBlank()) {
-                        Text(
-                            text = section.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                    style = MaterialTheme.typography.titleMedium
+                )
                 Icon(
                     imageVector = Icons.Default.ArrowOutward,
                     contentDescription = null,
@@ -314,12 +312,8 @@ fun EmptyStateCard(
 fun PinHistoryRecordCard(
     item: PinHistoryRecord,
     onRestore: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onOpenDetails: () -> Unit
 ) {
-    val canResumeEditing = !item.annotationSessionId.isNullOrBlank()
-    val fileName = item.imageUri.substringAfterLast('/').ifBlank { item.imageUri }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -327,48 +321,57 @@ fun PinHistoryRecordCard(
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top
             ) {
+                RecordThumbnail(
+                    imageUri = item.imageUri,
+                    modifier = Modifier.size(84.dp)
+                )
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(fileName, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = item.displayName ?: item.imageUri.substringAfterLast('/'),
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Text(
                         text = formatTimestamp(item.createdAt),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SummaryPill(text = historySourceLabel(item.sourceType), emphasized = true)
+                        if (!item.annotationSessionId.isNullOrBlank()) {
+                            SummaryPill(text = "可继续编辑")
+                        }
+                        item.widthPx?.let { width ->
+                            val height = item.heightPx ?: return@let
+                            SummaryPill(text = "${width}×$height")
+                        }
+                    }
+                    item.textPreview?.takeIf { it.isNotBlank() }?.let { preview ->
+                        Text(
+                            text = preview,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
-                SummaryPill(
-                    text = if (canResumeEditing) "可继续编辑" else "仅图片记录",
-                    emphasized = canResumeEditing
-                )
             }
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SummaryPill(text = historySourceLabel(item.sourceType), emphasized = true)
-                SummaryPill(
-                    text = if (canResumeEditing) "含工程信息" else "无工程信息"
-                )
-            }
-
-            Text(
-                text = item.imageUri,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -377,14 +380,74 @@ fun PinHistoryRecordCard(
                 OutlinedButton(onClick = onRestore, modifier = Modifier.weight(1f)) {
                     Text("恢复贴图")
                 }
-                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                    Text(if (canResumeEditing) "继续编辑" else "进入编辑")
-                }
-                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
-                    Text("删除")
+                OutlinedButton(onClick = onOpenDetails, modifier = Modifier.weight(1f)) {
+                    Text("查看详情")
                 }
             }
         }
+    }
+}
+
+@Composable
+fun RecordThumbnail(
+    imageUri: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        AndroidView(
+            factory = { context ->
+                ImageView(context).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    adjustViewBounds = false
+                    clipToOutline = true
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+            update = { imageView ->
+                runCatching {
+                    imageView.setImageURI(Uri.parse(imageUri))
+                }.onFailure {
+                    imageView.setImageDrawable(null)
+                }
+            }
+        )
+        if (imageUri.isBlank()) {
+            Icon(
+                imageVector = Icons.Default.BrokenImage,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun LabeledValueRow(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = value,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.End
+        )
     }
 }
 
@@ -509,9 +572,9 @@ fun historySourceLabel(sourceType: PinHistorySourceType): String {
     return when (sourceType) {
         PinHistorySourceType.SCREENSHOT -> "截图直贴"
         PinHistorySourceType.GALLERY_IMAGE -> "相册贴图"
-        PinHistorySourceType.CLIPBOARD_TEXT -> "剪贴板文字贴图"
-        PinHistorySourceType.OCR_TEXT -> "OCR 文字贴图"
+        PinHistorySourceType.CLIPBOARD_TEXT -> "剪贴板文字"
+        PinHistorySourceType.OCR_TEXT -> "OCR 文字"
         PinHistorySourceType.EDITOR_EXPORT -> "编辑后贴图"
-        PinHistorySourceType.RESTORED_PIN -> "历史恢复贴图"
+        PinHistorySourceType.RESTORED_PIN -> "历史恢复"
     }
 }

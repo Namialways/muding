@@ -25,7 +25,18 @@ data class PinHistoryRecord(
     val imageUri: String,
     val annotationSessionId: String?,
     val createdAt: Long,
-    val sourceType: PinHistorySourceType
+    val sourceType: PinHistorySourceType,
+    val displayName: String?,
+    val textPreview: String?,
+    val widthPx: Int?,
+    val heightPx: Int?
+)
+
+data class PinHistoryMetadata(
+    val displayName: String? = null,
+    val textPreview: String? = null,
+    val widthPx: Int? = null,
+    val heightPx: Int? = null
 )
 
 object PinHistoryStore {
@@ -35,7 +46,8 @@ object PinHistoryStore {
         context: Context,
         imageUri: String,
         annotationSessionId: String?,
-        sourceType: PinHistorySourceType
+        sourceType: PinHistorySourceType,
+        metadata: PinHistoryMetadata = PinHistoryMetadata()
     ): String {
         val existing = list(context).firstOrNull {
             it.imageUri == imageUri && it.annotationSessionId == annotationSessionId
@@ -48,7 +60,15 @@ object PinHistoryStore {
             imageUri = imageUri,
             annotationSessionId = annotationSessionId,
             createdAt = System.currentTimeMillis(),
-            sourceType = sourceType
+            sourceType = sourceType,
+            displayName = metadata.displayName?.trim().takeUnless { it.isNullOrBlank() },
+            textPreview = metadata.textPreview
+                ?.trim()
+                ?.replace(Regex("\\s+"), " ")
+                ?.take(120)
+                .takeUnless { it.isNullOrBlank() },
+            widthPx = metadata.widthPx?.takeIf { it > 0 },
+            heightPx = metadata.heightPx?.takeIf { it > 0 }
         )
         recordFile(context, record.id).writeText(serialize(record), Charsets.UTF_8)
         return record.id
@@ -111,6 +131,10 @@ object PinHistoryStore {
             put("annotationSessionId", record.annotationSessionId ?: "")
             put("createdAt", record.createdAt)
             put("sourceType", record.sourceType.value)
+            put("displayName", record.displayName ?: "")
+            put("textPreview", record.textPreview ?: "")
+            put("widthPx", record.widthPx ?: 0)
+            put("heightPx", record.heightPx ?: 0)
         }.toString()
     }
 
@@ -121,7 +145,11 @@ object PinHistoryStore {
             imageUri = json.getString("imageUri"),
             annotationSessionId = json.optString("annotationSessionId").ifBlank { null },
             createdAt = json.optLong("createdAt", 0L),
-            sourceType = PinHistorySourceType.fromValue(json.optString("sourceType"))
+            sourceType = PinHistorySourceType.fromValue(json.optString("sourceType")),
+            displayName = json.optString("displayName").ifBlank { null },
+            textPreview = json.optString("textPreview").ifBlank { null },
+            widthPx = json.optInt("widthPx", 0).takeIf { it > 0 },
+            heightPx = json.optInt("heightPx", 0).takeIf { it > 0 }
         )
     }
 }

@@ -28,6 +28,7 @@ import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.feature.pin.creation.EditorLaunchRequest
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
 import com.pixpin.android.domain.usecase.ClosedPinRecord
+import com.pixpin.android.domain.usecase.PinHistoryMetadata
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.feature.pin.runtime.PinManagerContent
 import com.pixpin.android.feature.pin.runtime.PinOverlayWindowController
@@ -89,6 +90,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val initialContentWidthPx = intent?.getIntExtra(EXTRA_INITIAL_CONTENT_WIDTH_PX, 0)?.takeIf { it > 0 }
         val initialContentHeightPx = intent?.getIntExtra(EXTRA_INITIAL_CONTENT_HEIGHT_PX, 0)?.takeIf { it > 0 }
         val historySourceType = PinHistorySourceType.fromValue(intent?.getStringExtra(EXTRA_HISTORY_SOURCE))
+        val historyDisplayName = intent?.getStringExtra(EXTRA_HISTORY_DISPLAY_NAME)
+        val historyTextPreview = intent?.getStringExtra(EXTRA_HISTORY_TEXT_PREVIEW)
         if (!imageUriString.isNullOrBlank()) {
             val imageUri = android.net.Uri.parse(imageUriString)
             serviceScope.launch {
@@ -103,7 +106,13 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         annotationSessionId = annotationSessionId,
                         initialContentWidthPx = initialContentWidthPx,
                         initialContentHeightPx = initialContentHeightPx,
-                        historySourceType = historySourceType
+                        historySourceType = historySourceType,
+                        historyMetadata = PinHistoryMetadata(
+                            displayName = historyDisplayName,
+                            textPreview = historyTextPreview,
+                            widthPx = initialContentWidthPx,
+                            heightPx = initialContentHeightPx
+                        )
                     )
                 }
             }
@@ -115,6 +124,9 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun restoreLastClosedOverlay() {
         val record = recentPinRepository.popMostRecent() ?: return
+        val historyRecord = pinHistoryRepository.list().firstOrNull {
+            it.imageUri == record.imageUri && it.annotationSessionId == record.annotationSessionId
+        }
         serviceScope.launch {
             decodeBitmap(android.net.Uri.parse(record.imageUri))?.let { bitmap ->
                 showPinOverlay(
@@ -123,7 +135,13 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     annotationSessionId = record.annotationSessionId,
                     initialContentWidthPx = null,
                     initialContentHeightPx = null,
-                    historySourceType = PinHistorySourceType.RESTORED_PIN
+                    historySourceType = PinHistorySourceType.RESTORED_PIN,
+                    historyMetadata = PinHistoryMetadata(
+                        displayName = historyRecord?.displayName,
+                        textPreview = historyRecord?.textPreview,
+                        widthPx = historyRecord?.widthPx,
+                        heightPx = historyRecord?.heightPx
+                    )
                 )
             }
         }
@@ -191,7 +209,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         annotationSessionId: String?,
         initialContentWidthPx: Int?,
         initialContentHeightPx: Int?,
-        historySourceType: PinHistorySourceType
+        historySourceType: PinHistorySourceType,
+        historyMetadata: PinHistoryMetadata
     ) {
         val overlayId = UUID.randomUUID().toString()
         val appearanceSettings = settingsRepository.getPinAppearanceSettings()
@@ -236,7 +255,11 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             recordPinHistoryIfNeeded(
                 imageUri = imageUriString,
                 annotationSessionId = annotationSessionId,
-                sourceType = historySourceType
+                sourceType = historySourceType,
+                metadata = historyMetadata.copy(
+                    widthPx = historyMetadata.widthPx ?: initialContentWidthPx ?: bitmap.width,
+                    heightPx = historyMetadata.heightPx ?: initialContentHeightPx ?: bitmap.height
+                )
             )
         }
         notifyManagerChanged()
@@ -258,14 +281,16 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun recordPinHistoryIfNeeded(
         imageUri: String,
         annotationSessionId: String?,
-        sourceType: PinHistorySourceType
+        sourceType: PinHistorySourceType,
+        metadata: PinHistoryMetadata
     ) {
         val pinHistorySettings = settingsRepository.getPinHistorySettings()
         if (!pinHistorySettings.enabled) return
         pinHistoryRepository.save(
             imageUri = imageUri,
             annotationSessionId = annotationSessionId,
-            sourceType = sourceType
+            sourceType = sourceType,
+            metadata = metadata
         )
         pinHistoryRepository.prune(
             maxCount = pinHistorySettings.maxCount,
@@ -400,6 +425,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         const val EXTRA_IMAGE_URI = "extra_image_uri"
         const val EXTRA_ANNOTATION_SESSION_ID = "extra_annotation_session_id"
         const val EXTRA_HISTORY_SOURCE = "extra_history_source"
+        const val EXTRA_HISTORY_DISPLAY_NAME = "extra_history_display_name"
+        const val EXTRA_HISTORY_TEXT_PREVIEW = "extra_history_text_preview"
         const val EXTRA_INITIAL_CONTENT_WIDTH_PX = "extra_initial_content_width_px"
         const val EXTRA_INITIAL_CONTENT_HEIGHT_PX = "extra_initial_content_height_px"
     }

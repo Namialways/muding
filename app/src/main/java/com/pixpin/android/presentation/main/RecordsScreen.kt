@@ -16,23 +16,28 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.pixpin.android.domain.usecase.PinHistoryRecord
 import com.pixpin.android.domain.usecase.PinHistorySourceType
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -46,9 +51,40 @@ fun RecordsScreen(
     onEditHistory: (PinHistoryRecord) -> Unit,
     onOpenStorageSettings: () -> Unit
 ) {
-    var selectedFilter by remember { mutableStateOf(RecordsFilter.ALL) }
-    val filteredRecords = remember(snapshot.pinHistoryRecords, selectedFilter) {
-        snapshot.pinHistoryRecords.filter { it.matches(selectedFilter) }
+    var selectedFilter by rememberSaveable { mutableStateOf(RecordsFilter.ALL) }
+    var selectedSort by rememberSaveable { mutableStateOf(RecordsSortOrder.NEWEST) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedRecordId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val selectedRecord = snapshot.pinHistoryRecords.firstOrNull { it.id == selectedRecordId }
+    LaunchedEffect(selectedRecordId, selectedRecord) {
+        if (selectedRecordId != null && selectedRecord == null) {
+            selectedRecordId = null
+        }
+    }
+
+    if (selectedRecord != null) {
+        RecordDetailScreen(
+            modifier = modifier,
+            record = selectedRecord,
+            onBack = { selectedRecordId = null },
+            onRestore = { onRestoreHistory(selectedRecord) },
+            onEdit = { onEditHistory(selectedRecord) },
+            onDelete = {
+                onDeleteHistory(selectedRecord)
+                selectedRecordId = null
+            }
+        )
+        return
+    }
+
+    val filteredRecords = remember(snapshot.pinHistoryRecords, selectedFilter, selectedSort, searchQuery) {
+        snapshot.pinHistoryRecords
+            .asSequence()
+            .filter { it.matches(selectedFilter) }
+            .filter { it.matchesSearch(searchQuery) }
+            .sortedWith(recordsComparator(selectedSort))
+            .toList()
     }
 
     LazyColumn(
@@ -59,9 +95,7 @@ fun RecordsScreen(
         contentPadding = PaddingValues(vertical = 20.dp)
     ) {
         item {
-            SectionHeader(
-                title = "记录中心"
-            )
+            SectionHeader(title = "记录中心")
         }
 
         item {
@@ -70,13 +104,13 @@ fun RecordsScreen(
                     modifier = Modifier.weight(1f),
                     title = "贴图历史",
                     value = snapshot.pinHistoryRecords.size.toString(),
-                    hint = "可恢复或继续编辑"
+                    hint = "可恢复"
                 )
                 MetricsCard(
                     modifier = Modifier.weight(1f),
                     title = "工程记录",
                     value = snapshot.sessionFiles.size.toString(),
-                    hint = "用于编辑器回溯"
+                    hint = "可继续编辑"
                 )
             }
         }
@@ -87,13 +121,13 @@ fun RecordsScreen(
                     modifier = Modifier.weight(1f),
                     title = "最近关闭",
                     value = snapshot.recentClosedPinCount.toString(),
-                    hint = "等待恢复的贴图"
+                    hint = "待恢复"
                 )
                 MetricsCard(
                     modifier = Modifier.weight(1f),
                     title = "缓存占用",
                     value = formatFileSize(snapshot.runtimeStorage.totalBytes),
-                    hint = "当前运行时文件"
+                    hint = "运行文件"
                 )
             }
         }
@@ -104,17 +138,27 @@ fun RecordsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("记录操作", style = MaterialTheme.typography.titleMedium)
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        },
+                        label = { Text("搜索记录") },
+                        placeholder = { Text("名称、文字、来源") }
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(onClick = onRefreshRecords, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Refresh, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("刷新记录")
+                            Text("刷新")
                         }
                         OutlinedButton(onClick = onOpenStorageSettings, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Storage, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("记录设置")
+                            Text("设置")
                         }
                     }
                 }
@@ -127,7 +171,7 @@ fun RecordsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("筛选记录", style = MaterialTheme.typography.titleMedium)
+                    Text("筛选", style = MaterialTheme.typography.titleMedium)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -140,13 +184,26 @@ fun RecordsScreen(
                             )
                         }
                     }
+                    Text("排序", style = MaterialTheme.typography.titleMedium)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        RecordsSortOrder.entries.forEach { sortOrder ->
+                            SelectablePill(
+                                text = sortOrder.title,
+                                selected = selectedSort == sortOrder,
+                                onClick = { selectedSort = sortOrder }
+                            )
+                        }
+                    }
                 }
             }
         }
 
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("贴图历史", style = MaterialTheme.typography.titleLarge)
+                Text("结果", style = MaterialTheme.typography.titleLarge)
                 Text(
                     text = "${filteredRecords.size} 条",
                     style = MaterialTheme.typography.bodySmall,
@@ -178,8 +235,8 @@ fun RecordsScreen(
         } else if (filteredRecords.isEmpty()) {
             item {
                 EmptyStateCard(
-                    title = "当前筛选下没有记录",
-                    description = "换一个筛选条件试试，或者先去创建新的贴图。"
+                    title = "没有匹配结果",
+                    description = "换一个关键词、筛选或排序试试。"
                 )
             }
         } else {
@@ -187,8 +244,7 @@ fun RecordsScreen(
                 PinHistoryRecordCard(
                     item = item,
                     onRestore = { onRestoreHistory(item) },
-                    onEdit = { onEditHistory(item) },
-                    onDelete = { onDeleteHistory(item) }
+                    onOpenDetails = { selectedRecordId = item.id }
                 )
             }
         }
@@ -211,5 +267,28 @@ private fun PinHistoryRecord.matches(filter: RecordsFilter): Boolean {
         )
 
         RecordsFilter.EDITABLE -> !annotationSessionId.isNullOrBlank()
+    }
+}
+
+private fun PinHistoryRecord.matchesSearch(query: String): Boolean {
+    val normalizedQuery = query.trim().lowercase(Locale.getDefault())
+    if (normalizedQuery.isBlank()) return true
+    val haystacks = listOfNotNull(
+        displayName,
+        textPreview,
+        imageUri.substringAfterLast('/'),
+        historySourceLabel(sourceType),
+        formatTimestamp(createdAt)
+    )
+    return haystacks.any { it.lowercase(Locale.getDefault()).contains(normalizedQuery) }
+}
+
+private fun recordsComparator(sortOrder: RecordsSortOrder): Comparator<PinHistoryRecord> {
+    return when (sortOrder) {
+        RecordsSortOrder.NEWEST -> compareByDescending<PinHistoryRecord> { it.createdAt }
+        RecordsSortOrder.OLDEST -> compareBy<PinHistoryRecord> { it.createdAt }
+        RecordsSortOrder.SOURCE -> compareBy<PinHistoryRecord>({ historySourceLabel(it.sourceType) }, { -it.createdAt })
+        RecordsSortOrder.EDITABLE -> compareByDescending<PinHistoryRecord> { !it.annotationSessionId.isNullOrBlank() }
+            .thenByDescending { it.createdAt }
     }
 }
