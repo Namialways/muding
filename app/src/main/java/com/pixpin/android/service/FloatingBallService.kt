@@ -80,9 +80,11 @@ import com.pixpin.android.data.repository.RecentPinRepository
 import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.domain.usecase.FloatingBallTheme
 import com.pixpin.android.domain.usecase.ScreenshotManager
+import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.feature.capture.CaptureDispatchRequest
 import com.pixpin.android.feature.capture.CaptureFlowCoordinator
 import com.pixpin.android.feature.ocr.OcrFlowCoordinator
+import com.pixpin.android.presentation.bridge.ForegroundLaunchBridgeActivity
 import com.pixpin.android.presentation.crop.CaptureCropOverlay
 import com.pixpin.android.presentation.ocr.OcrResultActivity
 import com.pixpin.android.presentation.source.ClipboardTextPinActivity
@@ -450,8 +452,15 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     )
                 )
 
+                val launchBeforeDismiss =
+                    preparedResult.resolvedAction == CaptureResultAction.OPEN_EDITOR
+                if (launchBeforeDismiss) {
+                    captureFlowCoordinator.dispatchPreparedResult(this@FloatingBallService, preparedResult)
+                }
                 dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
-                captureFlowCoordinator.dispatchPreparedResult(this@FloatingBallService, preparedResult)
+                if (!launchBeforeDismiss) {
+                    captureFlowCoordinator.dispatchPreparedResult(this@FloatingBallService, preparedResult)
+                }
                 restoreFloatingBall()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -470,19 +479,17 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     bitmap = bitmap,
                     cropRectInBitmap = cropRectInBitmap
                 )
-                dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
                 startActivity(
-                    Intent(this@FloatingBallService, OcrResultActivity::class.java).apply {
-                        addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                                Intent.FLAG_ACTIVITY_NO_ANIMATION
-                        )
-                        putExtra(OcrResultActivity.EXTRA_RECOGNIZED_TEXT, preparedResult.recognizedText)
-                        putExtra(OcrResultActivity.EXTRA_FINISH_TO_BACKGROUND, true)
-                        putExtra(OcrResultActivity.EXTRA_RESTORE_FLOATING_BALL, true)
-                    }
+                    ForegroundLaunchBridgeActivity.createIntent(
+                        context = this@FloatingBallService,
+                        targetIntent = Intent(this@FloatingBallService, OcrResultActivity::class.java).apply {
+                            putExtra(OcrResultActivity.EXTRA_RECOGNIZED_TEXT, preparedResult.recognizedText)
+                            putExtra(OcrResultActivity.EXTRA_FINISH_TO_BACKGROUND, true)
+                            putExtra(OcrResultActivity.EXTRA_RESTORE_FLOATING_BALL, true)
+                        }
+                    )
                 )
+                dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
             } catch (e: Exception) {
                 Toast.makeText(
                     this@FloatingBallService,

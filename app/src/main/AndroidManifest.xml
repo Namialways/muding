@@ -42,6 +42,13 @@
             android:theme="@style/Theme.PixPinAndroid" />
 
         <activity
+            android:name=".presentation.bridge.ForegroundLaunchBridgeActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
             android:name=".presentation.crop.RegionCropActivity"
             android:exported="false"
             android:theme="@style/Theme.PixPinAndroid" />

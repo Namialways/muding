@@ -1,5 +1,6 @@
 package com.pixpin.android.feature.pin.creation
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -15,6 +16,7 @@ import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.domain.usecase.PinHistoryMetadata
 import com.pixpin.android.domain.usecase.PinHistorySourceType
 import com.pixpin.android.feature.pin.source.PinSourceAssetResolver
+import com.pixpin.android.presentation.bridge.ForegroundLaunchBridgeActivity
 import com.pixpin.android.presentation.editor.AnnotationEditorActivity
 import com.pixpin.android.service.PinOverlayService
 import kotlinx.coroutines.Dispatchers
@@ -188,6 +190,19 @@ class PinCreationCoordinator(
         request: EditorLaunchRequest,
         launchInNewTask: Boolean = false
     ) {
+        if (launchInNewTask && context !is Activity) {
+            context.startActivity(
+                ForegroundLaunchBridgeActivity.createIntent(
+                    context = context,
+                    targetIntent = createEditorIntent(
+                        context = context,
+                        request = request,
+                        launchInNewTask = false
+                    )
+                )
+            )
+            return
+        }
         context.startActivity(createEditorIntent(context, request, launchInNewTask))
     }
 
