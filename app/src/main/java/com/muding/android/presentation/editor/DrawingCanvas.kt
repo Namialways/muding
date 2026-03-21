@@ -51,13 +51,30 @@ import kotlin.math.sin
 
 private const val SHAPE_CREATION_THRESHOLD = 6f
 private const val SELECTION_HIT_RADIUS = 18f
+private const val HANDLE_HIT_RADIUS = 24f
+private const val MIN_CIRCLE_RADIUS = 16f
+
+private sealed interface PathResizeHandle {
+    data object ArrowStart : PathResizeHandle
+    data object ArrowEnd : PathResizeHandle
+    data object RectTopLeft : PathResizeHandle
+    data object RectTopRight : PathResizeHandle
+    data object RectBottomLeft : PathResizeHandle
+    data object RectBottomRight : PathResizeHandle
+    data object CircleRadius : PathResizeHandle
+}
+
+private data class ActiveResizeState(
+    val index: Int,
+    val handle: PathResizeHandle
+)
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DrawingCanvas(
     modifier: Modifier = Modifier,
     paths: List<DrawingPath>,
-    currentTool: DrawingTool,
+    currentTool: DrawingTool?,
     currentColor: Color,
     strokeWidth: Float,
     eraserSize: Float,
@@ -79,6 +96,7 @@ fun DrawingCanvas(
     var startPoint by remember { mutableStateOf<Offset?>(null) }
     var endPoint by remember { mutableStateOf<Offset?>(null) }
     var movingPathIndex by remember { mutableStateOf<Int?>(null) }
+    var resizingState by remember { mutableStateOf<ActiveResizeState?>(null) }
     var showTextDialog by remember { mutableStateOf(false) }
     var textDraft by remember { mutableStateOf("") }
     var textTargetIndex by remember { mutableStateOf<Int?>(null) }
@@ -121,6 +139,7 @@ fun DrawingCanvas(
         startPoint = null
         endPoint = null
         movingPathIndex = null
+        resizingState = null
     }
 
     Canvas(
@@ -207,6 +226,19 @@ fun DrawingCanvas(
 
                     DrawingTool.ARROW, DrawingTool.RECTANGLE, DrawingTool.CIRCLE -> detectDragGestures(
                         onDragStart = { offset ->
+                            val selectedIndex = selectedPathIndex
+                            val selectedPath = selectedIndex?.let(paths::getOrNull)
+                            val activeHandle = if (selectedPath != null && toolFor(selectedPath) == currentTool) {
+                                resizeHandleHit(selectedPath, offset)
+                            } else {
+                                null
+                            }
+                            if (selectedIndex != null && activeHandle != null) {
+                                resizingState = ActiveResizeState(selectedIndex, activeHandle)
+                                onPathSelectionChanged(selectedIndex, selectedPath)
+                                return@detectDragGestures
+                            }
+
                             val hitIndex = hitIndexAt(offset, currentTool)
                             if (hitIndex != null) {
                                 movingPathIndex = hitIndex
@@ -218,51 +250,69 @@ fun DrawingCanvas(
                             }
                         },
                         onDrag = { change, dragAmount ->
-                            val movingIndex = movingPathIndex
-                            if (movingIndex != null) {
+                            val activeResize = resizingState
+                            if (activeResize != null) {
+                                val path = paths.getOrNull(activeResize.index) ?: return@detectDragGestures
+                                onPathUpdated(
+                                    activeResize.index,
+                                    resizePath(
+                                        path = path,
+                                        handle = activeResize.handle,
+                                        touch = change.position
+                                    )
+                                )
+                            } else {
+                                val movingIndex = movingPathIndex
+                                if (movingIndex != null) {
                                 paths.getOrNull(movingIndex)?.let { path ->
                                     onPathUpdated(movingIndex, movePath(path, dragAmount))
                                 }
-                            } else {
-                                endPoint = change.position
+                                } else {
+                                    endPoint = change.position
+                                }
                             }
                             change.consume()
                         },
                         onDragEnd = {
-                            val movingIndex = movingPathIndex
-                            if (movingIndex != null) {
-                                onPathSelectionChanged(movingIndex, paths.getOrNull(movingIndex))
+                            val activeResize = resizingState
+                            if (activeResize != null) {
+                                onPathSelectionChanged(activeResize.index, paths.getOrNull(activeResize.index))
                             } else {
-                                val start = startPoint
-                                val end = endPoint
-                                if (start != null && end != null && (end - start).getDistance() >= SHAPE_CREATION_THRESHOLD) {
-                                    val newPath = when (currentTool) {
-                                        DrawingTool.ARROW -> DrawingPath.ArrowPath(
-                                            start = start,
-                                            end = end,
-                                            color = currentColor,
-                                            strokeWidth = strokeWidth
-                                        )
+                                val movingIndex = movingPathIndex
+                                if (movingIndex != null) {
+                                onPathSelectionChanged(movingIndex, paths.getOrNull(movingIndex))
+                                } else {
+                                    val start = startPoint
+                                    val end = endPoint
+                                    if (start != null && end != null && (end - start).getDistance() >= SHAPE_CREATION_THRESHOLD) {
+                                        val newPath = when (currentTool) {
+                                            DrawingTool.ARROW -> DrawingPath.ArrowPath(
+                                                start = start,
+                                                end = end,
+                                                color = currentColor,
+                                                strokeWidth = strokeWidth
+                                            )
 
-                                        DrawingTool.RECTANGLE -> DrawingPath.RectanglePath(
-                                            topLeft = Offset(min(start.x, end.x), min(start.y, end.y)),
-                                            bottomRight = Offset(max(start.x, end.x), max(start.y, end.y)),
-                                            color = currentColor,
-                                            strokeWidth = strokeWidth,
-                                            filled = shapeFilled
-                                        )
+                                            DrawingTool.RECTANGLE -> DrawingPath.RectanglePath(
+                                                topLeft = Offset(min(start.x, end.x), min(start.y, end.y)),
+                                                bottomRight = Offset(max(start.x, end.x), max(start.y, end.y)),
+                                                color = currentColor,
+                                                strokeWidth = strokeWidth,
+                                                filled = shapeFilled
+                                            )
 
-                                        DrawingTool.CIRCLE -> DrawingPath.CirclePath(
-                                            center = start,
-                                            radius = (end - start).getDistance(),
-                                            color = currentColor,
-                                            strokeWidth = strokeWidth,
-                                            filled = shapeFilled
-                                        )
+                                            DrawingTool.CIRCLE -> DrawingPath.CirclePath(
+                                                center = start,
+                                                radius = (end - start).getDistance(),
+                                                color = currentColor,
+                                                strokeWidth = strokeWidth,
+                                                filled = shapeFilled
+                                            )
 
-                                        else -> null
+                                            else -> null
+                                        }
+                                        newPath?.let(onPathAdded)
                                     }
-                                    newPath?.let(onPathAdded)
                                 }
                             }
                             resetDragState()
@@ -290,6 +340,69 @@ fun DrawingCanvas(
                             val movingIndex = movingPathIndex
                             if (movingIndex != null) {
                                 onPathSelectionChanged(movingIndex, paths.getOrNull(movingIndex))
+                            }
+                            resetDragState()
+                        },
+                        onDragCancel = { resetDragState() }
+                    )
+
+                    null -> detectDragGestures(
+                        onDragStart = { offset ->
+                            val selectedIndex = selectedPathIndex
+                            val selectedPath = selectedIndex?.let(paths::getOrNull)
+                            val activeHandle = selectedPath?.let { resizeHandleHit(it, offset) }
+                            if (selectedIndex != null && activeHandle != null) {
+                                resizingState = ActiveResizeState(selectedIndex, activeHandle)
+                                onPathSelectionChanged(selectedIndex, selectedPath)
+                                return@detectDragGestures
+                            }
+
+                            val hitIndex = hitIndexAt(offset)
+                            if (hitIndex != null) {
+                                movingPathIndex = hitIndex
+                                onPathSelectionChanged(hitIndex, paths.getOrNull(hitIndex))
+                            } else {
+                                onPathSelectionChanged(null, null)
+                            }
+                        },
+                        onDrag = { change, dragAmount ->
+                            val activeResize = resizingState
+                            when {
+                                activeResize != null -> {
+                                    val path = paths.getOrNull(activeResize.index) ?: return@detectDragGestures
+                                    onPathUpdated(
+                                        activeResize.index,
+                                        resizePath(
+                                            path = path,
+                                            handle = activeResize.handle,
+                                            touch = change.position
+                                        )
+                                    )
+                                }
+
+                                movingPathIndex != null -> {
+                                    val movingIndex = movingPathIndex ?: return@detectDragGestures
+                                    val path = paths.getOrNull(movingIndex) ?: return@detectDragGestures
+                                    onPathUpdated(movingIndex, movePath(path, dragAmount))
+                                }
+
+                                else -> Unit
+                            }
+                            change.consume()
+                        },
+                        onDragEnd = {
+                            val activeResize = resizingState
+                            val movingIndex = movingPathIndex
+                            when {
+                                activeResize != null -> {
+                                    onPathSelectionChanged(activeResize.index, paths.getOrNull(activeResize.index))
+                                }
+
+                                movingIndex != null -> {
+                                    onPathSelectionChanged(movingIndex, paths.getOrNull(movingIndex))
+                                }
+
+                                else -> Unit
                             }
                             resetDragState()
                         },
@@ -329,10 +442,26 @@ fun DrawingCanvas(
                     }
 
                     DrawingTool.ERASER -> Unit
+
+                    null -> detectTapGestures(
+                        onTap = { offset ->
+                            val hitIndex = hitIndexAt(offset)
+                            onPathSelectionChanged(hitIndex, hitIndex?.let(paths::getOrNull))
+                        },
+                        onDoubleTap = { offset ->
+                            val hitIndex = hitIndexAt(offset)
+                            val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
+                            if (path != null) {
+                                onPathSelectionChanged(hitIndex, path)
+                                openTextDialog(hitIndex, path.position, path.text)
+                            }
+                        }
+                    )
                 }
             }
             .pointerInput(currentTool, selectedPathIndex, paths.size) {
-                if (currentTool == DrawingTool.TEXT) {
+                val selectedText = selectedPathIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
+                if (currentTool == DrawingTool.TEXT || (currentTool == null && selectedText != null)) {
                     detectTransformGestures { _, pan, zoom, rotation ->
                         val index = selectedPathIndex ?: return@detectTransformGestures
                         val path = paths.getOrNull(index) as? DrawingPath.TextPath ?: return@detectTransformGestures
@@ -569,8 +698,35 @@ private fun DrawScope.drawOutlinedText(
 }
 
 private fun DrawScope.drawPathSelection(path: DrawingPath) {
-    val bounds = boundsForPath(path) ?: return
-    drawSelectionBounds(bounds, selectionAccentColor(path))
+    when (path) {
+        is DrawingPath.ArrowPath -> drawArrowSelection(path)
+        is DrawingPath.CirclePath -> drawCircleSelection(path)
+        else -> {
+            val bounds = boundsForPath(path) ?: return
+            drawSelectionBounds(bounds, selectionAccentColor(path))
+        }
+    }
+}
+
+private fun DrawScope.drawArrowSelection(path: DrawingPath.ArrowPath) {
+    drawLine(
+        color = Color.White.copy(alpha = 0.92f),
+        start = path.start,
+        end = path.end,
+        strokeWidth = max(path.strokeWidth + 4f, 5f)
+    )
+    drawHandle(path.start, path.color)
+    drawHandle(path.end, path.color)
+}
+
+private fun DrawScope.drawCircleSelection(path: DrawingPath.CirclePath) {
+    drawCircle(
+        color = Color.White.copy(alpha = 0.95f),
+        radius = path.radius,
+        center = path.center,
+        style = Stroke(width = 2f)
+    )
+    drawHandle(Offset(path.center.x + path.radius, path.center.y), path.color)
 }
 
 private fun DrawScope.drawSelectionBounds(bounds: Rect, accent: Color) {
@@ -588,9 +744,13 @@ private fun DrawScope.drawSelectionBounds(bounds: Rect, accent: Color) {
         bounds.bottomRight
     )
     handles.forEach { handle ->
-        drawCircle(color = accent, radius = handleRadius, center = handle, style = Fill)
-        drawCircle(color = Color.White, radius = handleRadius, center = handle, style = Stroke(width = 1.5f))
+        drawHandle(handle, accent, handleRadius)
     }
+}
+
+private fun DrawScope.drawHandle(center: Offset, accent: Color, radius: Float = 6f) {
+    drawCircle(color = accent, radius = radius, center = center, style = Fill)
+    drawCircle(color = Color.White, radius = radius, center = center, style = Stroke(width = 1.5f))
 }
 
 private fun selectionAccentColor(path: DrawingPath): Color {
@@ -707,8 +867,8 @@ private fun erasePenPathPartially(
 
 private fun isPathHit(path: DrawingPath, touch: Offset, radius: Float): Boolean {
     return when (path) {
-        is DrawingPath.PenPath -> path.points.any { (it - touch).getDistance() <= max(radius, path.strokeWidth * 2f) }
-        is DrawingPath.ArrowPath -> distanceToSegment(touch, path.start, path.end) <= max(radius, path.strokeWidth * 2f)
+        is DrawingPath.PenPath -> distanceToPolyline(touch, path.points) <= max(radius * 1.35f, path.strokeWidth * 2.8f)
+        is DrawingPath.ArrowPath -> distanceToSegment(touch, path.start, path.end) <= max(radius * 1.25f, path.strokeWidth * 2.6f)
         is DrawingPath.RectanglePath -> Rect(path.topLeft, path.bottomRight).inflate(radius).contains(touch)
         is DrawingPath.CirclePath -> {
             val distance = (touch - path.center).getDistance()
@@ -716,6 +876,35 @@ private fun isPathHit(path: DrawingPath, touch: Offset, radius: Float): Boolean 
             else abs(distance - path.radius) <= max(radius, path.strokeWidth * 2f)
         }
         is DrawingPath.TextPath -> estimateTextBounds(path).inflate(radius).contains(touch)
+    }
+}
+
+private fun resizeHandleHit(path: DrawingPath, touch: Offset): PathResizeHandle? {
+    return when (path) {
+        is DrawingPath.ArrowPath -> listOf(
+            PathResizeHandle.ArrowStart to path.start,
+            PathResizeHandle.ArrowEnd to path.end
+        ).firstOrNull { (_, center) ->
+            (center - touch).getDistance() <= HANDLE_HIT_RADIUS * 1.2f
+        }?.first
+
+        is DrawingPath.RectanglePath -> listOf(
+            PathResizeHandle.RectTopLeft to path.topLeft,
+            PathResizeHandle.RectTopRight to Offset(path.bottomRight.x, path.topLeft.y),
+            PathResizeHandle.RectBottomLeft to Offset(path.topLeft.x, path.bottomRight.y),
+            PathResizeHandle.RectBottomRight to path.bottomRight
+        ).firstOrNull { (_, center) ->
+            (center - touch).getDistance() <= HANDLE_HIT_RADIUS
+        }?.first
+
+        is DrawingPath.CirclePath -> {
+            val handle = Offset(path.center.x + path.radius, path.center.y)
+            PathResizeHandle.CircleRadius.takeIf {
+                (handle - touch).getDistance() <= HANDLE_HIT_RADIUS
+            }
+        }
+
+        else -> null
     }
 }
 
@@ -729,6 +918,64 @@ private fun movePath(path: DrawingPath, delta: Offset): DrawingPath {
         is DrawingPath.RectanglePath -> path.copy(topLeft = path.topLeft + delta, bottomRight = path.bottomRight + delta)
         is DrawingPath.CirclePath -> path.copy(center = path.center + delta)
         is DrawingPath.TextPath -> path.copy(position = path.position + delta)
+    }
+}
+
+private fun resizePath(path: DrawingPath, handle: PathResizeHandle, touch: Offset): DrawingPath {
+    return when {
+        path is DrawingPath.ArrowPath && handle is PathResizeHandle.ArrowStart -> {
+            path.copy(start = touch)
+        }
+
+        path is DrawingPath.ArrowPath && handle is PathResizeHandle.ArrowEnd -> {
+            path.copy(end = touch)
+        }
+
+        path is DrawingPath.RectanglePath -> {
+            val currentTopLeft = path.topLeft
+            val currentBottomRight = path.bottomRight
+            val updatedTopLeft = when (handle) {
+                PathResizeHandle.RectTopLeft,
+                PathResizeHandle.RectBottomLeft -> Offset(touch.x, currentTopLeft.y)
+
+                else -> currentTopLeft
+            }
+            val updatedBottomRight = when (handle) {
+                PathResizeHandle.RectTopRight,
+                PathResizeHandle.RectBottomRight -> Offset(touch.x, currentBottomRight.y)
+
+                else -> currentBottomRight
+            }
+            val topY = when (handle) {
+                PathResizeHandle.RectTopLeft,
+                PathResizeHandle.RectTopRight -> touch.y
+
+                else -> currentTopLeft.y
+            }
+            val bottomY = when (handle) {
+                PathResizeHandle.RectBottomLeft,
+                PathResizeHandle.RectBottomRight -> touch.y
+
+                else -> currentBottomRight.y
+            }
+
+            path.copy(
+                topLeft = Offset(
+                    x = min(updatedTopLeft.x, updatedBottomRight.x),
+                    y = min(topY, bottomY)
+                ),
+                bottomRight = Offset(
+                    x = max(updatedTopLeft.x, updatedBottomRight.x),
+                    y = max(topY, bottomY)
+                )
+            )
+        }
+
+        path is DrawingPath.CirclePath && handle is PathResizeHandle.CircleRadius -> {
+            path.copy(radius = max((touch - path.center).getDistance(), MIN_CIRCLE_RADIUS))
+        }
+
+        else -> path
     }
 }
 
@@ -761,6 +1008,17 @@ private fun distanceToSegment(point: Offset, start: Offset, end: Offset): Float 
     val clamped = t.coerceIn(0f, 1f)
     val projection = Offset(start.x + (clamped * segment.x), start.y + (clamped * segment.y))
     return (point - projection).getDistance()
+}
+
+private fun distanceToPolyline(point: Offset, points: List<Offset>): Float {
+    if (points.isEmpty()) return Float.MAX_VALUE
+    if (points.size == 1) return (point - points.first()).getDistance()
+
+    var minDistance = Float.MAX_VALUE
+    for (index in 0 until points.lastIndex) {
+        minDistance = min(minDistance, distanceToSegment(point, points[index], points[index + 1]))
+    }
+    return minDistance
 }
 
 private fun toolFor(path: DrawingPath): DrawingTool {

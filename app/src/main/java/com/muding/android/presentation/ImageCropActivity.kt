@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.lifecycleScope
+import com.muding.android.R
 import com.muding.android.app.AppGraph
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.feature.capture.CaptureDispatchRequest
@@ -43,7 +44,7 @@ class ImageCropActivity : ComponentActivity() {
 
         val uriString = intent.getStringExtra(EXTRA_IMAGE_URI)
         if (uriString.isNullOrBlank()) {
-            Toast.makeText(this, "Unable to load image", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.crop_image_load_failed), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -57,7 +58,11 @@ class ImageCropActivity : ComponentActivity() {
                 throw IllegalStateException("Bitmap decode failed")
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "Image load failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                getString(R.string.crop_image_load_failed_with_reason, e.message ?: ""),
+                Toast.LENGTH_SHORT
+            ).show()
             finish()
             return
         }
@@ -96,7 +101,11 @@ class ImageCropActivity : ComponentActivity() {
                 }
                 finish()
             } catch (e: Exception) {
-                Toast.makeText(this@ImageCropActivity, "Crop failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@ImageCropActivity,
+                    getString(R.string.crop_operation_failed, e.message ?: ""),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -118,7 +127,11 @@ class ImageCropActivity : ComponentActivity() {
                 )
                 finish()
             } catch (e: Exception) {
-                Toast.makeText(this@ImageCropActivity, "OCR failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@ImageCropActivity,
+                    getString(R.string.crop_ocr_failed, e.message ?: ""),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }

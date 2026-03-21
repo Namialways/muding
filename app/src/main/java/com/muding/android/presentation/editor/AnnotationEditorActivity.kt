@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,9 +40,11 @@ import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TextFields
@@ -61,13 +64,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
@@ -153,6 +164,8 @@ class AnnotationEditorActivity : ComponentActivity() {
     @Composable
     private fun AnnotationEditorScreen() {
         val bitmap = capturedBitmap ?: return
+        var canvasScale by remember { mutableStateOf(1f) }
+        var canvasOffset by remember { mutableStateOf(Offset.Zero) }
 
         Scaffold(
             topBar = {
@@ -165,7 +178,13 @@ class AnnotationEditorActivity : ComponentActivity() {
                     canUndo = viewModel.canUndo(),
                     canRedo = viewModel.canRedo(),
                     onUndo = { viewModel.undo() },
-                    onRedo = { viewModel.redo() }
+                    onRedo = { viewModel.redo() },
+                    canDeleteSelection = viewModel.selectedPathIndex.value != null,
+                    onDeleteSelection = { viewModel.deleteSelectedPath() },
+                    onResetViewport = {
+                        canvasScale = 1f
+                        canvasOffset = Offset.Zero
+                    }
                 )
             },
             bottomBar = { EditorBottomBar(viewModel = viewModel) }
@@ -178,6 +197,7 @@ class AnnotationEditorActivity : ComponentActivity() {
             ) {
                 val imageAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height.toFloat()
                 val containerAspect = maxWidth.value / maxHeight.value
+                val density = LocalDensity.current
                 val imageModifier = if (containerAspect > imageAspect) {
                     Modifier
                         .fillMaxHeight()
@@ -187,6 +207,24 @@ class AnnotationEditorActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .aspectRatio(imageAspect)
                 }
+                val contentWidthPx = with(density) {
+                    if (containerAspect > imageAspect) {
+                        maxHeight.toPx() * imageAspect
+                    } else {
+                        maxWidth.toPx()
+                    }
+                }
+                val contentHeightPx = with(density) {
+                    if (containerAspect > imageAspect) {
+                        maxHeight.toPx()
+                    } else {
+                        maxWidth.toPx() / imageAspect
+                    }
+                }
+                val canTransformCanvas = currentToolAllowsViewportTransform(
+                    tool = viewModel.currentTool.value,
+                    selectedPath = viewModel.selectedPath()
+                )
 
                 Surface(
                     modifier = Modifier
@@ -196,7 +234,38 @@ class AnnotationEditorActivity : ComponentActivity() {
                     tonalElevation = 2.dp,
                     shadowElevation = 8.dp
                 ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = canvasScale
+                                scaleY = canvasScale
+                                translationX = canvasOffset.x
+                                translationY = canvasOffset.y
+                            }
+                            .pointerInput(
+                                canTransformCanvas,
+                                canvasScale,
+                                contentWidthPx,
+                                contentHeightPx
+                            ) {
+                                if (canTransformCanvas) {
+                                    detectTransformGestures(
+                                        panZoomLock = true
+                                    ) { _, pan, zoom, _ ->
+                                        val newScale = (canvasScale * zoom).coerceIn(1f, 4f)
+                                        val maxOffsetX = ((contentWidthPx * newScale) - contentWidthPx) / 2f
+                                        val maxOffsetY = ((contentHeightPx * newScale) - contentHeightPx) / 2f
+                                        val nextOffset = Offset(
+                                            x = (canvasOffset.x + pan.x).coerceIn(-maxOffsetX, maxOffsetX),
+                                            y = (canvasOffset.y + pan.y).coerceIn(-maxOffsetY, maxOffsetY)
+                                        )
+                                        canvasScale = newScale
+                                        canvasOffset = nextOffset
+                                    }
+                                }
+                            }
+                    ) {
                         Image(
                             bitmap = bitmap.asImageBitmap(),
                             contentDescription = stringResource(R.string.editor_canvas_description),
@@ -374,7 +443,10 @@ fun EditorTopBar(
     canUndo: Boolean,
     canRedo: Boolean,
     onUndo: () -> Unit,
-    onRedo: () -> Unit
+    onRedo: () -> Unit,
+    canDeleteSelection: Boolean,
+    onDeleteSelection: () -> Unit,
+    onResetViewport: () -> Unit
 ) {
     TopAppBar(
         title = { Text(stringResource(R.string.editor_title)) },
@@ -389,6 +461,12 @@ fun EditorTopBar(
             }
             IconButton(onClick = onRedo, enabled = canRedo) {
                 Icon(Icons.Default.Redo, contentDescription = stringResource(R.string.action_redo))
+            }
+            IconButton(onClick = onResetViewport) {
+                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_reset_view))
+            }
+            IconButton(onClick = onDeleteSelection, enabled = canDeleteSelection) {
+                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.action_delete))
             }
             IconButton(onClick = onRecrop) {
                 Icon(Icons.Default.Crop, contentDescription = stringResource(R.string.action_recrop))
@@ -414,14 +492,18 @@ fun EditorTopBar(
 fun EditorBottomBar(viewModel: AnnotationViewModel) {
     val currentTool = viewModel.currentTool.value
     val selectedPath = viewModel.selectedPath()
-    val showStrokeControls = currentTool in setOf(
-        DrawingTool.PEN,
-        DrawingTool.ARROW,
-        DrawingTool.RECTANGLE,
-        DrawingTool.CIRCLE
-    )
+    val showStrokeControls =
+        currentTool in setOf(DrawingTool.PEN, DrawingTool.ARROW, DrawingTool.RECTANGLE, DrawingTool.CIRCLE) ||
+            selectedPath is DrawingPath.PenPath ||
+            selectedPath is DrawingPath.ArrowPath ||
+            selectedPath is DrawingPath.RectanglePath ||
+            selectedPath is DrawingPath.CirclePath
     val showTextControls = currentTool == DrawingTool.TEXT || selectedPath is DrawingPath.TextPath
-    val showFillControls = currentTool == DrawingTool.RECTANGLE || currentTool == DrawingTool.CIRCLE
+    val showFillControls =
+        currentTool == DrawingTool.RECTANGLE ||
+            currentTool == DrawingTool.CIRCLE ||
+            selectedPath is DrawingPath.RectanglePath ||
+            selectedPath is DrawingPath.CirclePath
     val showEraserControls = currentTool == DrawingTool.ERASER
 
     val tools = listOf(
@@ -621,4 +703,11 @@ fun ColorButton(
             )
             .clickable(onClick = onClick)
     )
+}
+
+private fun currentToolAllowsViewportTransform(
+    tool: DrawingTool?,
+    selectedPath: DrawingPath?
+): Boolean {
+    return tool == null && selectedPath == null
 }

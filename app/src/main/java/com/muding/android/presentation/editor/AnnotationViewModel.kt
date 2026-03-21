@@ -14,7 +14,7 @@ enum class EraserMode {
 
 class AnnotationViewModel : ViewModel() {
 
-    val currentTool = mutableStateOf(DrawingTool.PEN)
+    val currentTool = mutableStateOf<DrawingTool?>(null)
     val currentColor = mutableStateOf(Color(0xFFF44336))
     val strokeWidth = mutableStateOf(6f)
     val eraserSize = mutableStateOf(28f)
@@ -105,9 +105,9 @@ class AnnotationViewModel : ViewModel() {
     fun canRedo(): Boolean = undoPaths.isNotEmpty()
 
     fun selectTool(tool: DrawingTool) {
-        currentTool.value = tool
+        currentTool.value = if (currentTool.value == tool) null else tool
         val selected = selectedPath()
-        if (selected != null && toolFor(selected) != tool) {
+        if (currentTool.value != null && selected != null && toolFor(selected) != currentTool.value) {
             selectedPathIndex.value = null
         }
     }
@@ -148,13 +148,16 @@ class AnnotationViewModel : ViewModel() {
     fun selectPath(index: Int?, path: DrawingPath?) {
         selectedPathIndex.value = index
         if (path != null) {
-            currentTool.value = toolFor(path)
             syncControlsFromPath(path)
         }
     }
 
     fun clearSelection() {
         selectedPathIndex.value = null
+    }
+
+    fun deleteSelectedPath() {
+        selectedPathIndex.value?.let(::removePath)
     }
 
     private fun syncControlsFromPath(path: DrawingPath) {

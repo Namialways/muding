@@ -1,4 +1,4 @@
-package com.muding.android.presentation.crop
+﻿package com.muding.android.presentation.crop
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
@@ -31,7 +31,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.muding.android.R
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -56,7 +58,7 @@ fun CaptureCropOverlay(
     ) {
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "�ü�ԭͼ",
+            contentDescription = stringResource(R.string.crop_overlay_image_description),
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(imageRectOnScreen) {
@@ -185,7 +187,7 @@ fun CaptureCropOverlay(
         }
 
         Text(
-            text = "�����ȫ����ͼ����ק�ɴ������ƶ�������ѡ����",
+            text = stringResource(R.string.crop_overlay_hint),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 16.dp),
@@ -201,7 +203,7 @@ fun CaptureCropOverlay(
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "�ر�",
+                contentDescription = stringResource(R.string.action_cancel),
                 tint = Color.White
             )
         }
@@ -218,7 +220,7 @@ fun CaptureCropOverlay(
             ) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "ȷ��",
+                    contentDescription = stringResource(R.string.crop_overlay_confirm),
                     tint = Color.White
                 )
             }
