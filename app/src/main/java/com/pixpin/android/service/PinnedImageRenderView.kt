@@ -59,6 +59,7 @@ class PinnedImageRenderView(context: Context) : View(context) {
     var onDragResize: ((DragResizeMode, Float, Float) -> Unit)? = null
     var onLongPress: (() -> Unit)? = null
     var onDoubleTap: (() -> Unit)? = null
+    var onFocusRequested: (() -> Unit)? = null
 
     private val drawMatrix = Matrix()
     private val imageRect = RectF()
@@ -92,6 +93,13 @@ class PinnedImageRenderView(context: Context) : View(context) {
         context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = true
+
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                cancelPendingLongPress()
+                if (shouldIgnoreTap()) return true
+                onFocusRequested?.invoke()
+                return true
+            }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 cancelPendingLongPress()
@@ -236,6 +244,10 @@ class PinnedImageRenderView(context: Context) : View(context) {
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val shouldRequestFocus =
+                    event.actionMasked == MotionEvent.ACTION_UP &&
+                        !longPressTriggered &&
+                        (dragExceededSlop || activeDragResizeMode != null)
                 activePointerCount = 0
                 cancelPendingLongPress()
                 dragExceededSlop = false
@@ -243,6 +255,9 @@ class PinnedImageRenderView(context: Context) : View(context) {
                 activeDragResizeMode = null
                 if (scalingInProgress || scaleGestureDetector.isInProgress) {
                     suppressTapFor(220L)
+                }
+                if (shouldRequestFocus) {
+                    onFocusRequested?.invoke()
                 }
             }
 

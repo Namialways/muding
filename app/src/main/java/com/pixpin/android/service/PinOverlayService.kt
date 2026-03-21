@@ -228,6 +228,9 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             initialContentHeightPx = initialContentHeightPx,
             initialX = 120 + overlays.size * 36,
             initialY = 220 + overlays.size * 36,
+            onFocusRequested = {
+                bringOverlayToFront(overlayId)
+            },
             onEditRequested = {
                 pinCreationCoordinator.startEditor(
                     context = this@PinOverlayService,
@@ -325,6 +328,10 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun bringOverlayToFront(overlayId: String) {
         val controller = overlays[overlayId] ?: return
+        val currentTopId = overlays.keys.lastOrNull()
+        if (currentTopId == overlayId) {
+            return
+        }
         controller.bringToFront()
         overlays.remove(overlayId)
         overlays[overlayId] = controller

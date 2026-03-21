@@ -29,6 +29,7 @@ class PinOverlayWindowController(
     initialContentHeightPx: Int?,
     initialX: Int,
     initialY: Int,
+    private val onFocusRequested: () -> Unit,
     private val onEditRequested: () -> Unit,
     private val onCloseRequested: () -> Unit
 ) {
@@ -74,6 +75,9 @@ class PinOverlayWindowController(
         this.scaleMode = scaleMode
         this.shadowEnabled = runtimeState.shadowEnabled
         this.cornerRadiusPx = runtimeState.cornerRadiusDp * density
+        onFocusRequested = {
+            onFocusRequested()
+        }
         onMoveWindow = { dx, dy ->
             moveBy(dx, dy)
         }
