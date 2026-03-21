@@ -3,6 +3,7 @@ package com.pixpin.android.presentation.ocr
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -36,13 +37,20 @@ import com.pixpin.android.app.AppGraph
 import com.pixpin.android.core.model.PinSourceType
 import com.pixpin.android.domain.usecase.CaptureResultAction
 import com.pixpin.android.feature.pin.creation.PinCreationCoordinator
+import com.pixpin.android.feature.translation.TranslationEngine
+import com.pixpin.android.feature.translation.TranslationLanguageCatalog
+import com.pixpin.android.data.settings.AppSettingsRepository
 import com.pixpin.android.presentation.theme.PixPinTheme
+import com.pixpin.android.presentation.translation.TranslationSettingsActivity
 import com.pixpin.android.service.FloatingBallService
 import kotlinx.coroutines.launch
 
 class OcrResultActivity : ComponentActivity() {
 
     private lateinit var pinCreationCoordinator: PinCreationCoordinator
+    private lateinit var settingsRepository: AppSettingsRepository
+    private lateinit var localTranslationEngine: TranslationEngine
+    private lateinit var cloudTranslationEngine: TranslationEngine
     private val finishToBackground: Boolean
         get() = intent.getBooleanExtra(EXTRA_FINISH_TO_BACKGROUND, false)
     private val restoreFloatingBall: Boolean
@@ -51,7 +59,13 @@ class OcrResultActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
+        settingsRepository = AppGraph.appSettingsRepository(this)
+        localTranslationEngine = AppGraph.localTranslationEngine(this)
+        cloudTranslationEngine = AppGraph.cloudTranslationEngine(this)
         val initialText = intent.getStringExtra(EXTRA_RECOGNIZED_TEXT).orEmpty()
+        val targetLanguageDisplayName = TranslationLanguageCatalog.findByAppTag(
+            settingsRepository.getTranslationSettings().localTargetLanguageTag
+        ).displayName
         if (initialText.isBlank()) {
             Toast.makeText(this, "OCR 结果为空", Toast.LENGTH_SHORT).show()
             finishFlow()
@@ -68,6 +82,14 @@ class OcrResultActivity : ComponentActivity() {
                         initialText = initialText,
                         onCreateTextPin = { text -> createTextPin(text) },
                         onCopyText = { text -> copyText(text) },
+                        onTranslateLocally = { text, onComplete ->
+                            translateWithEngine(text, localTranslationEngine, onComplete)
+                        },
+                        onTranslateInCloud = { text, onComplete ->
+                            translateWithEngine(text, cloudTranslationEngine, onComplete)
+                        },
+                        targetLanguageDisplayName = targetLanguageDisplayName,
+                        onOpenTranslationSettings = { openTranslationSettings() },
                         onClose = { finishFlow() }
                     )
                 }
@@ -105,6 +127,35 @@ class OcrResultActivity : ComponentActivity() {
         Toast.makeText(this, "已复制 OCR 文本", Toast.LENGTH_SHORT).show()
     }
 
+    private fun translateWithEngine(
+        text: String,
+        engine: TranslationEngine,
+        onComplete: (String) -> Unit
+    ) {
+        val targetLanguage = settingsRepository.getTranslationSettings().localTargetLanguageTag
+        lifecycleScope.launch {
+            try {
+                val result = engine.translate(text, targetLanguage)
+                onComplete(result.translatedText)
+                Toast.makeText(
+                    this@OcrResultActivity,
+                    "${result.providerLabel}已完成",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@OcrResultActivity,
+                    "翻译失败: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    private fun openTranslationSettings() {
+        startActivity(Intent(this, TranslationSettingsActivity::class.java))
+    }
+
     private fun finishFlow() {
         if (restoreFloatingBall) {
             startService(
@@ -135,9 +186,14 @@ private fun OcrResultScreen(
     initialText: String,
     onCreateTextPin: (String) -> Unit,
     onCopyText: (String) -> Unit,
+    onTranslateLocally: (String, (String) -> Unit) -> Unit,
+    onTranslateInCloud: (String, (String) -> Unit) -> Unit,
+    targetLanguageDisplayName: String,
+    onOpenTranslationSettings: () -> Unit,
     onClose: () -> Unit
 ) {
     var text by remember(initialText) { mutableStateOf(initialText) }
+    var translatedText by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -181,6 +237,49 @@ private fun OcrResultScreen(
             ) {
                 Text("复制文本")
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = {
+                    onTranslateLocally(text.trim()) { translatedText = it }
+                },
+                modifier = Modifier.weight(1f),
+                enabled = text.isNotBlank()
+            ) {
+                Text("本地翻译")
+            }
+            OutlinedButton(
+                onClick = {
+                    onTranslateInCloud(text.trim()) { translatedText = it }
+                },
+                modifier = Modifier.weight(1f),
+                enabled = text.isNotBlank()
+            ) {
+                Text("云翻译")
+            }
+        }
+        OutlinedButton(
+            onClick = onOpenTranslationSettings,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("翻译设置")
+        }
+        if (translatedText.isNotBlank()) {
+            Text(
+                text = "翻译结果",
+                style = MaterialTheme.typography.titleMedium
+            )
+            OutlinedTextField(
+                value = translatedText,
+                onValueChange = { translatedText = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp),
+                label = { Text("目标语言：$targetLanguageDisplayName") }
+            )
         }
         Spacer(modifier = Modifier.height(4.dp))
         OutlinedButton(

@@ -87,6 +87,7 @@ import com.pixpin.android.presentation.theme.PixPinTheme
 import com.pixpin.android.presentation.source.ClipboardTextPinActivity
 import com.pixpin.android.presentation.source.GalleryOcrActivity
 import com.pixpin.android.presentation.source.GalleryPinActivity
+import com.pixpin.android.presentation.translation.TranslationSettingsActivity
 import com.pixpin.android.service.FloatingBallService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -231,6 +232,9 @@ class MainActivity : ComponentActivity() {
                         onOpenGalleryOcr = {
                             openGalleryOcr()
                         },
+                        onOpenTranslationSettings = {
+                            openTranslationSettings()
+                        },
                         onOpenClipboardTextPin = {
                             openClipboardTextPin()
                         },
@@ -294,6 +298,12 @@ class MainActivity : ComponentActivity() {
     private fun openClipboardTextPin() {
         startActivity(
             Intent(this, ClipboardTextPinActivity::class.java)
+        )
+    }
+
+    private fun openTranslationSettings() {
+        startActivity(
+            Intent(this, TranslationSettingsActivity::class.java)
         )
     }
 
@@ -385,6 +395,7 @@ private fun MainScreen(
     onRequestPermission: () -> Unit,
     onOpenGalleryPin: () -> Unit,
     onOpenGalleryOcr: () -> Unit,
+    onOpenTranslationSettings: () -> Unit,
     onOpenClipboardTextPin: () -> Unit,
     onStartService: () -> Unit
 ) {
@@ -490,6 +501,7 @@ private fun MainScreen(
                 onRequestPermission = onRequestPermission,
                 onOpenGalleryPin = onOpenGalleryPin,
                 onOpenGalleryOcr = onOpenGalleryOcr,
+                onOpenTranslationSettings = onOpenTranslationSettings,
                 onOpenClipboardTextPin = onOpenClipboardTextPin,
                 onStartService = onStartService
             )
@@ -566,6 +578,7 @@ private fun BasicSettingsTab(
     onRequestPermission: () -> Unit,
     onOpenGalleryPin: () -> Unit,
     onOpenGalleryOcr: () -> Unit,
+    onOpenTranslationSettings: () -> Unit,
     onOpenClipboardTextPin: () -> Unit,
     onStartService: () -> Unit
 ) {
@@ -638,6 +651,14 @@ private fun BasicSettingsTab(
                             Icon(Icons.Default.TextFields, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("从相册 OCR")
+                        }
+                        OutlinedButton(
+                            onClick = onOpenTranslationSettings,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("翻译设置")
                         }
                         OutlinedButton(
                             onClick = onOpenClipboardTextPin,

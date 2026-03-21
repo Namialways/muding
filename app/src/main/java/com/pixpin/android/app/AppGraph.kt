@@ -25,6 +25,11 @@ import com.pixpin.android.feature.pin.source.ImageUriPinSourceAdapter
 import com.pixpin.android.feature.pin.source.PinSourceAssetResolver
 import com.pixpin.android.feature.pin.source.TextBitmapRenderer
 import com.pixpin.android.feature.pin.source.TextPinSourceAdapter
+import com.pixpin.android.feature.translation.BaiduCloudTranslationEngine
+import com.pixpin.android.feature.translation.CloudTranslationEngineRouter
+import com.pixpin.android.feature.translation.LocalTranslationModelManager
+import com.pixpin.android.feature.translation.MlKitLocalTranslationEngine
+import com.pixpin.android.feature.translation.YoudaoCloudTranslationEngine
 
 object AppGraph {
 
@@ -89,6 +94,26 @@ object AppGraph {
             bitmapCropper = BitmapCropper(),
             ocrEngine = ocrEngine(),
             pinCreationCoordinator = pinCreationCoordinator(context)
+        )
+    }
+
+    fun localTranslationModelManager(): LocalTranslationModelManager {
+        return LocalTranslationModelManager()
+    }
+
+    fun localTranslationEngine(context: Context): MlKitLocalTranslationEngine {
+        return MlKitLocalTranslationEngine(
+            modelManager = localTranslationModelManager()
+        )
+    }
+
+    fun cloudTranslationEngine(context: Context): CloudTranslationEngineRouter {
+        val appContext = context.applicationContext
+        val settingsRepository = appSettingsRepository(appContext)
+        return CloudTranslationEngineRouter(
+            settingsRepository = settingsRepository,
+            baiduEngine = BaiduCloudTranslationEngine(settingsRepository),
+            youdaoEngine = YoudaoCloudTranslationEngine(settingsRepository)
         )
     }
 
