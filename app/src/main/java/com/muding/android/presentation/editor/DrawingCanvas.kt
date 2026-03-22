@@ -97,6 +97,7 @@ fun DrawingCanvas(
     var endPoint by remember { mutableStateOf<Offset?>(null) }
     var movingPathIndex by remember { mutableStateOf<Int?>(null) }
     var resizingState by remember { mutableStateOf<ActiveResizeState?>(null) }
+    var moveGestureDownOffset by remember { mutableStateOf<Offset?>(null) }
     var showTextDialog by remember { mutableStateOf(false) }
     var textDraft by remember { mutableStateOf("") }
     var textTargetIndex by remember { mutableStateOf<Int?>(null) }
@@ -151,6 +152,7 @@ fun DrawingCanvas(
         endPoint = null
         movingPathIndex = null
         resizingState = null
+        moveGestureDownOffset = null
     }
 
     Canvas(
@@ -160,9 +162,27 @@ fun DrawingCanvas(
                 onCanvasSizeChanged(Size(it.width.toFloat(), it.height.toFloat()))
             }
             .pointerInteropFilter { event ->
-                if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
                 when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                    MotionEvent.ACTION_DOWN -> {
+                        if (currentTool == DrawingTool.MOVE) {
+                            moveGestureDownOffset = Offset(event.x, event.y)
+                        }
+                        if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
+                        val touch = Offset(event.x, event.y)
+                        eraserPreviewCenter = touch
+                        erasePathAt(
+                            touch = touch,
+                            paths = paths,
+                            eraserMode = eraserMode,
+                            eraserSize = eraserSize,
+                            onPathReplaced = onPathReplaced,
+                            onPathRemoved = onPathRemoved
+                        )
+                        true
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
                         val touch = Offset(event.x, event.y)
                         eraserPreviewCenter = touch
                         erasePathAt(
@@ -177,6 +197,8 @@ fun DrawingCanvas(
                     }
 
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        moveGestureDownOffset = null
+                        if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
                         eraserPreviewCenter = null
                         true
                     }
@@ -188,9 +210,10 @@ fun DrawingCanvas(
                 when (currentTool) {
                     DrawingTool.MOVE -> detectDragGestures(
                         onDragStart = { offset ->
+                            val dragStartOffset = moveGestureDownOffset ?: offset
                             val selectedIndex = selectedPathIndex
                             val selectedPath = selectedIndex?.let(paths::getOrNull)
-                            val activeHandle = selectedPath?.let { resizeHandleHit(it, offset) }
+                            val activeHandle = selectedPath?.let { resizeHandleHit(it, dragStartOffset) }
                             if (selectedIndex != null && activeHandle != null) {
                                 resizingState = ActiveResizeState(selectedIndex, activeHandle)
                                 onPathSelectionChanged(selectedIndex, selectedPath)
@@ -200,14 +223,14 @@ fun DrawingCanvas(
                             if (selectedIndex != null &&
                                 selectedPath != null &&
                                 selectedPath !is DrawingPath.PenPath &&
-                                isPathHit(selectedPath, offset, SELECTION_HIT_RADIUS)
+                                isPathHit(selectedPath, dragStartOffset, SELECTION_HIT_RADIUS)
                             ) {
                                 movingPathIndex = selectedIndex
                                 onPathSelectionChanged(selectedIndex, selectedPath)
                                 return@detectDragGestures
                             }
 
-                            val hitIndex = hitEditableIndexAt(offset)
+                            val hitIndex = hitEditableIndexAt(dragStartOffset)
                             val hitPath = hitIndex?.let(paths::getOrNull)
                             onPathSelectionChanged(hitIndex, hitPath)
                         },
@@ -419,9 +442,11 @@ fun DrawingCanvas(
             .pointerInput(currentTool, selectedPathIndex, paths.size) {
                 val selectedText = selectedPathIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
                 val selectedRectangle = selectedPathIndex?.let { paths.getOrNull(it) as? DrawingPath.RectanglePath }
+                val selectedCircle = selectedPathIndex?.let { paths.getOrNull(it) as? DrawingPath.CirclePath }
                 if (
                     (selectedText != null && currentTool == DrawingTool.MOVE) ||
-                    (selectedRectangle != null && currentTool == DrawingTool.MOVE)
+                    (selectedRectangle != null && currentTool == DrawingTool.MOVE) ||
+                    (selectedCircle != null && currentTool == DrawingTool.MOVE)
                 ) {
                     detectTransformGestures { _, pan, zoom, rotation ->
                         val index = selectedPathIndex
@@ -443,6 +468,17 @@ fun DrawingCanvas(
                                 onPathUpdated(
                                     index,
                                     transformRectangle(path, pan, zoom, rotation)
+                                )
+                            }
+
+                            is DrawingPath.CirclePath -> {
+                                if (pan == Offset.Zero && zoom == 1f) return@detectTransformGestures
+                                onPathUpdated(
+                                    index,
+                                    path.copy(
+                                        center = path.center + pan,
+                                        radius = (path.radius * zoom).coerceAtLeast(MIN_CIRCLE_RADIUS)
+                                    )
                                 )
                             }
 
@@ -706,12 +742,10 @@ private fun DrawScope.drawCircleSelection(path: DrawingPath.CirclePath) {
         center = path.center,
         style = Stroke(width = 2f)
     )
-    drawHandle(Offset(path.center.x + path.radius, path.center.y), path.color)
 }
 
 private fun DrawScope.drawRectangleSelection(path: DrawingPath.RectanglePath) {
     val corners = rectangleCorners(path)
-    val accent = path.color
     val strokeColor = Color.White.copy(alpha = 0.95f)
     corners.zipWithNext().forEach { (start, end) ->
         drawLine(
@@ -727,9 +761,6 @@ private fun DrawScope.drawRectangleSelection(path: DrawingPath.RectanglePath) {
         end = corners.first(),
         strokeWidth = 2f
     )
-    corners.forEach { handle ->
-        drawHandle(handle, accent)
-    }
 }
 
 private fun DrawScope.drawSelectionBounds(bounds: Rect, accent: Color) {
@@ -900,21 +931,9 @@ private fun resizeHandleHit(path: DrawingPath, touch: Offset): PathResizeHandle?
             (center - touch).getDistance() <= HANDLE_HIT_RADIUS * 1.2f
         }?.first
 
-        is DrawingPath.RectanglePath -> listOf(
-            PathResizeHandle.RectTopLeft to rectangleCorners(path)[0],
-            PathResizeHandle.RectTopRight to rectangleCorners(path)[1],
-            PathResizeHandle.RectBottomRight to rectangleCorners(path)[2],
-            PathResizeHandle.RectBottomLeft to rectangleCorners(path)[3]
-        ).firstOrNull { (_, center) ->
-            (center - touch).getDistance() <= HANDLE_HIT_RADIUS
-        }?.first
+        is DrawingPath.RectanglePath -> null
 
-        is DrawingPath.CirclePath -> {
-            val handle = Offset(path.center.x + path.radius, path.center.y)
-            PathResizeHandle.CircleRadius.takeIf {
-                (handle - touch).getDistance() <= HANDLE_HIT_RADIUS
-            }
-        }
+        is DrawingPath.CirclePath -> null
 
         else -> null
     }
