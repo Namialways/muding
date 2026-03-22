@@ -75,6 +75,8 @@ fun DrawingCanvas(
     modifier: Modifier = Modifier,
     paths: List<DrawingPath>,
     currentTool: DrawingTool?,
+    viewportScale: Float,
+    viewportOffset: Offset,
     currentColor: Color,
     strokeWidth: Float,
     eraserSize: Float,
@@ -103,14 +105,59 @@ fun DrawingCanvas(
     var textTargetIndex by remember { mutableStateOf<Int?>(null) }
     var textTargetPosition by remember { mutableStateOf(Offset.Zero) }
     var eraserPreviewCenter by remember { mutableStateOf<Offset?>(null) }
+    var localCanvasSize by remember { mutableStateOf(Size.Zero) }
 
     val textMeasurer = rememberTextMeasurer()
+
+    fun toCanvasOffset(rawOffset: Offset): Offset {
+        if (viewportScale == 1f && viewportOffset == Offset.Zero) return rawOffset
+        val pivot = Offset(localCanvasSize.width / 2f, localCanvasSize.height / 2f)
+        val scale = viewportScale.coerceAtLeast(0.01f)
+        return Offset(
+            x = ((rawOffset.x - viewportOffset.x - pivot.x) / scale) + pivot.x,
+            y = ((rawOffset.y - viewportOffset.y - pivot.y) / scale) + pivot.y
+        )
+    }
+
+    fun toCanvasDelta(rawDelta: Offset): Offset {
+        val scale = viewportScale.coerceAtLeast(0.01f)
+        return Offset(rawDelta.x / scale, rawDelta.y / scale)
+    }
+
+    fun actualTextBounds(path: DrawingPath.TextPath): Rect {
+        val layout = textMeasurer.measure(
+            text = path.text,
+            style = TextStyle(
+                color = path.color,
+                fontSize = (path.fontSize * path.scale).sp
+            )
+        )
+        return Rect(
+            left = path.position.x,
+            top = path.position.y,
+            right = path.position.x + layout.size.width,
+            bottom = path.position.y + layout.size.height
+        )
+    }
+
+    fun isInteractivePathHit(path: DrawingPath, offset: Offset, radius: Float): Boolean {
+        return when (path) {
+            is DrawingPath.TextPath -> {
+                val localTouch = rotatePointAround(offset, path.position, -path.rotation)
+                actualTextBounds(path)
+                    .inflate(max(radius * 1.5f, path.fontSize * path.scale * 0.35f))
+                    .contains(localTouch)
+            }
+
+            else -> isPathHit(path, offset, radius)
+        }
+    }
 
     fun hitIndexAt(offset: Offset, tool: DrawingTool? = null): Int? {
         for (index in paths.indices.reversed()) {
             val path = paths[index]
             if (tool != null && toolFor(path) != tool) continue
-            if (isPathHit(path, offset, SELECTION_HIT_RADIUS)) {
+            if (isInteractivePathHit(path, offset, SELECTION_HIT_RADIUS)) {
                 return index
             }
         }
@@ -121,7 +168,7 @@ fun DrawingCanvas(
         for (index in paths.indices.reversed()) {
             val path = paths[index]
             if (path is DrawingPath.PenPath) continue
-            if (isPathHit(path, offset, SELECTION_HIT_RADIUS)) {
+            if (isInteractivePathHit(path, offset, SELECTION_HIT_RADIUS)) {
                 return index
             }
         }
@@ -159,16 +206,17 @@ fun DrawingCanvas(
         modifier = modifier
             .fillMaxSize()
             .onSizeChanged {
-                onCanvasSizeChanged(Size(it.width.toFloat(), it.height.toFloat()))
+                localCanvasSize = Size(it.width.toFloat(), it.height.toFloat())
+                onCanvasSizeChanged(localCanvasSize)
             }
             .pointerInteropFilter { event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         if (currentTool == DrawingTool.MOVE) {
-                            moveGestureDownOffset = Offset(event.x, event.y)
+                            moveGestureDownOffset = toCanvasOffset(Offset(event.x, event.y))
                         }
                         if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
-                        val touch = Offset(event.x, event.y)
+                        val touch = toCanvasOffset(Offset(event.x, event.y))
                         eraserPreviewCenter = touch
                         erasePathAt(
                             touch = touch,
@@ -183,7 +231,7 @@ fun DrawingCanvas(
 
                     MotionEvent.ACTION_MOVE -> {
                         if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
-                        val touch = Offset(event.x, event.y)
+                        val touch = toCanvasOffset(Offset(event.x, event.y))
                         eraserPreviewCenter = touch
                         erasePathAt(
                             touch = touch,
@@ -210,7 +258,7 @@ fun DrawingCanvas(
                 when (currentTool) {
                     DrawingTool.MOVE -> detectDragGestures(
                         onDragStart = { offset ->
-                            val dragStartOffset = moveGestureDownOffset ?: offset
+                            val dragStartOffset = moveGestureDownOffset ?: toCanvasOffset(offset)
                             val selectedIndex = selectedPathIndex
                             val selectedPath = selectedIndex?.let(paths::getOrNull)
                             val activeHandle = selectedPath?.let { resizeHandleHit(it, dragStartOffset) }
@@ -223,7 +271,7 @@ fun DrawingCanvas(
                             if (selectedIndex != null &&
                                 selectedPath != null &&
                                 selectedPath !is DrawingPath.PenPath &&
-                                isPathHit(selectedPath, dragStartOffset, SELECTION_HIT_RADIUS)
+                                isInteractivePathHit(selectedPath, dragStartOffset, SELECTION_HIT_RADIUS)
                             ) {
                                 movingPathIndex = selectedIndex
                                 onPathSelectionChanged(selectedIndex, selectedPath)
@@ -244,7 +292,7 @@ fun DrawingCanvas(
                                         resizePath(
                                             path = path,
                                             handle = activeResize.handle,
-                                            touch = change.position
+                                            touch = toCanvasOffset(change.position)
                                         )
                                     )
                                 }
@@ -252,7 +300,7 @@ fun DrawingCanvas(
                                 movingPathIndex != null -> {
                                     val movingIndex = movingPathIndex ?: return@detectDragGestures
                                     val path = paths.getOrNull(movingIndex) ?: return@detectDragGestures
-                                    onPathUpdated(movingIndex, movePath(path, dragAmount))
+                                    onPathUpdated(movingIndex, movePath(path, toCanvasDelta(dragAmount)))
                                 }
 
                                 else -> Unit
@@ -280,14 +328,16 @@ fun DrawingCanvas(
 
                     DrawingTool.PEN -> detectDragGestures(
                         onDragStart = { offset ->
+                            val canvasOffset = toCanvasOffset(offset)
                             onPathSelectionChanged(null, null)
-                            currentPath = Path().apply { moveTo(offset.x, offset.y) }
+                            currentPath = Path().apply { moveTo(canvasOffset.x, canvasOffset.y) }
                             currentPenPoints.clear()
-                            currentPenPoints.add(offset)
+                            currentPenPoints.add(canvasOffset)
                         },
                         onDrag = { change, _ ->
-                            currentPath?.lineTo(change.position.x, change.position.y)
-                            currentPenPoints.add(change.position)
+                            val canvasOffset = toCanvasOffset(change.position)
+                            currentPath?.lineTo(canvasOffset.x, canvasOffset.y)
+                            currentPenPoints.add(canvasOffset)
                             pathVersion++
                             change.consume()
                         },
@@ -311,12 +361,13 @@ fun DrawingCanvas(
 
                     DrawingTool.ARROW, DrawingTool.RECTANGLE, DrawingTool.CIRCLE -> detectDragGestures(
                         onDragStart = { offset ->
+                            val canvasOffset = toCanvasOffset(offset)
                             onPathSelectionChanged(null, null)
-                            startPoint = offset
-                            endPoint = offset
+                            startPoint = canvasOffset
+                            endPoint = canvasOffset
                         },
                         onDrag = { change, _ ->
-                            endPoint = change.position
+                            endPoint = toCanvasOffset(change.position)
                             change.consume()
                         },
                         onDragEnd = {
@@ -389,11 +440,19 @@ fun DrawingCanvas(
                 when (currentTool) {
                     DrawingTool.MOVE -> detectTapGestures(
                         onTap = { offset ->
-                            val hitIndex = hitEditableIndexAt(offset)
+                            val hitIndex = hitEditableIndexAt(toCanvasOffset(offset))
                             onPathSelectionChanged(hitIndex, hitIndex?.let(paths::getOrNull))
                         },
+                        onLongPress = { offset ->
+                            val hitIndex = hitEditableIndexAt(toCanvasOffset(offset))
+                            val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
+                            if (path != null) {
+                                onPathSelectionChanged(hitIndex, path)
+                                openTextDialog(hitIndex, path.position, path.text)
+                            }
+                        },
                         onDoubleTap = { offset ->
-                            val hitIndex = hitEditableIndexAt(offset)
+                            val hitIndex = hitEditableIndexAt(toCanvasOffset(offset))
                             val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
                             if (path != null) {
                                 onPathSelectionChanged(hitIndex, path)
@@ -404,19 +463,22 @@ fun DrawingCanvas(
 
                     DrawingTool.TEXT -> detectTapGestures(
                         onTap = { offset ->
-                            val hitIndex = hitIndexAt(offset, DrawingTool.TEXT)
-                            if (hitIndex != null) {
-                                onPathSelectionChanged(hitIndex, paths.getOrNull(hitIndex))
+                            val canvasOffset = toCanvasOffset(offset)
+                            val hitIndex = hitIndexAt(canvasOffset, DrawingTool.TEXT)
+                            val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
+                            if (path != null) {
+                                onPathSelectionChanged(hitIndex, path)
+                                openTextDialog(hitIndex, path.position, path.text)
                             } else {
                                 val hadSelection = selectedPathIndex != null
                                 onPathSelectionChanged(null, null)
                                 if (!hadSelection) {
-                                    openTextDialog(null, offset, "")
+                                    openTextDialog(null, canvasOffset, "")
                                 }
                             }
                         },
                         onDoubleTap = { offset ->
-                            val hitIndex = hitIndexAt(offset, DrawingTool.TEXT)
+                            val hitIndex = hitIndexAt(toCanvasOffset(offset), DrawingTool.TEXT)
                             val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
                             if (path != null) {
                                 onPathSelectionChanged(hitIndex, path)
@@ -450,13 +512,14 @@ fun DrawingCanvas(
                 ) {
                     detectTransformGestures { _, pan, zoom, rotation ->
                         val index = selectedPathIndex
+                        val canvasPan = toCanvasDelta(pan)
                         when (val path = paths.getOrNull(index)) {
                             is DrawingPath.TextPath -> {
-                                if (pan == Offset.Zero && zoom == 1f && rotation == 0f) return@detectTransformGestures
+                                if (canvasPan == Offset.Zero && zoom == 1f && rotation == 0f) return@detectTransformGestures
                                 onPathUpdated(
                                     index,
                                     path.copy(
-                                        position = path.position + pan,
+                                        position = path.position + canvasPan,
                                         scale = (path.scale * zoom).coerceIn(0.5f, 6f),
                                         rotation = normalizeRotation(path.rotation + rotation)
                                     )
@@ -464,19 +527,19 @@ fun DrawingCanvas(
                             }
 
                             is DrawingPath.RectanglePath -> {
-                                if (pan == Offset.Zero && zoom == 1f && rotation == 0f) return@detectTransformGestures
+                                if (canvasPan == Offset.Zero && zoom == 1f && rotation == 0f) return@detectTransformGestures
                                 onPathUpdated(
                                     index,
-                                    transformRectangle(path, pan, zoom, rotation)
+                                    transformRectangle(path, canvasPan, zoom, rotation)
                                 )
                             }
 
                             is DrawingPath.CirclePath -> {
-                                if (pan == Offset.Zero && zoom == 1f) return@detectTransformGestures
+                                if (canvasPan == Offset.Zero && zoom == 1f) return@detectTransformGestures
                                 onPathUpdated(
                                     index,
                                     path.copy(
-                                        center = path.center + pan,
+                                        center = path.center + canvasPan,
                                         radius = (path.radius * zoom).coerceAtLeast(MIN_CIRCLE_RADIUS)
                                     )
                                 )

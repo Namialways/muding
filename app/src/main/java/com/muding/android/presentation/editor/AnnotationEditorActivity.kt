@@ -275,6 +275,8 @@ class AnnotationEditorActivity : ComponentActivity() {
                         DrawingCanvas(
                             paths = viewModel.paths,
                             currentTool = viewModel.currentTool.value,
+                            viewportScale = canvasScale,
+                            viewportOffset = canvasOffset,
                             currentColor = viewModel.currentColor.value,
                             strokeWidth = viewModel.strokeWidth.value,
                             eraserSize = viewModel.eraserSize.value,
