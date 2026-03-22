@@ -216,6 +216,8 @@ fun AnnotationEditorScreenContent(
                         textOutlineEnabled = documentState.textOutlineEnabled,
                         shapeFilled = documentState.shapeFilled,
                         selectedPathIndex = documentState.selectedPathIndex,
+                        viewportScale = viewportState.scale,
+                        viewportOffset = viewportState.offset,
                         onPathAdded = screenActions.onAddPath,
                         onPathUpdated = screenActions.onUpdatePath,
                         onPathReplaced = screenActions.onReplacePath,

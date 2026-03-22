@@ -1,23 +1,130 @@
 package com.muding.android.presentation.editor
 
 import android.view.MotionEvent
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.runtime.State
 import com.muding.android.domain.model.DrawingPath
 import com.muding.android.domain.model.DrawingTool
+import kotlin.math.PI
+import kotlin.math.abs
+
+fun Modifier.bindMoveModeGestures(
+    latestPaths: State<List<DrawingPath>>,
+    latestSelectedPathIndex: State<Int?>,
+    toCanvasOffset: (Offset) -> Offset,
+    toCanvasDelta: (Offset) -> Offset,
+    interactionState: EditorCanvasInteractionState,
+    pathHitTester: EditorPathHitTester,
+    callbacks: EditorCanvasCallbacks,
+    textEditState: EditorTextEditState,
+    selectionHitRadius: Float
+): Modifier {
+    return this
+        .pointerInput(Unit) {
+            detectDragGestures(
+                onDragStart = { offset ->
+                    handleMoveDragStart(
+                        interactionState = interactionState,
+                        pathHitTester = pathHitTester,
+                        paths = latestPaths.value,
+                        selectedPathIndex = latestSelectedPathIndex.value,
+                        selectionHitRadius = selectionHitRadius,
+                        callbacks = callbacks,
+                        fallbackOffset = interactionState.moveGestureDownOffset ?: toCanvasOffset(offset)
+                    )
+                },
+                onDrag = { change, dragAmount ->
+                    handleMoveDrag(
+                        interactionState = interactionState,
+                        paths = latestPaths.value,
+                        callbacks = callbacks,
+                        dragAmount = toCanvasDelta(dragAmount),
+                        touch = toCanvasOffset(change.position)
+                    )
+                    change.consume()
+                },
+                onDragEnd = {
+                    handleMoveDragEnd(
+                        interactionState = interactionState,
+                        paths = latestPaths.value,
+                        callbacks = callbacks
+                    )
+                },
+                onDragCancel = { interactionState.resetDragState() }
+            )
+        }
+        .pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { offset ->
+                    handleMoveTap(
+                        pathHitTester = pathHitTester,
+                        paths = latestPaths.value,
+                        selectionHitRadius = selectionHitRadius,
+                        callbacks = callbacks,
+                        offset = toCanvasOffset(offset)
+                    )
+                },
+                onLongPress = { offset ->
+                    handleMoveTextEditRequest(
+                        pathHitTester = pathHitTester,
+                        paths = latestPaths.value,
+                        selectionHitRadius = selectionHitRadius,
+                        callbacks = callbacks,
+                        textEditState = textEditState,
+                        offset = toCanvasOffset(offset)
+                    )
+                },
+                onDoubleTap = { offset ->
+                    handleMoveTextEditRequest(
+                        pathHitTester = pathHitTester,
+                        paths = latestPaths.value,
+                        selectionHitRadius = selectionHitRadius,
+                        callbacks = callbacks,
+                        textEditState = textEditState,
+                        offset = toCanvasOffset(offset)
+                    )
+                }
+            )
+        }
+        .pointerInput(Unit) {
+            detectTransformGestures { _, pan, zoom, rotation ->
+                handleSelectionTransform(
+                    currentTool = DrawingTool.MOVE,
+                    selectedPathIndex = latestSelectedPathIndex.value,
+                    paths = latestPaths.value,
+                    pan = toCanvasDelta(pan),
+                    zoom = zoom,
+                    rotation = rotation,
+                    callbacks = callbacks
+                )
+            }
+        }
+}
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun Modifier.bindCanvasInteropInput(
     currentTool: DrawingTool?,
     interactionState: EditorCanvasInteractionState,
-    paths: List<DrawingPath>,
+    latestPaths: State<List<DrawingPath>>,
+    toCanvasOffset: (Offset) -> Offset,
     eraserMode: EraserMode,
     eraserSize: Float,
     onPathReplaced: (Int, List<DrawingPath>) -> Unit,
@@ -27,14 +134,14 @@ fun Modifier.bindCanvasInteropInput(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 if (currentTool == DrawingTool.MOVE) {
-                    interactionState.moveGestureDownOffset = Offset(event.x, event.y)
+                    interactionState.moveGestureDownOffset = toCanvasOffset(Offset(event.x, event.y))
                 }
                 if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
-                val touch = Offset(event.x, event.y)
+                val touch = toCanvasOffset(Offset(event.x, event.y))
                 interactionState.eraserPreviewCenter = touch
                 erasePathAt(
                     touch = touch,
-                    paths = paths,
+                    paths = latestPaths.value,
                     eraserMode = eraserMode,
                     eraserSize = eraserSize,
                     onPathReplaced = onPathReplaced,
@@ -45,11 +152,11 @@ fun Modifier.bindCanvasInteropInput(
 
             MotionEvent.ACTION_MOVE -> {
                 if (currentTool != DrawingTool.ERASER) return@pointerInteropFilter false
-                val touch = Offset(event.x, event.y)
+                val touch = toCanvasOffset(Offset(event.x, event.y))
                 interactionState.eraserPreviewCenter = touch
                 erasePathAt(
                     touch = touch,
-                    paths = paths,
+                    paths = latestPaths.value,
                     eraserMode = eraserMode,
                     eraserSize = eraserSize,
                     onPathReplaced = onPathReplaced,
@@ -72,61 +179,33 @@ fun Modifier.bindCanvasInteropInput(
 
 fun Modifier.bindCanvasDragGestures(
     currentTool: DrawingTool?,
-    paths: List<DrawingPath>,
-    selectedPathIndex: Int?,
+    latestPaths: State<List<DrawingPath>>,
+    latestSelectedPathIndex: State<Int?>,
     currentColor: Color,
     strokeWidth: Float,
     shapeFilled: Boolean,
+    toCanvasOffset: (Offset) -> Offset,
+    toCanvasDelta: (Offset) -> Offset,
     interactionState: EditorCanvasInteractionState,
     pathHitTester: EditorPathHitTester,
     callbacks: EditorCanvasCallbacks,
     selectionHitRadius: Float,
     creationThreshold: Float
 ): Modifier {
-    return pointerInput(currentTool, paths.size, selectedPathIndex, strokeWidth, currentColor, shapeFilled) {
+    return pointerInput(currentTool, strokeWidth, currentColor, shapeFilled) {
         when (currentTool) {
-            DrawingTool.MOVE -> detectDragGestures(
-                onDragStart = { offset ->
-                    handleMoveDragStart(
-                        interactionState = interactionState,
-                        pathHitTester = pathHitTester,
-                        paths = paths,
-                        selectedPathIndex = selectedPathIndex,
-                        selectionHitRadius = selectionHitRadius,
-                        callbacks = callbacks,
-                        fallbackOffset = offset
-                    )
-                },
-                onDrag = { change, dragAmount ->
-                    handleMoveDrag(
-                        interactionState = interactionState,
-                        paths = paths,
-                        callbacks = callbacks,
-                        dragAmount = dragAmount,
-                        touch = change.position
-                    )
-                    change.consume()
-                },
-                onDragEnd = {
-                    handleMoveDragEnd(
-                        interactionState = interactionState,
-                        paths = paths,
-                        callbacks = callbacks
-                    )
-                },
-                onDragCancel = { interactionState.resetDragState() }
-            )
+            DrawingTool.MOVE -> Unit
 
             DrawingTool.PEN -> detectDragGestures(
                 onDragStart = { offset ->
                     handlePenDragStart(
                         interactionState = interactionState,
                         callbacks = callbacks,
-                        offset = offset
+                        offset = toCanvasOffset(offset)
                     )
                 },
                 onDrag = { change, _ ->
-                    handlePenDrag(interactionState, change.position)
+                    handlePenDrag(interactionState, toCanvasOffset(change.position))
                     change.consume()
                 },
                 onDragEnd = {
@@ -147,11 +226,11 @@ fun Modifier.bindCanvasDragGestures(
                     handleShapeDragStart(
                         interactionState = interactionState,
                         callbacks = callbacks,
-                        offset = offset
+                        offset = toCanvasOffset(offset)
                     )
                 },
                 onDrag = { change, _ ->
-                    handleShapeDrag(interactionState, change.position)
+                    handleShapeDrag(interactionState, toCanvasOffset(change.position))
                     change.consume()
                 },
                 onDragEnd = {
@@ -173,25 +252,25 @@ fun Modifier.bindCanvasDragGestures(
                     handleTextDragStart(
                         interactionState = interactionState,
                         pathHitTester = pathHitTester,
-                        paths = paths,
+                        paths = latestPaths.value,
                         callbacks = callbacks,
                         selectionHitRadius = selectionHitRadius,
-                        offset = offset
+                        offset = toCanvasOffset(offset)
                     )
                 },
                 onDrag = { change, dragAmount ->
                     handleTextDrag(
                         interactionState = interactionState,
-                        paths = paths,
+                        paths = latestPaths.value,
                         callbacks = callbacks,
-                        dragAmount = dragAmount
+                        dragAmount = toCanvasDelta(dragAmount)
                     )
                     change.consume()
                 },
                 onDragEnd = {
                     handleTextDragEnd(
                         interactionState = interactionState,
-                        paths = paths,
+                        paths = latestPaths.value,
                         callbacks = callbacks
                     )
                 },
@@ -205,44 +284,45 @@ fun Modifier.bindCanvasDragGestures(
 
 fun Modifier.bindCanvasTapGestures(
     currentTool: DrawingTool?,
-    paths: List<DrawingPath>,
-    selectedPathIndex: Int?,
+    latestPaths: State<List<DrawingPath>>,
+    latestSelectedPathIndex: State<Int?>,
+    toCanvasOffset: (Offset) -> Offset,
     pathHitTester: EditorPathHitTester,
     callbacks: EditorCanvasCallbacks,
     textEditState: EditorTextEditState,
     selectionHitRadius: Float,
     onViewportResetRequested: () -> Unit
 ): Modifier {
-    return pointerInput(currentTool, paths.size, selectedPathIndex) {
+    return pointerInput(currentTool) {
         when (currentTool) {
             DrawingTool.MOVE -> detectTapGestures(
                 onTap = { offset ->
                     handleMoveTap(
                         pathHitTester = pathHitTester,
-                        paths = paths,
+                        paths = latestPaths.value,
                         selectionHitRadius = selectionHitRadius,
                         callbacks = callbacks,
-                        offset = offset
+                        offset = toCanvasOffset(offset)
                     )
                 },
                 onLongPress = { offset ->
                     handleMoveTextEditRequest(
                         pathHitTester = pathHitTester,
-                        paths = paths,
+                        paths = latestPaths.value,
                         selectionHitRadius = selectionHitRadius,
                         callbacks = callbacks,
                         textEditState = textEditState,
-                        offset = offset
+                        offset = toCanvasOffset(offset)
                     )
                 },
                 onDoubleTap = { offset ->
                     handleMoveTextEditRequest(
                         pathHitTester = pathHitTester,
-                        paths = paths,
+                        paths = latestPaths.value,
                         selectionHitRadius = selectionHitRadius,
                         callbacks = callbacks,
                         textEditState = textEditState,
-                        offset = offset
+                        offset = toCanvasOffset(offset)
                     )
                 }
             )
@@ -251,23 +331,23 @@ fun Modifier.bindCanvasTapGestures(
                 onTap = { offset ->
                     handleTextToolTap(
                         pathHitTester = pathHitTester,
-                        paths = paths,
+                        paths = latestPaths.value,
                         selectionHitRadius = selectionHitRadius,
-                        selectedPathIndex = selectedPathIndex,
+                        selectedPathIndex = latestSelectedPathIndex.value,
                         callbacks = callbacks,
                         textEditState = textEditState,
-                        offset = offset
+                        offset = toCanvasOffset(offset)
                     )
                 },
                 onDoubleTap = { offset ->
                     handleTextToolTap(
                         pathHitTester = pathHitTester,
-                        paths = paths,
+                        paths = latestPaths.value,
                         selectionHitRadius = selectionHitRadius,
-                        selectedPathIndex = selectedPathIndex,
+                        selectedPathIndex = latestSelectedPathIndex.value,
                         callbacks = callbacks,
                         textEditState = textEditState,
-                        offset = offset
+                        offset = toCanvasOffset(offset)
                     )
                 }
             )
@@ -294,30 +374,68 @@ fun Modifier.bindCanvasTapGestures(
 
 fun Modifier.bindCanvasTransformGestures(
     currentTool: DrawingTool?,
-    selectedPathIndex: Int?,
-    paths: List<DrawingPath>,
+    latestSelectedPathIndex: State<Int?>,
+    latestPaths: State<List<DrawingPath>>,
+    toCanvasDelta: (Offset) -> Offset,
     callbacks: EditorCanvasCallbacks
 ): Modifier {
-    return pointerInput(currentTool, selectedPathIndex, paths.size) {
-        val selectedText = selectedPathIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
-        val selectedRectangle = selectedPathIndex?.let { paths.getOrNull(it) as? DrawingPath.RectanglePath }
-        val selectedCircle = selectedPathIndex?.let { paths.getOrNull(it) as? DrawingPath.CirclePath }
-        if (
-            (selectedText != null && currentTool == DrawingTool.MOVE) ||
-            (selectedRectangle != null && currentTool == DrawingTool.MOVE) ||
-            (selectedCircle != null && currentTool == DrawingTool.MOVE)
-        ) {
-            detectTransformGestures { _, pan, zoom, rotation ->
+    return pointerInput(currentTool) {
+        if (currentTool == DrawingTool.MOVE) {
+            detectMultiTouchTransformGestures { pan, zoom, rotation ->
                 handleSelectionTransform(
                     currentTool = currentTool,
-                    selectedPathIndex = selectedPathIndex,
-                    paths = paths,
-                    pan = pan,
+                    selectedPathIndex = latestSelectedPathIndex.value,
+                    paths = latestPaths.value,
+                    pan = toCanvasDelta(pan),
                     zoom = zoom,
                     rotation = rotation,
                     callbacks = callbacks
                 )
             }
         }
+    }
+}
+
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectMultiTouchTransformGestures(
+    onGesture: (pan: Offset, zoom: Float, rotation: Float) -> Unit
+) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        var pastTouchSlop = false
+
+        do {
+            val event = awaitPointerEvent()
+            val activePointers = event.changes.count { it.pressed }
+
+            if (activePointers < 2) {
+                if (pastTouchSlop) break
+                continue
+            }
+
+            val panChange = event.calculatePan()
+            val zoomChange = event.calculateZoom()
+            val rotationChange = event.calculateRotation()
+
+            if (!pastTouchSlop) {
+                val panMotion = panChange.getDistance()
+                val zoomMotion = abs(1f - zoomChange)
+                val rotationMotion = abs(rotationChange * PI.toFloat() / 180f)
+                if (panMotion > viewConfiguration.touchSlop ||
+                    zoomMotion > 0.01f ||
+                    rotationMotion > 0.01f
+                ) {
+                    pastTouchSlop = true
+                }
+            }
+
+            if (pastTouchSlop) {
+                onGesture(panChange, zoomChange, rotationChange)
+                event.changes.forEach { change ->
+                    if (change.positionChanged()) {
+                        change.consume()
+                    }
+                }
+            }
+        } while (event.changes.any { it.pressed })
     }
 }

@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -36,6 +38,8 @@ fun DrawingCanvas(
     textOutlineEnabled: Boolean,
     shapeFilled: Boolean,
     selectedPathIndex: Int?,
+    viewportScale: Float,
+    viewportOffset: Offset,
     onPathAdded: (DrawingPath) -> Unit,
     onPathUpdated: (Int, DrawingPath) -> Unit,
     onPathReplaced: (Int, List<DrawingPath>) -> Unit,
@@ -47,6 +51,9 @@ fun DrawingCanvas(
     val interactionState = rememberEditorCanvasInteractionState()
     val textEditState = rememberEditorTextEditState()
     val pathHitTester = rememberEditorPathHitTester()
+    val localCanvasSize = remember { mutableStateOf(Size.Zero) }
+    val latestPaths = rememberUpdatedState(paths)
+    val latestSelectedPathIndex = rememberUpdatedState(selectedPathIndex)
     val callbacks = remember(
         onPathAdded,
         onPathUpdated,
@@ -59,51 +66,90 @@ fun DrawingCanvas(
         )
     }
 
-    Canvas(
-        modifier = modifier
-            .fillMaxSize()
-            .onSizeChanged {
-                onCanvasSizeChanged(Size(it.width.toFloat(), it.height.toFloat()))
+    fun toCanvasOffset(rawOffset: Offset): Offset {
+        if (viewportScale == 1f && viewportOffset == Offset.Zero) return rawOffset
+        val pivot = Offset(localCanvasSize.value.width / 2f, localCanvasSize.value.height / 2f)
+        val scale = viewportScale.coerceAtLeast(0.01f)
+        return Offset(
+            x = ((rawOffset.x - viewportOffset.x - pivot.x) / scale) + pivot.x,
+            y = ((rawOffset.y - viewportOffset.y - pivot.y) / scale) + pivot.y
+        )
+    }
+
+    fun toCanvasDelta(rawDelta: Offset): Offset {
+        val scale = viewportScale.coerceAtLeast(0.01f)
+        return Offset(rawDelta.x / scale, rawDelta.y / scale)
+    }
+
+    val canvasModifier = modifier
+        .fillMaxSize()
+        .onSizeChanged {
+            val size = Size(it.width.toFloat(), it.height.toFloat())
+            localCanvasSize.value = size
+            onCanvasSizeChanged(size)
+        }
+        .bindCanvasInteropInput(
+            currentTool = currentTool,
+            interactionState = interactionState,
+            latestPaths = latestPaths,
+            toCanvasOffset = ::toCanvasOffset,
+            eraserMode = eraserMode,
+            eraserSize = eraserSize,
+            onPathReplaced = onPathReplaced,
+            onPathRemoved = onPathRemoved
+        )
+        .let { baseModifier ->
+            if (currentTool == DrawingTool.MOVE) {
+                baseModifier.bindMoveModeGestures(
+                    latestPaths = latestPaths,
+                    latestSelectedPathIndex = latestSelectedPathIndex,
+                    toCanvasOffset = ::toCanvasOffset,
+                    toCanvasDelta = ::toCanvasDelta,
+                    interactionState = interactionState,
+                    pathHitTester = pathHitTester,
+                    callbacks = callbacks,
+                    textEditState = textEditState,
+                    selectionHitRadius = SELECTION_HIT_RADIUS
+                )
+            } else {
+                baseModifier
+                    .bindCanvasDragGestures(
+                        currentTool = currentTool,
+                        latestPaths = latestPaths,
+                        latestSelectedPathIndex = latestSelectedPathIndex,
+                        currentColor = currentColor,
+                        strokeWidth = strokeWidth,
+                        shapeFilled = shapeFilled,
+                        toCanvasOffset = ::toCanvasOffset,
+                        toCanvasDelta = ::toCanvasDelta,
+                        interactionState = interactionState,
+                        pathHitTester = pathHitTester,
+                        callbacks = callbacks,
+                        selectionHitRadius = SELECTION_HIT_RADIUS,
+                        creationThreshold = SHAPE_CREATION_THRESHOLD
+                    )
+                    .bindCanvasTapGestures(
+                        currentTool = currentTool,
+                        latestPaths = latestPaths,
+                        latestSelectedPathIndex = latestSelectedPathIndex,
+                        toCanvasOffset = ::toCanvasOffset,
+                        pathHitTester = pathHitTester,
+                        callbacks = callbacks,
+                        textEditState = textEditState,
+                        selectionHitRadius = SELECTION_HIT_RADIUS,
+                        onViewportResetRequested = onViewportResetRequested
+                    )
+                    .bindCanvasTransformGestures(
+                        currentTool = currentTool,
+                        latestSelectedPathIndex = latestSelectedPathIndex,
+                        latestPaths = latestPaths,
+                        toCanvasDelta = ::toCanvasDelta,
+                        callbacks = callbacks
+                    )
             }
-            .bindCanvasInteropInput(
-                currentTool = currentTool,
-                interactionState = interactionState,
-                paths = paths,
-                eraserMode = eraserMode,
-                eraserSize = eraserSize,
-                onPathReplaced = onPathReplaced,
-                onPathRemoved = onPathRemoved
-            )
-            .bindCanvasDragGestures(
-                currentTool = currentTool,
-                paths = paths,
-                selectedPathIndex = selectedPathIndex,
-                currentColor = currentColor,
-                strokeWidth = strokeWidth,
-                shapeFilled = shapeFilled,
-                interactionState = interactionState,
-                pathHitTester = pathHitTester,
-                callbacks = callbacks,
-                selectionHitRadius = SELECTION_HIT_RADIUS,
-                creationThreshold = SHAPE_CREATION_THRESHOLD
-            )
-            .bindCanvasTapGestures(
-                currentTool = currentTool,
-                paths = paths,
-                selectedPathIndex = selectedPathIndex,
-                pathHitTester = pathHitTester,
-                callbacks = callbacks,
-                textEditState = textEditState,
-                selectionHitRadius = SELECTION_HIT_RADIUS,
-                onViewportResetRequested = onViewportResetRequested
-            )
-            .bindCanvasTransformGestures(
-                currentTool = currentTool,
-                selectedPathIndex = selectedPathIndex,
-                paths = paths,
-                callbacks = callbacks
-            )
-    ) {
+        }
+
+    Canvas(modifier = canvasModifier) {
         paths.forEachIndexed { index, drawingPath ->
             when (drawingPath) {
                 is DrawingPath.PenPath -> drawPath(

@@ -252,6 +252,23 @@ fun transformRectangle(
     )
 }
 
+fun transformArrow(
+    path: DrawingPath.ArrowPath,
+    pan: Offset,
+    zoom: Float,
+    rotation: Float
+): DrawingPath.ArrowPath {
+    val center = Offset(
+        x = (path.start.x + path.end.x) / 2f,
+        y = (path.start.y + path.end.y) / 2f
+    )
+    val scaledStart = center + (path.start - center) * zoom
+    val scaledEnd = center + (path.end - center) * zoom
+    val rotatedStart = rotatePointAround(scaledStart, center, rotation) + pan
+    val rotatedEnd = rotatePointAround(scaledEnd, center, rotation) + pan
+    return path.copy(start = rotatedStart, end = rotatedEnd)
+}
+
 fun estimateTextBounds(path: DrawingPath.TextPath): Rect {
     val lines = path.text.split('\n')
     val widestLine = lines.maxOfOrNull { it.length } ?: 1

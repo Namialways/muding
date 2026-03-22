@@ -328,6 +328,11 @@ fun handleSelectionTransform(
             )
         }
 
+        is DrawingPath.ArrowPath -> {
+            if (pan == Offset.Zero && zoom == 1f && rotation == 0f) return
+            callbacks.onPathUpdated(index, transformArrow(path, pan, zoom, rotation))
+        }
+
         else -> Unit
     }
 }
