@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 
 enum class DrawingTool {
+    MOVE,
     PEN,
     ERASER,
     ARROW,
@@ -33,7 +34,8 @@ sealed class DrawingPath {
         val bottomRight: Offset,
         val color: Color,
         val strokeWidth: Float,
-        val filled: Boolean = false
+        val filled: Boolean = false,
+        val rotation: Float = 0f
     ) : DrawingPath()
 
     data class CirclePath(

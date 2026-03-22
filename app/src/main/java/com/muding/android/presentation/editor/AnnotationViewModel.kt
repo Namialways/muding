@@ -106,8 +106,15 @@ class AnnotationViewModel : ViewModel() {
 
     fun selectTool(tool: DrawingTool) {
         currentTool.value = if (currentTool.value == tool) null else tool
+        if (currentTool.value == null) {
+            selectedPathIndex.value = null
+            return
+        }
         val selected = selectedPath()
-        if (currentTool.value != null && selected != null && toolFor(selected) != currentTool.value) {
+        if (selected != null &&
+            currentTool.value != DrawingTool.MOVE &&
+            toolFor(selected) != currentTool.value
+        ) {
             selectedPathIndex.value = null
         }
     }

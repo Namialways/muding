@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Refresh
@@ -222,8 +223,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                     }
                 }
                 val canTransformCanvas = currentToolAllowsViewportTransform(
-                    tool = viewModel.currentTool.value,
-                    selectedPath = viewModel.selectedPath()
+                    tool = viewModel.currentTool.value
                 )
 
                 Surface(
@@ -285,7 +285,11 @@ class AnnotationEditorActivity : ComponentActivity() {
                             selectedPathIndex = viewModel.selectedPathIndex.value,
                             onPathAdded = { path ->
                                 val index = viewModel.addPath(path)
-                                viewModel.selectPath(index, path)
+                                if (path is DrawingPath.TextPath) {
+                                    viewModel.selectPath(index, path)
+                                } else {
+                                    viewModel.clearSelection()
+                                }
                             },
                             onPathUpdated = { index, path -> viewModel.updatePath(index, path) },
                             onPathReplaced = { index, replacements -> viewModel.replacePath(index, replacements) },
@@ -507,6 +511,7 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
     val showEraserControls = currentTool == DrawingTool.ERASER
 
     val tools = listOf(
+        EditorToolSpec(DrawingTool.MOVE, Icons.Default.OpenWith, R.string.tool_move),
         EditorToolSpec(DrawingTool.PEN, Icons.Default.Edit, R.string.tool_pen),
         EditorToolSpec(DrawingTool.ERASER, Icons.Default.AutoFixOff, R.string.tool_eraser),
         EditorToolSpec(DrawingTool.ARROW, Icons.Default.TrendingUp, R.string.tool_arrow),
@@ -705,9 +710,6 @@ fun ColorButton(
     )
 }
 
-private fun currentToolAllowsViewportTransform(
-    tool: DrawingTool?,
-    selectedPath: DrawingPath?
-): Boolean {
-    return tool == null && selectedPath == null
+private fun currentToolAllowsViewportTransform(tool: DrawingTool?): Boolean {
+    return tool == null
 }

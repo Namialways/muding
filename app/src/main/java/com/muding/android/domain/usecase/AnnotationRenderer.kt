@@ -76,13 +76,16 @@ class AnnotationRenderer {
                     paint.color = path.color.toArgb()
                     paint.strokeWidth = path.strokeWidth * scaleAverage
                     paint.style = if (path.filled) Paint.Style.FILL else Paint.Style.STROKE
-                    canvas.drawRect(
-                        path.topLeft.x * scaleX,
-                        path.topLeft.y * scaleY,
-                        path.bottomRight.x * scaleX,
-                        path.bottomRight.y * scaleY,
-                        paint
-                    )
+                    val left = path.topLeft.x * scaleX
+                    val top = path.topLeft.y * scaleY
+                    val right = path.bottomRight.x * scaleX
+                    val bottom = path.bottomRight.y * scaleY
+                    val centerX = (left + right) / 2f
+                    val centerY = (top + bottom) / 2f
+                    canvas.save()
+                    canvas.rotate(path.rotation, centerX, centerY)
+                    canvas.drawRect(left, top, right, bottom, paint)
+                    canvas.restore()
                 }
 
                 is DrawingPath.CirclePath -> {

@@ -174,6 +174,7 @@ object AnnotationSessionStore {
                 put("color", path.color.toArgb())
                 put("strokeWidth", path.strokeWidth)
                 put("filled", path.filled)
+                put("rotation", path.rotation)
                 put("topLeft", serializeOffset(path.topLeft))
                 put("bottomRight", serializeOffset(path.bottomRight))
             }
@@ -228,7 +229,8 @@ object AnnotationSessionStore {
                 bottomRight = deserializeOffset(json.getJSONObject("bottomRight")),
                 color = Color(json.getInt("color")),
                 strokeWidth = json.getDouble("strokeWidth").toFloat(),
-                filled = json.optBoolean("filled", false)
+                filled = json.optBoolean("filled", false),
+                rotation = json.optDouble("rotation", 0.0).toFloat()
             )
 
             "circle" -> DrawingPath.CirclePath(

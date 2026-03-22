@@ -17,6 +17,7 @@
     <string name="action_exit">退出</string>
 
     <string name="tool_pen">画笔</string>
+    <string name="tool_move">移动</string>
     <string name="tool_eraser">橡皮擦</string>
     <string name="tool_arrow">箭头</string>
     <string name="tool_rectangle">矩形</string>
