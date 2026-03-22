@@ -3,6 +3,7 @@ package com.muding.android.presentation.editor
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -15,6 +16,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,12 +30,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixOff
 import androidx.compose.material.icons.filled.Circle
@@ -57,15 +61,19 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,6 +84,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -165,8 +174,7 @@ class AnnotationEditorActivity : ComponentActivity() {
     @Composable
     private fun AnnotationEditorScreen() {
         val bitmap = capturedBitmap ?: return
-        var canvasScale by remember { mutableStateOf(1f) }
-        var canvasOffset by remember { mutableStateOf(Offset.Zero) }
+        val viewportState = remember { EditorViewportState() }
 
         Scaffold(
             topBar = {
@@ -182,10 +190,7 @@ class AnnotationEditorActivity : ComponentActivity() {
                     onRedo = { viewModel.redo() },
                     canDeleteSelection = viewModel.selectedPathIndex.value != null,
                     onDeleteSelection = { viewModel.deleteSelectedPath() },
-                    onResetViewport = {
-                        canvasScale = 1f
-                        canvasOffset = Offset.Zero
-                    }
+                    onResetViewport = { viewportState.reset() }
                 )
             },
             bottomBar = { EditorBottomBar(viewModel = viewModel) }
@@ -238,30 +243,31 @@ class AnnotationEditorActivity : ComponentActivity() {
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                scaleX = canvasScale
-                                scaleY = canvasScale
-                                translationX = canvasOffset.x
-                                translationY = canvasOffset.y
+                                scaleX = viewportState.scale
+                                scaleY = viewportState.scale
+                                translationX = viewportState.offset.x
+                                translationY = viewportState.offset.y
                             }
                             .pointerInput(
                                 canTransformCanvas,
-                                canvasScale,
                                 contentWidthPx,
                                 contentHeightPx
                             ) {
                                 if (canTransformCanvas) {
                                     detectTransformGestures(
-                                        panZoomLock = true
-                                    ) { _, pan, zoom, _ ->
-                                        val newScale = (canvasScale * zoom).coerceIn(1f, 4f)
+                                    ) { centroid, pan, zoom, _ ->
+                                        val previousScale = viewportState.scale
+                                        val newScale = (previousScale * zoom).coerceIn(1f, 6f)
+                                        val pivot = Offset(contentWidthPx / 2f, contentHeightPx / 2f)
+                                        val focusCompensation = (centroid - pivot) * (previousScale - newScale)
                                         val maxOffsetX = ((contentWidthPx * newScale) - contentWidthPx) / 2f
                                         val maxOffsetY = ((contentHeightPx * newScale) - contentHeightPx) / 2f
                                         val nextOffset = Offset(
-                                            x = (canvasOffset.x + pan.x).coerceIn(-maxOffsetX, maxOffsetX),
-                                            y = (canvasOffset.y + pan.y).coerceIn(-maxOffsetY, maxOffsetY)
+                                            x = (viewportState.offset.x + pan.x + focusCompensation.x).coerceIn(-maxOffsetX, maxOffsetX),
+                                            y = (viewportState.offset.y + pan.y + focusCompensation.y).coerceIn(-maxOffsetY, maxOffsetY)
                                         )
-                                        canvasScale = newScale
-                                        canvasOffset = nextOffset
+                                        viewportState.scale = newScale
+                                        viewportState.offset = nextOffset
                                     }
                                 }
                             }
@@ -275,8 +281,6 @@ class AnnotationEditorActivity : ComponentActivity() {
                         DrawingCanvas(
                             paths = viewModel.paths,
                             currentTool = viewModel.currentTool.value,
-                            viewportScale = canvasScale,
-                            viewportOffset = canvasOffset,
                             currentColor = viewModel.currentColor.value,
                             strokeWidth = viewModel.strokeWidth.value,
                             eraserSize = viewModel.eraserSize.value,
@@ -297,7 +301,8 @@ class AnnotationEditorActivity : ComponentActivity() {
                             onPathReplaced = { index, replacements -> viewModel.replacePath(index, replacements) },
                             onPathRemoved = { index -> viewModel.removePath(index) },
                             onPathSelectionChanged = { index, path -> viewModel.selectPath(index, path) },
-                            onCanvasSizeChanged = { editorCanvasSize = it }
+                            onCanvasSizeChanged = { editorCanvasSize = it },
+                            onViewportResetRequested = { viewportState.reset() }
                         )
                     }
                 }
@@ -498,6 +503,7 @@ fun EditorTopBar(
 fun EditorBottomBar(viewModel: AnnotationViewModel) {
     val currentTool = viewModel.currentTool.value
     val selectedPath = viewModel.selectedPath()
+    var showColorPaletteDialog by remember { mutableStateOf(false) }
     val showStrokeControls =
         currentTool in setOf(DrawingTool.PEN, DrawingTool.ARROW, DrawingTool.RECTANGLE, DrawingTool.CIRCLE) ||
             selectedPath is DrawingPath.PenPath ||
@@ -556,97 +562,128 @@ fun EditorBottomBar(viewModel: AnnotationViewModel) {
                 }
             }
 
-            if (showStrokeControls) {
-                EditorControlCard {
-                    EditorSliderRow(
-                        title = stringResource(R.string.editor_stroke_width, viewModel.strokeWidth.value.toInt()),
-                        value = viewModel.strokeWidth.value,
-                        valueRange = 2f..32f,
-                        onValueChange = viewModel::selectStrokeWidth
-                    )
-                }
-            }
-
-            if (showTextControls) {
-                EditorControlCard {
-                    EditorSliderRow(
-                        title = stringResource(R.string.editor_text_size, viewModel.textSize.value.toInt()),
-                        value = viewModel.textSize.value,
-                        valueRange = 14f..72f,
-                        onValueChange = viewModel::selectTextSize
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    EditorSwitchRow(
-                        title = stringResource(R.string.editor_text_outline),
-                        checked = viewModel.textOutlineEnabled.value,
-                        onCheckedChange = viewModel::selectTextOutlineEnabled
-                    )
-                }
-            }
-
-            if (showFillControls) {
-                EditorControlCard {
-                    EditorSwitchRow(
-                        title = stringResource(R.string.editor_shape_fill),
-                        checked = viewModel.shapeFilled.value,
-                        onCheckedChange = viewModel::selectShapeFilled
-                    )
-                }
-            }
-
-            if (showEraserControls) {
-                EditorControlCard {
-                    EditorSliderRow(
-                        title = stringResource(R.string.editor_eraser_size, viewModel.eraserSize.value.toInt()),
-                        value = viewModel.eraserSize.value,
-                        valueRange = 12f..96f,
-                        onValueChange = viewModel::selectEraserSize
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = viewModel.eraserMode.value == EraserMode.OBJECT,
-                            onClick = { viewModel.selectEraserMode(EraserMode.OBJECT) },
-                            label = { Text(stringResource(R.string.editor_eraser_object)) }
-                        )
-                        FilterChip(
-                            selected = viewModel.eraserMode.value == EraserMode.PARTIAL,
-                            onClick = { viewModel.selectEraserMode(EraserMode.PARTIAL) },
-                            label = { Text(stringResource(R.string.editor_eraser_partial)) }
+            EditorControlCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(184.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (showStrokeControls) {
+                        EditorSliderRow(
+                            title = stringResource(R.string.editor_stroke_width, viewModel.strokeWidth.value.toInt()),
+                            value = viewModel.strokeWidth.value,
+                            valueRange = 2f..32f,
+                            onValueChange = viewModel::selectStrokeWidth
                         )
                     }
-                }
-            }
 
-            EditorControlCard {
-                Text(
-                    text = stringResource(R.string.editor_color_palette),
-                    style = MaterialTheme.typography.labelLarge
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(viewModel.availableColors, key = { it.hashCode() }) { color: Color ->
-                        ColorButton(
-                            color = color,
-                            isSelected = viewModel.currentColor.value == color,
-                            onClick = { viewModel.selectColor(color) }
+                    if (showTextControls) {
+                        EditorSliderRow(
+                            title = stringResource(R.string.editor_text_size, viewModel.textSize.value.toInt()),
+                            value = viewModel.textSize.value,
+                            valueRange = 14f..72f,
+                            onValueChange = viewModel::selectTextSize
                         )
+                        EditorSwitchRow(
+                            title = stringResource(R.string.editor_text_outline),
+                            checked = viewModel.textOutlineEnabled.value,
+                            onCheckedChange = viewModel::selectTextOutlineEnabled
+                        )
+                    }
+
+                    if (showFillControls) {
+                        EditorSwitchRow(
+                            title = stringResource(R.string.editor_shape_fill),
+                            checked = viewModel.shapeFilled.value,
+                            onCheckedChange = viewModel::selectShapeFilled
+                        )
+                    }
+
+                    if (showEraserControls) {
+                        EditorSliderRow(
+                            title = stringResource(R.string.editor_eraser_size, viewModel.eraserSize.value.toInt()),
+                            value = viewModel.eraserSize.value,
+                            valueRange = 12f..96f,
+                            onValueChange = viewModel::selectEraserSize
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = viewModel.eraserMode.value == EraserMode.OBJECT,
+                                onClick = { viewModel.selectEraserMode(EraserMode.OBJECT) },
+                                label = { Text(stringResource(R.string.editor_eraser_object)) }
+                            )
+                            FilterChip(
+                                selected = viewModel.eraserMode.value == EraserMode.PARTIAL,
+                                onClick = { viewModel.selectEraserMode(EraserMode.PARTIAL) },
+                                label = { Text(stringResource(R.string.editor_eraser_partial)) }
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = stringResource(R.string.editor_color_palette),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ColorButton(
+                            color = viewModel.currentColor.value,
+                            isSelected = true,
+                            onClick = { showColorPaletteDialog = true }
+                        )
+                        OutlinedButton(onClick = { showColorPaletteDialog = true }) {
+                            Text("色板")
+                        }
+                    }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(viewModel.availableColors, key = { it.hashCode() }) { color ->
+                            ColorButton(
+                                color = color,
+                                isSelected = viewModel.currentColor.value == color,
+                                onClick = { viewModel.selectColor(color) }
+                            )
+                        }
                     }
                 }
             }
         }
     }
+
+    if (showColorPaletteDialog) {
+        ColorPaletteDialog(
+            initialColor = viewModel.currentColor.value,
+            onDismiss = { showColorPaletteDialog = false },
+            onConfirm = { color ->
+                viewModel.selectColor(color)
+                showColorPaletteDialog = false
+            }
+        )
+    }
 }
 
 @Composable
-private fun EditorControlCard(content: @Composable ColumnScope.() -> Unit) {
+private fun EditorControlCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Surface(
+        modifier = modifier,
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
         tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             content = content
         )
     }
@@ -709,6 +746,68 @@ fun ColorButton(
                 shape = CircleShape
             )
             .clickable(onClick = onClick)
+    )
+}
+
+@Composable
+private fun ColorPaletteDialog(
+    initialColor: Color,
+    onDismiss: () -> Unit,
+    onConfirm: (Color) -> Unit
+) {
+    val hsv = remember(initialColor) {
+        FloatArray(3).apply {
+            AndroidColor.colorToHSV(initialColor.toArgb(), this)
+        }
+    }
+    var hue by remember(initialColor) { mutableFloatStateOf(hsv[0]) }
+    var saturation by remember(initialColor) { mutableFloatStateOf(hsv[1]) }
+    var value by remember(initialColor) { mutableFloatStateOf(hsv[2]) }
+    val previewColor = Color.hsv(hue, saturation, value)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择颜色") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(previewColor)
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.32f), RoundedCornerShape(12.dp))
+                )
+                EditorSliderRow(
+                    title = "色相 ${hue.toInt()}",
+                    value = hue,
+                    valueRange = 0f..360f,
+                    onValueChange = { hue = it }
+                )
+                EditorSliderRow(
+                    title = "饱和度 ${(saturation * 100).toInt()}%",
+                    value = saturation,
+                    valueRange = 0f..1f,
+                    onValueChange = { saturation = it }
+                )
+                EditorSliderRow(
+                    title = "明度 ${(value * 100).toInt()}%",
+                    value = value,
+                    valueRange = 0f..1f,
+                    onValueChange = { value = it }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(previewColor) }) {
+                Text(stringResource(R.string.action_done))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
     )
 }
 
