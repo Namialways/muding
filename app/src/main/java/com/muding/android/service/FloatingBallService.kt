@@ -171,6 +171,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             ACTION_START_SCREENSHOT -> {
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
                 val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
+                val captureAfterPermission =
+                    intent.getBooleanExtra(EXTRA_CAPTURE_AFTER_PERMISSION, false)
                 if (resultCode == Activity.RESULT_OK && resultData != null) {
                     floatingView?.visibility = View.GONE
                     createNotificationChannel()
@@ -184,7 +186,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         startForeground(NOTIFICATION_ID, createNotification())
                     }
                     screenshotManager.initMediaProjection(resultCode, resultData)
-                    captureAndShowCropOverlay()
+                    captureAndShowCropOverlay(captureAfterPermission = captureAfterPermission)
                 } else {
                     floatingView?.visibility = View.VISIBLE
                 }
@@ -371,10 +373,13 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         )
     }
 
-    private fun captureAndShowCropOverlay() {
+    private fun captureAndShowCropOverlay(captureAfterPermission: Boolean = false) {
         lifecycleScope.launch {
             try {
-                val bitmap = screenshotManager.captureScreen()
+                val bitmap = screenshotManager.captureScreen(
+                    startDelayMs = if (captureAfterPermission) FIRST_CAPTURE_AFTER_PERMISSION_DELAY_MS else 150L,
+                    dropFirstFrame = captureAfterPermission
+                )
                 showCropOverlay(bitmap)
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -877,6 +882,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             "com.muding.android.action.RESTORE_FLOATING_BALL_VISIBILITY"
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
+        const val EXTRA_CAPTURE_AFTER_PERMISSION = "extra_capture_after_permission"
+        private const val FIRST_CAPTURE_AFTER_PERMISSION_DELAY_MS = 360L
 
         fun createRestoreVisibilityIntent(context: Context): Intent {
             return Intent(context, FloatingBallService::class.java).apply {
