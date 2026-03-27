@@ -28,6 +28,8 @@ fun handleMoveDragStart(
     val activeHandle = selectedPath?.let { resizeHandleHit(it, dragStartOffset) }
     if (selectedPathIndex != null && activeHandle != null) {
         interactionState.resizingState = ActiveResizeState(selectedPathIndex, activeHandle)
+        interactionState.originalDragPath = selectedPath
+        interactionState.activePreviewPath = selectedPath
         callbacks.onPathSelectionChanged(selectedPathIndex, selectedPath)
         return
     }
@@ -39,12 +41,20 @@ fun handleMoveDragStart(
         pathHitTester.isInteractivePathHit(selectedPath, dragStartOffset, selectionHitRadius)
     ) {
         interactionState.movingPathIndex = selectedPathIndex
+        interactionState.originalDragPath = selectedPath
+        interactionState.activePreviewPath = selectedPath
         callbacks.onPathSelectionChanged(selectedPathIndex, selectedPath)
         return
     }
 
     val hitIndex = pathHitTester.hitEditableIndexAt(paths, dragStartOffset, selectionHitRadius)
-    callbacks.onPathSelectionChanged(hitIndex, hitIndex?.let(paths::getOrNull))
+    val hitPath = hitIndex?.let(paths::getOrNull)
+    if (hitIndex != null && hitPath != null) {
+        interactionState.movingPathIndex = hitIndex
+        interactionState.originalDragPath = hitPath
+        interactionState.activePreviewPath = hitPath
+    }
+    callbacks.onPathSelectionChanged(hitIndex, hitPath)
 }
 
 fun handleMoveDrag(
@@ -57,17 +67,13 @@ fun handleMoveDrag(
     val activeResize = interactionState.resizingState
     when {
         activeResize != null -> {
-            val path = paths.getOrNull(activeResize.index) ?: return
-            callbacks.onPathUpdated(
-                activeResize.index,
-                resizePath(path = path, handle = activeResize.handle, touch = touch)
-            )
+            val path = interactionState.activePreviewPath ?: interactionState.originalDragPath ?: return
+            interactionState.activePreviewPath = resizePath(path = path, handle = activeResize.handle, touch = touch)
         }
 
         interactionState.movingPathIndex != null -> {
-            val movingIndex = interactionState.movingPathIndex ?: return
-            val path = paths.getOrNull(movingIndex) ?: return
-            callbacks.onPathUpdated(movingIndex, movePath(path, dragAmount))
+            val path = interactionState.activePreviewPath ?: interactionState.originalDragPath ?: return
+            interactionState.activePreviewPath = movePath(path, dragAmount)
         }
     }
 }
@@ -79,7 +85,19 @@ fun handleMoveDragEnd(
 ) {
     val activeResize = interactionState.resizingState
     val movingIndex = interactionState.movingPathIndex
+    val finalPreview = interactionState.activePreviewPath
+    
     when {
+        activeResize != null && finalPreview != null -> {
+            callbacks.onPathUpdated(activeResize.index, finalPreview)
+            callbacks.onPathSelectionChanged(activeResize.index, finalPreview)
+        }
+
+        movingIndex != null && finalPreview != null -> {
+            callbacks.onPathUpdated(movingIndex, finalPreview)
+            callbacks.onPathSelectionChanged(movingIndex, finalPreview)
+        }
+        
         activeResize != null -> {
             callbacks.onPathSelectionChanged(activeResize.index, paths.getOrNull(activeResize.index))
         }
@@ -289,6 +307,7 @@ fun handleTextToolTap(
 }
 
 fun handleSelectionTransform(
+    interactionState: EditorCanvasInteractionState,
     currentTool: DrawingTool?,
     selectedPathIndex: Int?,
     paths: List<DrawingPath>,
@@ -299,38 +318,40 @@ fun handleSelectionTransform(
 ) {
     if (currentTool != DrawingTool.MOVE) return
     val index = selectedPathIndex ?: return
-    when (val path = paths.getOrNull(index)) {
+    val path = interactionState.activePreviewPath ?: paths.getOrNull(index) ?: return
+    
+    // Check if we just started a multi-touch transform from an idle selection
+    // without a dragStart firing first. If so, initialize the original drag state
+    if (interactionState.activePreviewPath == null) {
+        interactionState.originalDragPath = path
+    }
+
+    when (path) {
         is DrawingPath.TextPath -> {
             if (pan == Offset.Zero && zoom == 1f && rotation == 0f) return
-            callbacks.onPathUpdated(
-                index,
-                path.copy(
-                    position = path.position + pan,
-                    scale = (path.scale * zoom).coerceIn(0.5f, 6f),
-                    rotation = normalizeRotation(path.rotation + rotation)
-                )
+            interactionState.activePreviewPath = path.copy(
+                position = path.position + pan,
+                scale = (path.scale * zoom).coerceIn(0.5f, 6f),
+                rotation = normalizeRotation(path.rotation + rotation)
             )
         }
 
         is DrawingPath.RectanglePath -> {
             if (pan == Offset.Zero && zoom == 1f && rotation == 0f) return
-            callbacks.onPathUpdated(index, transformRectangle(path, pan, zoom, rotation))
+            interactionState.activePreviewPath = transformRectangle(path, pan, zoom, rotation)
         }
 
         is DrawingPath.CirclePath -> {
             if (pan == Offset.Zero && zoom == 1f) return
-            callbacks.onPathUpdated(
-                index,
-                path.copy(
-                    center = path.center + pan,
-                    radius = (path.radius * zoom).coerceAtLeast(MIN_CIRCLE_RADIUS)
-                )
+            interactionState.activePreviewPath = path.copy(
+                center = path.center + pan,
+                radius = (path.radius * zoom).coerceAtLeast(MIN_CIRCLE_RADIUS)
             )
         }
 
         is DrawingPath.ArrowPath -> {
             if (pan == Offset.Zero && zoom == 1f && rotation == 0f) return
-            callbacks.onPathUpdated(index, transformArrow(path, pan, zoom, rotation))
+            interactionState.activePreviewPath = transformArrow(path, pan, zoom, rotation)
         }
 
         else -> Unit

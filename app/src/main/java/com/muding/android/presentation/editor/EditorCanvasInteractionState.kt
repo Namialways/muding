@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
+import com.muding.android.domain.model.DrawingPath
 
 @Stable
 class EditorCanvasInteractionState {
@@ -22,6 +23,8 @@ class EditorCanvasInteractionState {
     var resizingState by mutableStateOf<ActiveResizeState?>(null)
     var moveGestureDownOffset by mutableStateOf<Offset?>(null)
     var eraserPreviewCenter by mutableStateOf<Offset?>(null)
+    var activePreviewPath by mutableStateOf<DrawingPath?>(null)
+    var originalDragPath by mutableStateOf<DrawingPath?>(null)
 
     fun resetDragState() {
         currentPath = null
@@ -31,6 +34,8 @@ class EditorCanvasInteractionState {
         movingPathIndex = null
         resizingState = null
         moveGestureDownOffset = null
+        activePreviewPath = null
+        originalDragPath = null
     }
 }
 

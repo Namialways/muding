@@ -139,79 +139,91 @@ fun DrawingCanvas(
                         selectionHitRadius = SELECTION_HIT_RADIUS,
                         onViewportResetRequested = onViewportResetRequested
                     )
-                    .bindCanvasTransformGestures(
-                        currentTool = currentTool,
-                        latestSelectedPathIndex = latestSelectedPathIndex,
-                        latestPaths = latestPaths,
-                        toCanvasDelta = ::toCanvasDelta,
-                        callbacks = callbacks
-                    )
             }
         }
 
-    Canvas(modifier = canvasModifier) {
-        paths.forEachIndexed { index, drawingPath ->
-            when (drawingPath) {
-                is DrawingPath.PenPath -> drawPath(
-                    path = drawingPath.path,
-                    color = drawingPath.color,
-                    style = Stroke(
-                        width = drawingPath.strokeWidth,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
+    fun androidx.compose.ui.graphics.drawscope.DrawScope.renderDrawingPath(
+        drawingPath: DrawingPath,
+        isSelected: Boolean
+    ) {
+        when (drawingPath) {
+            is DrawingPath.PenPath -> drawPath(
+                path = drawingPath.path,
+                color = drawingPath.color,
+                style = Stroke(
+                    width = drawingPath.strokeWidth,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+            )
+
+            is DrawingPath.ArrowPath -> drawArrow(
+                start = drawingPath.start,
+                end = drawingPath.end,
+                color = drawingPath.color,
+                strokeWidth = drawingPath.strokeWidth
+            )
+
+            is DrawingPath.RectanglePath -> {
+                val center = rectangleCenter(drawingPath)
+                rotate(drawingPath.rotation, pivot = center) {
+                    drawRect(
+                        color = drawingPath.color,
+                        topLeft = drawingPath.topLeft,
+                        size = Size(
+                            drawingPath.bottomRight.x - drawingPath.topLeft.x,
+                            drawingPath.bottomRight.y - drawingPath.topLeft.y
+                        ),
+                        style = if (drawingPath.filled) Fill else Stroke(width = drawingPath.strokeWidth)
                     )
-                )
+                }
+            }
 
-                is DrawingPath.ArrowPath -> drawArrow(
-                    start = drawingPath.start,
-                    end = drawingPath.end,
-                    color = drawingPath.color,
-                    strokeWidth = drawingPath.strokeWidth
-                )
+            is DrawingPath.CirclePath -> drawCircle(
+                color = drawingPath.color,
+                radius = drawingPath.radius,
+                center = drawingPath.center,
+                style = if (drawingPath.filled) Fill else Stroke(width = drawingPath.strokeWidth)
+            )
 
-                is DrawingPath.RectanglePath -> {
-                    val center = rectangleCenter(drawingPath)
-                    rotate(drawingPath.rotation, pivot = center) {
-                        drawRect(
-                            color = drawingPath.color,
-                            topLeft = drawingPath.topLeft,
-                            size = Size(
-                                drawingPath.bottomRight.x - drawingPath.topLeft.x,
-                                drawingPath.bottomRight.y - drawingPath.topLeft.y
-                            ),
-                            style = if (drawingPath.filled) Fill else Stroke(width = drawingPath.strokeWidth)
+            is DrawingPath.TextPath -> {
+                val textLayout = pathHitTester.measureText(drawingPath)
+                rotate(drawingPath.rotation, pivot = drawingPath.position) {
+                    if (drawingPath.outlineEnabled) {
+                        drawOutlinedText(
+                            textLayout = textLayout,
+                            topLeft = drawingPath.position,
+                            outlineColor = outlineColorFor(drawingPath.color)
                         )
                     }
+                    drawText(textLayoutResult = textLayout, topLeft = drawingPath.position)
                 }
+            }
+        }
 
-                is DrawingPath.CirclePath -> drawCircle(
-                    color = drawingPath.color,
-                    radius = drawingPath.radius,
-                    center = drawingPath.center,
-                    style = if (drawingPath.filled) Fill else Stroke(width = drawingPath.strokeWidth)
+        if (isSelected) {
+            when (drawingPath) {
+                is DrawingPath.TextPath -> drawTextSelection(drawingPath, pathHitTester.measureText(drawingPath))
+                else -> drawPathSelection(drawingPath)
+            }
+        }
+    }
+
+    Canvas(modifier = canvasModifier) {
+        paths.forEachIndexed { index, drawingPath ->
+            val isActive = index == interactionState.movingPathIndex || index == interactionState.resizingState?.index
+            if (!isActive) {
+                renderDrawingPath(
+                    drawingPath = drawingPath,
+                    isSelected = selectedPathIndex == index
                 )
-
-                is DrawingPath.TextPath -> {
-                    val textLayout = pathHitTester.measureText(drawingPath)
-                    rotate(drawingPath.rotation, pivot = drawingPath.position) {
-                        if (drawingPath.outlineEnabled) {
-                            drawOutlinedText(
-                                textLayout = textLayout,
-                                topLeft = drawingPath.position,
-                                outlineColor = outlineColorFor(drawingPath.color)
-                            )
-                        }
-                        drawText(textLayoutResult = textLayout, topLeft = drawingPath.position)
-                    }
-                }
             }
+        }
 
-            if (selectedPathIndex == index) {
-                when (drawingPath) {
-                    is DrawingPath.TextPath -> drawTextSelection(drawingPath, pathHitTester.measureText(drawingPath))
-                    else -> drawPathSelection(drawingPath)
-                }
-            }
+        interactionState.activePreviewPath?.let { previewPath ->
+            val activeIndex = interactionState.movingPathIndex ?: interactionState.resizingState?.index
+            val isSelected = activeIndex != null && activeIndex == selectedPathIndex
+            renderDrawingPath(previewPath, isSelected)
         }
 
         if (interactionState.pathVersion >= 0) {

@@ -7,14 +7,13 @@ import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
@@ -25,6 +24,39 @@ import com.muding.android.domain.model.DrawingPath
 import com.muding.android.domain.model.DrawingTool
 import kotlin.math.PI
 import kotlin.math.abs
+
+
+private sealed interface MoveGestureOutcome {
+    data class Drag(val change: PointerInputChange, val overSlop: Offset) : MoveGestureOutcome
+    data object Tap : MoveGestureOutcome
+    data object LongPress : MoveGestureOutcome
+}
+
+private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.awaitMoveGestureOutcome(
+    pointerId: PointerId,
+    startPosition: Offset,
+    touchSlopPx: Float,
+    longPressTimeoutMs: Long
+): MoveGestureOutcome {
+    val deadlineNanos = System.nanoTime() + longPressTimeoutMs * 1_000_000L
+    while (true) {
+        val remainingMs = (deadlineNanos - System.nanoTime()) / 1_000_000L
+        if (remainingMs <= 0) return MoveGestureOutcome.LongPress
+
+        val event = withTimeoutOrNull(remainingMs) {
+            awaitPointerEvent()
+        } ?: return MoveGestureOutcome.LongPress
+
+        val change = event.changes.firstOrNull { it.id == pointerId }
+            ?: return MoveGestureOutcome.Tap
+        if (!change.pressed) return MoveGestureOutcome.Tap
+
+        val offset = change.position - startPosition
+        if (offset.getDistance() > touchSlopPx) {
+            return MoveGestureOutcome.Drag(change, offset)
+        }
+    }
+}
 
 fun Modifier.bindMoveModeGestures(
     latestPaths: State<List<DrawingPath>>,
@@ -37,10 +69,27 @@ fun Modifier.bindMoveModeGestures(
     textEditState: EditorTextEditState,
     selectionHitRadius: Float
 ): Modifier {
-    return this
-        .pointerInput(Unit) {
-            detectDragGestures(
-                onDragStart = { offset ->
+    return this.pointerInput(Unit) {
+        var lastTapTimeMs = 0L
+        var lastTapPosition = Offset.Zero
+
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val downPos = down.position
+            val downTimeMs = down.uptimeMillis
+            val canvasDown = toCanvasOffset(downPos)
+            interactionState.moveGestureDownOffset = canvasDown
+
+            val outcome = awaitMoveGestureOutcome(
+                pointerId = down.id,
+                startPosition = downPos,
+                touchSlopPx = viewConfiguration.touchSlop,
+                longPressTimeoutMs = viewConfiguration.longPressTimeoutMillis
+            )
+
+            when (outcome) {
+                is MoveGestureOutcome.Drag -> {
+                    // 拖动识别成功，立即启动移动
                     handleMoveDragStart(
                         interactionState = interactionState,
                         pathHitTester = pathHitTester,
@@ -48,75 +97,103 @@ fun Modifier.bindMoveModeGestures(
                         selectedPathIndex = latestSelectedPathIndex.value,
                         selectionHitRadius = selectionHitRadius,
                         callbacks = callbacks,
-                        fallbackOffset = interactionState.moveGestureDownOffset ?: toCanvasOffset(offset)
+                        fallbackOffset = canvasDown
                     )
-                },
-                onDrag = { change, dragAmount ->
+                    // 应用超出 touch slop 的初始偏移量
                     handleMoveDrag(
                         interactionState = interactionState,
                         paths = latestPaths.value,
                         callbacks = callbacks,
-                        dragAmount = toCanvasDelta(dragAmount),
-                        touch = toCanvasOffset(change.position)
+                        dragAmount = toCanvasDelta(outcome.overSlop),
+                        touch = toCanvasOffset(outcome.change.position)
                     )
-                    change.consume()
-                },
-                onDragEnd = {
+                    outcome.change.consume()
+
+                    // 持续跟踪拖动
+                    drag(outcome.change.id) { change ->
+                        val pointerCount = currentEvent.changes.count { it.pressed }
+                        if (pointerCount >= 2) {
+                            val pan = currentEvent.calculatePan()
+                            val zoom = currentEvent.calculateZoom()
+                            val rotation = currentEvent.calculateRotation()
+                            handleSelectionTransform(
+                                interactionState = interactionState,
+                                currentTool = DrawingTool.MOVE,
+                                selectedPathIndex = latestSelectedPathIndex.value,
+                                paths = latestPaths.value,
+                                pan = toCanvasDelta(pan),
+                                zoom = zoom,
+                                rotation = rotation,
+                                callbacks = callbacks
+                            )
+                        } else {
+                            handleMoveDrag(
+                                interactionState = interactionState,
+                                paths = latestPaths.value,
+                                callbacks = callbacks,
+                                dragAmount = toCanvasDelta(change.positionChange()),
+                                touch = toCanvasOffset(change.position)
+                            )
+                        }
+                        change.consume()
+                    }
                     handleMoveDragEnd(
                         interactionState = interactionState,
                         paths = latestPaths.value,
                         callbacks = callbacks
                     )
-                },
-                onDragCancel = { interactionState.resetDragState() }
-            )
-        }
-        .pointerInput(Unit) {
-            detectTapGestures(
-                onTap = { offset ->
-                    handleMoveTap(
-                        pathHitTester = pathHitTester,
-                        paths = latestPaths.value,
-                        selectionHitRadius = selectionHitRadius,
-                        callbacks = callbacks,
-                        offset = toCanvasOffset(offset)
-                    )
-                },
-                onLongPress = { offset ->
-                    handleMoveTextEditRequest(
-                        pathHitTester = pathHitTester,
-                        paths = latestPaths.value,
-                        selectionHitRadius = selectionHitRadius,
-                        callbacks = callbacks,
-                        textEditState = textEditState,
-                        offset = toCanvasOffset(offset)
-                    )
-                },
-                onDoubleTap = { offset ->
-                    handleMoveTextEditRequest(
-                        pathHitTester = pathHitTester,
-                        paths = latestPaths.value,
-                        selectionHitRadius = selectionHitRadius,
-                        callbacks = callbacks,
-                        textEditState = textEditState,
-                        offset = toCanvasOffset(offset)
-                    )
+                    lastTapTimeMs = 0L
                 }
-            )
-        }
-        .pointerInput(Unit) {
-            detectTransformGestures { _, pan, zoom, rotation ->
-                handleSelectionTransform(
-                    currentTool = DrawingTool.MOVE,
-                    selectedPathIndex = latestSelectedPathIndex.value,
-                    paths = latestPaths.value,
-                    pan = toCanvasDelta(pan),
-                    zoom = zoom,
-                    rotation = rotation,
-                    callbacks = callbacks
-                )
+
+                is MoveGestureOutcome.LongPress -> {
+                    handleMoveTextEditRequest(
+                        pathHitTester = pathHitTester,
+                        paths = latestPaths.value,
+                        selectionHitRadius = selectionHitRadius,
+                        callbacks = callbacks,
+                        textEditState = textEditState,
+                        offset = canvasDown
+                    )
+                    // 消费后续事件直到手指抬起
+                    do {
+                        val event = awaitPointerEvent()
+                    } while (event.changes.any { it.pressed })
+                    interactionState.resetDragState()
+                    lastTapTimeMs = 0L
+                }
+
+                is MoveGestureOutcome.Tap -> {
+                    val isDoubleTap =
+                        (downTimeMs - lastTapTimeMs) < viewConfiguration.doubleTapTimeoutMillis &&
+                            (downPos - lastTapPosition).getDistance() < viewConfiguration.touchSlop * 2
+
+                    if (isDoubleTap) {
+                        handleMoveTextEditRequest(
+                            pathHitTester = pathHitTester,
+                            paths = latestPaths.value,
+                            selectionHitRadius = selectionHitRadius,
+                            callbacks = callbacks,
+                            textEditState = textEditState,
+                            offset = canvasDown
+                        )
+                        lastTapTimeMs = 0L
+                    } else {
+                        handleMoveTap(
+                            pathHitTester = pathHitTester,
+                            paths = latestPaths.value,
+                            selectionHitRadius = selectionHitRadius,
+                            callbacks = callbacks,
+                            offset = canvasDown
+                        )
+                        lastTapTimeMs = downTimeMs
+                        lastTapPosition = downPos
+                    }
+                    interactionState.resetDragState()
+                }
             }
+            interactionState.moveGestureDownOffset = null
         }
+    }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -372,70 +449,4 @@ fun Modifier.bindCanvasTapGestures(
     }
 }
 
-fun Modifier.bindCanvasTransformGestures(
-    currentTool: DrawingTool?,
-    latestSelectedPathIndex: State<Int?>,
-    latestPaths: State<List<DrawingPath>>,
-    toCanvasDelta: (Offset) -> Offset,
-    callbacks: EditorCanvasCallbacks
-): Modifier {
-    return pointerInput(currentTool) {
-        if (currentTool == DrawingTool.MOVE) {
-            detectMultiTouchTransformGestures { pan, zoom, rotation ->
-                handleSelectionTransform(
-                    currentTool = currentTool,
-                    selectedPathIndex = latestSelectedPathIndex.value,
-                    paths = latestPaths.value,
-                    pan = toCanvasDelta(pan),
-                    zoom = zoom,
-                    rotation = rotation,
-                    callbacks = callbacks
-                )
-            }
-        }
-    }
-}
 
-private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectMultiTouchTransformGestures(
-    onGesture: (pan: Offset, zoom: Float, rotation: Float) -> Unit
-) {
-    awaitEachGesture {
-        awaitFirstDown(requireUnconsumed = false)
-        var pastTouchSlop = false
-
-        do {
-            val event = awaitPointerEvent()
-            val activePointers = event.changes.count { it.pressed }
-
-            if (activePointers < 2) {
-                if (pastTouchSlop) break
-                continue
-            }
-
-            val panChange = event.calculatePan()
-            val zoomChange = event.calculateZoom()
-            val rotationChange = event.calculateRotation()
-
-            if (!pastTouchSlop) {
-                val panMotion = panChange.getDistance()
-                val zoomMotion = abs(1f - zoomChange)
-                val rotationMotion = abs(rotationChange * PI.toFloat() / 180f)
-                if (panMotion > viewConfiguration.touchSlop ||
-                    zoomMotion > 0.01f ||
-                    rotationMotion > 0.01f
-                ) {
-                    pastTouchSlop = true
-                }
-            }
-
-            if (pastTouchSlop) {
-                onGesture(panChange, zoomChange, rotationChange)
-                event.changes.forEach { change ->
-                    if (change.positionChanged()) {
-                        change.consume()
-                    }
-                }
-            }
-        } while (event.changes.any { it.pressed })
-    }
-}
