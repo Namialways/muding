@@ -21,7 +21,19 @@ sealed interface PathResizeHandle {
     data object RectTopRight : PathResizeHandle
     data object RectBottomLeft : PathResizeHandle
     data object RectBottomRight : PathResizeHandle
+    data object RectTopCenter : PathResizeHandle
+    data object RectBottomCenter : PathResizeHandle
+    data object RectLeftCenter : PathResizeHandle
+    data object RectRightCenter : PathResizeHandle
     data object CircleRadius : PathResizeHandle
+    data object CircleTop : PathResizeHandle
+    data object CircleBottom : PathResizeHandle
+    data object CircleLeft : PathResizeHandle
+    data object CircleRight : PathResizeHandle
+    data object TextTopLeft : PathResizeHandle
+    data object TextTopRight : PathResizeHandle
+    data object TextBottomLeft : PathResizeHandle
+    data object TextBottomRight : PathResizeHandle
 }
 
 data class ActiveResizeState(
@@ -114,8 +126,55 @@ fun resizeHandleHit(path: DrawingPath, touch: Offset): PathResizeHandle? {
             (center - touch).getDistance() <= HANDLE_HIT_RADIUS * 1.2f
         }?.first
 
-        is DrawingPath.RectanglePath -> null
-        is DrawingPath.CirclePath -> null
+        is DrawingPath.RectanglePath -> {
+            val center = rectangleCenter(path)
+            val localTouch = rotatePointAround(touch, center, -path.rotation)
+            val tl = path.topLeft
+            val br = path.bottomRight
+            val handles = listOf(
+                PathResizeHandle.RectTopLeft to tl,
+                PathResizeHandle.RectTopRight to Offset(br.x, tl.y),
+                PathResizeHandle.RectBottomRight to br,
+                PathResizeHandle.RectBottomLeft to Offset(tl.x, br.y),
+                PathResizeHandle.RectTopCenter to Offset((tl.x + br.x) / 2f, tl.y),
+                PathResizeHandle.RectBottomCenter to Offset((tl.x + br.x) / 2f, br.y),
+                PathResizeHandle.RectLeftCenter to Offset(tl.x, (tl.y + br.y) / 2f),
+                PathResizeHandle.RectRightCenter to Offset(br.x, (tl.y + br.y) / 2f)
+            )
+            handles.firstOrNull { (_, pos) ->
+                (pos - localTouch).getDistance() <= HANDLE_HIT_RADIUS * 1.2f
+            }?.first
+        }
+        is DrawingPath.CirclePath -> {
+            val center = path.center
+            val radius = path.radius
+            val handles = listOf(
+                PathResizeHandle.CircleTop to Offset(center.x, center.y - radius),
+                PathResizeHandle.CircleBottom to Offset(center.x, center.y + radius),
+                PathResizeHandle.CircleLeft to Offset(center.x - radius, center.y),
+                PathResizeHandle.CircleRight to Offset(center.x + radius, center.y)
+            )
+            handles.firstOrNull { (_, pos) ->
+                (pos - touch).getDistance() <= HANDLE_HIT_RADIUS * 1.2f
+            }?.first
+        }
+        is DrawingPath.TextPath -> {
+            val rect = estimateTextBounds(path)
+            val w = rect.width
+            val h = rect.height
+            val center = path.position // pivot is TopLeft
+            val localTouch = rotatePointAround(touch, center, -path.rotation)
+            
+            val handles = listOf(
+                PathResizeHandle.TextTopLeft to rect.topLeft,
+                PathResizeHandle.TextTopRight to Offset(rect.right, rect.top),
+                PathResizeHandle.TextBottomLeft to Offset(rect.left, rect.bottom),
+                PathResizeHandle.TextBottomRight to rect.bottomRight
+            )
+            handles.firstOrNull { (_, pos) ->
+                (pos - localTouch).getDistance() <= HANDLE_HIT_RADIUS * 1.2f
+            }?.first
+        }
         else -> null
     }
 }
@@ -151,25 +210,29 @@ fun resizePath(path: DrawingPath, handle: PathResizeHandle, touch: Offset): Draw
             val currentBottomRight = path.bottomRight
             val updatedTopLeft = when (handle) {
                 PathResizeHandle.RectTopLeft,
-                PathResizeHandle.RectBottomLeft -> Offset(localTouch.x, currentTopLeft.y)
+                PathResizeHandle.RectBottomLeft,
+                PathResizeHandle.RectLeftCenter -> Offset(localTouch.x, currentTopLeft.y)
 
                 else -> currentTopLeft
             }
             val updatedBottomRight = when (handle) {
                 PathResizeHandle.RectTopRight,
-                PathResizeHandle.RectBottomRight -> Offset(localTouch.x, currentBottomRight.y)
+                PathResizeHandle.RectBottomRight,
+                PathResizeHandle.RectRightCenter -> Offset(localTouch.x, currentBottomRight.y)
 
                 else -> currentBottomRight
             }
             val topY = when (handle) {
                 PathResizeHandle.RectTopLeft,
-                PathResizeHandle.RectTopRight -> localTouch.y
+                PathResizeHandle.RectTopRight,
+                PathResizeHandle.RectTopCenter -> localTouch.y
 
                 else -> currentTopLeft.y
             }
             val bottomY = when (handle) {
                 PathResizeHandle.RectBottomLeft,
-                PathResizeHandle.RectBottomRight -> localTouch.y
+                PathResizeHandle.RectBottomRight,
+                PathResizeHandle.RectBottomCenter -> localTouch.y
 
                 else -> currentBottomRight.y
             }
@@ -187,8 +250,60 @@ fun resizePath(path: DrawingPath, handle: PathResizeHandle, touch: Offset): Draw
             )
         }
 
-        path is DrawingPath.CirclePath && handle is PathResizeHandle.CircleRadius -> {
+        path is DrawingPath.CirclePath && (
+                handle is PathResizeHandle.CircleRadius ||
+                handle is PathResizeHandle.CircleTop ||
+                handle is PathResizeHandle.CircleBottom ||
+                handle is PathResizeHandle.CircleLeft ||
+                handle is PathResizeHandle.CircleRight
+        ) -> {
             path.copy(radius = max((touch - path.center).getDistance(), MIN_CIRCLE_RADIUS))
+        }
+
+        path is DrawingPath.TextPath && (
+            handle is PathResizeHandle.TextTopLeft ||
+            handle is PathResizeHandle.TextTopRight ||
+            handle is PathResizeHandle.TextBottomLeft ||
+            handle is PathResizeHandle.TextBottomRight
+        ) -> {
+            val rect = estimateTextBounds(path)
+            val wOld = rect.width
+            val hOld = rect.height
+            val localTouch = rotatePointAround(touch, path.position, -path.rotation)
+            
+            val oldAnchorOffsetLocal = when (handle) {
+                PathResizeHandle.TextTopLeft -> Offset(wOld, hOld)
+                PathResizeHandle.TextTopRight -> Offset(0f, hOld)
+                PathResizeHandle.TextBottomLeft -> Offset(wOld, 0f)
+                PathResizeHandle.TextBottomRight -> Offset.Zero
+                else -> Offset.Zero
+            }
+            
+            val localAnchor = path.position + oldAnchorOffsetLocal
+            val oldDistanceSimple = Offset(wOld, hOld).getDistance()
+            val newDistance = (localTouch - localAnchor).getDistance()
+            
+            val scaleFactor = if (oldDistanceSimple > 0) newDistance / oldDistanceSimple else 1f
+            val newScale = max(0.2f, path.scale * scaleFactor).coerceAtMost(20f)
+            
+            val wNew = wOld * (newScale / path.scale)
+            val hNew = hOld * (newScale / path.scale)
+            
+            val newAnchorOffsetLocal = when (handle) {
+                PathResizeHandle.TextTopLeft -> Offset(wNew, hNew)
+                PathResizeHandle.TextTopRight -> Offset(0f, hNew)
+                PathResizeHandle.TextBottomLeft -> Offset(wNew, 0f)
+                PathResizeHandle.TextBottomRight -> Offset.Zero
+                else -> Offset.Zero
+            }
+            
+            val globalAnchor = path.position + rotatePointAround(oldAnchorOffsetLocal, Offset.Zero, path.rotation)
+            val newPosition = globalAnchor - rotatePointAround(newAnchorOffsetLocal, Offset.Zero, path.rotation)
+            
+            path.copy(
+                scale = newScale,
+                position = newPosition
+            )
         }
 
         else -> path

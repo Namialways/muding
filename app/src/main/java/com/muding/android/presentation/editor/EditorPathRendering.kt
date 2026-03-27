@@ -71,6 +71,15 @@ fun DrawScope.drawCircleSelection(path: DrawingPath.CirclePath) {
         center = path.center,
         style = Stroke(width = 2f)
     )
+    val handles = listOf(
+        Offset(path.center.x, path.center.y - path.radius),
+        Offset(path.center.x, path.center.y + path.radius),
+        Offset(path.center.x - path.radius, path.center.y),
+        Offset(path.center.x + path.radius, path.center.y)
+    )
+    handles.forEach { pos ->
+        drawHandle(pos, path.color)
+    }
 }
 
 fun DrawScope.drawRectangleSelection(path: DrawingPath.RectanglePath) {
@@ -90,6 +99,24 @@ fun DrawScope.drawRectangleSelection(path: DrawingPath.RectanglePath) {
         end = corners.first(),
         strokeWidth = 2f
     )
+
+    val center = rectangleCenter(path)
+    val tl = path.topLeft
+    val br = path.bottomRight
+    val handles = listOf(
+        tl,
+        Offset(br.x, tl.y),
+        br,
+        Offset(tl.x, br.y),
+        Offset((tl.x + br.x) / 2f, tl.y),
+        Offset((tl.x + br.x) / 2f, br.y),
+        Offset(tl.x, (tl.y + br.y) / 2f),
+        Offset(br.x, (tl.y + br.y) / 2f)
+    ).map { rotatePointAround(it, center, path.rotation) }
+
+    handles.forEach { pos ->
+        drawHandle(pos, path.color)
+    }
 }
 
 fun DrawScope.drawSelectionBounds(bounds: Rect, accent: Color) {
