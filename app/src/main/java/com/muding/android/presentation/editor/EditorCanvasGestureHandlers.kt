@@ -106,7 +106,7 @@ fun handleMoveDragEnd(
             callbacks.onPathSelectionChanged(movingIndex, paths.getOrNull(movingIndex))
         }
     }
-    interactionState.resetDragState()
+    interactionState.deferResetDragState()
 }
 
 fun handlePenDragStart(
@@ -145,7 +145,7 @@ fun handlePenDragEnd(
             )
         )
     }
-    interactionState.resetDragState()
+    interactionState.deferResetDragState()
 }
 
 fun handleShapeDragStart(
@@ -205,7 +205,7 @@ fun handleShapeDragEnd(
         }
         newPath?.let(callbacks.onPathAdded)
     }
-    interactionState.resetDragState()
+    interactionState.deferResetDragState()
 }
 
 fun handleTextDragStart(

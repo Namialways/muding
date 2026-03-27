@@ -10,10 +10,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
+import androidx.compose.runtime.rememberCoroutineScope
 import com.muding.android.domain.model.DrawingPath
+import kotlinx.coroutines.launch
 
 @Stable
-class EditorCanvasInteractionState {
+class EditorCanvasInteractionState(
+    private val coroutineScope: kotlinx.coroutines.CoroutineScope
+) {
     var currentPath by mutableStateOf<Path?>(null)
     val currentPenPoints = mutableStateListOf<Offset>()
     var pathVersion by mutableIntStateOf(0)
@@ -25,8 +29,10 @@ class EditorCanvasInteractionState {
     var eraserPreviewCenter by mutableStateOf<Offset?>(null)
     var activePreviewPath by mutableStateOf<DrawingPath?>(null)
     var originalDragPath by mutableStateOf<DrawingPath?>(null)
+    private var clearPreviewJob: kotlinx.coroutines.Job? = null
 
     fun resetDragState() {
+        clearPreviewJob?.cancel()
         currentPath = null
         currentPenPoints.clear()
         startPoint = null
@@ -37,9 +43,27 @@ class EditorCanvasInteractionState {
         activePreviewPath = null
         originalDragPath = null
     }
+
+    fun deferResetDragState() {
+        currentPath = null
+        currentPenPoints.clear()
+        startPoint = null
+        endPoint = null
+        moveGestureDownOffset = null
+        
+        clearPreviewJob?.cancel()
+        clearPreviewJob = coroutineScope.launch {
+            kotlinx.coroutines.delay(50)
+            movingPathIndex = null
+            resizingState = null
+            activePreviewPath = null
+            originalDragPath = null
+        }
+    }
 }
 
 @Composable
 fun rememberEditorCanvasInteractionState(): EditorCanvasInteractionState {
-    return remember { EditorCanvasInteractionState() }
+    val coroutineScope = rememberCoroutineScope()
+    return remember { EditorCanvasInteractionState(coroutineScope) }
 }
