@@ -2,256 +2,174 @@
 
 Date: 2026-04-04
 Project: androidprintScreen
-Scope: Translation settings entry in main settings and `TranslationSettingsActivity`
+Scope: Translation settings entry in main settings, `TranslationSettingsActivity`, and OCR result screen translation actions
 
 ## 1. Goal
 
-Redesign the translation settings experience into a modern, low-noise mobile settings flow that feels aligned with the app's warm-paper visual direction.
+Redesign translation settings into a cleaner mobile-first configuration page that matches the app's warm-paper UI direction and removes the current long-form clutter.
 
 The redesign must solve these current problems:
 
-- the page behaves like a long configuration form instead of a settings flow
-- local translation, cloud translation, and credential management are mixed into one screen
-- the user must scan too many controls before understanding current state
-- two providers' credential fields appear at the same time, which creates visual noise
-- the current page does not match the cleaner grouped-settings structure already established in the main settings redesign
+- local translation and cloud translation settings are mixed into one long screen
+- target languages and providers are always expanded instead of being selected compactly
+- all cloud credential fields are shown at once, even when they are irrelevant
+- the OCR result screen duplicates strategy choice with separate local/cloud buttons
+- the overall experience feels more like a raw configuration form than a modern app settings surface
 
 ## 2. Non-goals
 
 - No new translation providers in this phase
 - No new translation engines in this phase
-- No change to credential storage format in this phase
-- No redesign of OCR result screen behavior beyond navigation into translation settings
+- No changes to how credentials are persisted in storage
+- No automatic translation immediately after OCR in this phase
 
 ## 3. Design References
 
-The redesign follows mainstream mobile settings patterns rather than dashboard or form-builder patterns.
+The redesign follows common mobile settings and compact form patterns rather than dashboard or wizard patterns.
 
-- Jetpack Compose menus: use temporary menus for compact option picking instead of permanently expanded controls
+- Jetpack Compose menus: compact option selection through anchored menus
   - https://developer.android.com/develop/ui/compose/components/menu
-- Jetpack Compose lists: prefer efficient list-based structures for vertically scrolling collections
+- Jetpack Compose lists: structured vertical content for mobile scrolling
   - https://developer.android.com/develop/ui/compose/lists
-- Apple HIG menus: keep option groups compact, prioritize important items first, and avoid long noisy menus
+- Apple HIG menus: show only relevant choices and reduce persistent noise
   - https://developer.apple.com/design/human-interface-guidelines/menus
 
 Shared traits borrowed from mainstream tool apps:
 
-- overview first, detail second
-- one decision per row whenever possible
-- short trailing state values
-- only show configuration fields when they are relevant
-- action labels should be concise and task-oriented
+- single responsibility per section
+- dropdown or menu selection for low-frequency choices
+- only current provider fields are visible
+- settings page defines behavior, task page executes behavior
+- low-noise forms with short labels and clear primary action
 
 ## 4. Product Direction
 
-Chosen direction: grouped utility settings with warm-paper styling.
+Chosen direction: single-page grouped settings with compact controls.
 
 This means:
 
-- translation settings should feel like a focused settings flow, not a setup wizard
-- overview screen should emphasize current status over explanation text
-- heavy forms should be pushed into detail screens
-- only one provider's credentials should be visible at a time
-- visual hierarchy should come from spacing, grouping, and trailing values, not from many large cards
+- one translation settings page with two clean groups instead of multiple subpages
+- local model choice and cloud provider choice use dropdown selection
+- only the currently selected model or provider is actionable
+- the visual language should resemble a refined mobile settings sheet, not a backend form
+- OCR result page should offer a single translation action and follow saved settings
 
 This is intentionally not:
 
-- a single endless page with all controls expanded
-- a tabbed configuration surface
-- a modal-heavy workflow with many interruptions
+- a multi-page translation control center
+- a tabbed local/cloud settings UI
+- a page with every supported model and provider expanded at once
 
 ## 5. Information Architecture
 
-Use one translation settings activity with three internal destinations:
+Keep one `TranslationSettingsActivity` page with two groups:
 
-- `Overview`
 - `Local Translation`
 - `Cloud Translation`
 
-Do not create separate Android activities for local and cloud settings. Keep the flow inside the existing translation settings entry so navigation remains simple and maintainable.
+The main settings overview keeps one entry into this page.
 
-### 5.1 Overview
-
-Purpose:
-
-- show current translation defaults at a glance
-- expose only the settings that matter most often
-- route the user into deeper management pages
-
-Content:
-
-- page title
-- `Default Translation` group
-- `Local Translation` entry row
-- `Cloud Translation` entry row
-
-### 5.2 Local Translation
-
-Purpose:
-
-- manage target language and local model download state
-
-Content:
-
-- target language picker
-- Wi-Fi only download switch
-- model list with per-language status and actions
-
-### 5.3 Cloud Translation
-
-Purpose:
-
-- select provider
-- edit only the active provider's credentials
-- save and validate cloud configuration
-
-Content:
-
-- provider picker
-- provider-specific credentials form
-- validation or save status
-- `Save and Test` primary action
+The OCR result screen should no longer let the user choose translation mode each time. It should use the configured strategy from translation settings.
 
 ## 6. Screen Design
 
-### 6.1 Overview Screen
+### 6.1 Translation Settings Page
 
 Structure:
 
 1. simple page header
-2. `Default Translation` group
-3. `Local Translation` grouped entry
-4. `Cloud Translation` grouped entry
+2. `Local Translation` group
+3. `Cloud Translation` group
 
-#### Default Translation group
+There should be no extra hero block, no large explanatory card, and no bottom `Save / Close` pair for the whole page.
 
-Rows:
+### 6.2 Local Translation Group
 
-- `Target Language` -> trailing value like `English`
-- `Download on Wi-Fi Only` -> trailing switch
+Purpose:
 
-This group is intentionally small. The user should be able to confirm the app's default translation behavior in one glance.
+- define target language
+- define local model download rule
+- manage only the currently selected local model
 
-#### Local Translation entry
+Rows and controls:
 
-Use a compact `SettingEntryRow`.
+- `Target Language`
+  - dropdown field
+  - shows the currently selected language
+- `Wi-Fi only download`
+  - switch
+- `Model Status`
+  - concise status text for the currently selected language
+  - examples: `Downloaded`, `Not downloaded`
+- primary action row
+  - if current model is missing: `Download Current Model`
+  - if current model is present: `Delete Current Model`
 
-Trailing value examples:
+Design principle:
 
-- `Downloaded 2`
-- `None downloaded`
-- `Japanese ready`
+- do not render a full language list with one action per row
+- the user picks one target language, then acts on that selected model only
 
-Tap opens the local translation page.
+### 6.3 Cloud Translation Group
 
-#### Cloud Translation entry
+Purpose:
 
-Use a compact `SettingEntryRow`.
+- define whether cloud translation is used
+- define which provider is active
+- edit only the active provider's credentials
 
-Trailing value examples:
+Rows and controls:
 
-- `Youdao / Configured`
-- `Baidu / Missing key`
-- `Disabled`
+- `Translation Service`
+  - dropdown field
+  - options:
+    - `Do not use cloud translation`
+    - `Youdao`
+    - `Baidu`
+- provider-specific credential fields
+  - only visible when a concrete provider is selected
+  - Youdao:
+    - `App Key`
+    - `App Secret`
+  - Baidu:
+    - `App ID`
+    - `Secret Key`
+- action row
+  - only shown when a concrete provider is selected
+  - button: `Save and Verify`
 
-Tap opens the cloud translation page.
+When `Do not use cloud translation` is selected:
 
-### 6.2 Local Translation Screen
+- hide provider credential fields
+- hide the save-and-verify action
+- keep the section visually compact
 
-Structure:
+This selection replaces the need for a separate toggle like `Use custom API key`.
 
-1. header with back action
-2. `Language` group
-3. `Download Rules` group
-4. `Models` group
+## 7. OCR Result Screen Changes
 
-#### Language group
+The OCR result screen should stop exposing strategy selection as two separate buttons.
 
-Use a menu or compact single-choice list, not a permanently expanded radio wall.
+Current duplicated controls to remove:
 
-The selected language is shown as one current value row, such as:
+- `Local Translation`
+- `Cloud Translation`
+- `Translation Settings`
 
-- `Target Language` -> `English`
+Replace them with one button:
 
-Tapping the row opens a menu anchored to the row trigger.
+- `Translate`
 
-#### Download Rules group
+Behavior:
 
-Rows:
+- the button executes translation using the settings currently saved in translation settings
+- local target language is always taken from translation settings
+- if cloud translation is disabled, the OCR result screen should not try to use a cloud engine
+- if cloud translation is enabled, the app uses the configured provider according to existing translation routing rules
 
-- `Wi-Fi only download` -> switch
+This change makes translation strategy a setting, not an OCR-session decision.
 
-This setting is instant-apply.
-
-#### Models group
-
-Show each supported language as a row item with:
-
-- language name
-- current status
-- trailing action
-
-Status examples:
-
-- `Downloaded`
-- `Not downloaded`
-- `Downloading`
-
-Action examples:
-
-- `Download`
-- `Delete`
-
-The current target language should be visually marked, but not with oversized emphasis.
-
-### 6.3 Cloud Translation Screen
-
-Structure:
-
-1. header with back action
-2. `Provider` group
-3. `Credentials` group
-4. sticky or bottom-aligned primary action area
-
-#### Provider group
-
-Use a compact menu or segmented choice row. Do not expand all providers as a radio wall unless there are only two and the layout remains quiet.
-
-Recommended default:
-
-- a row showing `Provider` -> `Youdao / Baidu / Disabled`
-- tapping opens a dropdown menu
-
-Provider selection is instant-apply.
-
-#### Credentials group
-
-Only render fields for the currently selected provider.
-
-Examples:
-
-- Baidu:
-  - `App ID`
-  - `Secret Key`
-- Youdao:
-  - `App Key`
-  - `App Secret`
-
-If provider is `None`, hide the credentials form and show a short empty-state line such as `Cloud translation is disabled`.
-
-#### Primary action
-
-Only this screen keeps an explicit save action:
-
-- `Save and Test`
-
-Rationale:
-
-- picker and switch changes are low-risk and should feel immediate
-- credential edits are draft-like and need explicit confirmation
-- testing immediately after save reduces uncertainty
-
-## 7. Interaction Rules
+## 8. Interaction Rules
 
 ### Immediate-apply settings
 
@@ -259,118 +177,117 @@ The following apply immediately when changed:
 
 - target language
 - Wi-Fi only download
-- cloud provider selection
+- translation service provider selection
 
 ### Deferred-save settings
 
-The following remain local draft state until explicit save:
+The following remain draft state until explicit confirmation:
 
-- Baidu App ID
-- Baidu Secret Key
 - Youdao App Key
 - Youdao App Secret
+- Baidu App ID
+- Baidu Secret Key
+
+Only provider credentials require an explicit action:
+
+- `Save and Verify`
 
 ### Feedback
 
-Use short inline status text or snackbar-style toast feedback.
+Use short status feedback only.
 
 Examples:
 
 - `Model downloaded`
 - `Model deleted`
 - `Credentials saved`
-- `Connection test failed`
+- `Verification failed`
 
-Avoid verbose helper paragraphs under every group.
+Avoid helper paragraphs unless the user is in an error state.
 
-## 8. State and Architecture
+## 9. State and Architecture
 
-Introduce a small route-state layer for translation settings instead of keeping the entire screen as one large composable with local mutable state.
+The screen should not stay as one large mutable composable with mixed local and cloud state.
 
 Recommended structure:
 
 - `TranslationSettingsRoute`
 - `TranslationSettingsViewModel`
 - `TranslationSettingsUiState`
-- `TranslationSettingsDestination`
+- small sub-composables for:
+  - local translation group
+  - cloud translation group
+  - provider credential form
 
 Responsibilities:
 
-- repository-backed persisted state for current settings
-- transient UI state for loading, download progress, save state, and validation message
-- internal destination state for `Overview / Local / Cloud`
-- provider-specific credential draft state isolated to the cloud settings screen
+- persisted current settings from repository
+- transient UI state for model operations and credential validation
+- provider-specific draft state isolated from local model state
+- OCR result page consumes current translation strategy instead of deciding engine in UI
 
-This keeps the flow maintainable when more target languages, providers, or status indicators are added later.
+## 10. Visual Language
 
-## 9. Visual Language
-
-The translation settings redesign must inherit the main UI redesign tokens.
-
-Rules:
+The page should inherit the main UI redesign tokens:
 
 - warm off-white background
-- soft bordered grouped surfaces
-- limited accent usage
-- concise trailing value text
-- no repeated decorative cards
-- no large explanatory hero blocks
+- grouped bordered surfaces
+- restrained accent usage
+- short labels and trailing values
+- no stacked oversized cards
 
-Typography:
+The visual feeling should be closer to a polished mobile utility settings page than a desktop admin form.
 
-- one page title
-- group titles
-- body text only where needed
+## 11. Performance and Maintainability
 
-The page should feel quieter than the current implementation.
+- prefer `LazyColumn` or lightweight grouped scrolling structure over a huge eagerly rendered form
+- avoid composing irrelevant provider fields
+- keep provider-specific forms isolated so changing local translation state does not force unrelated cloud fields to refresh
+- keep dropdown option lists stable and immutable
+- reduce OCR result screen branching by replacing dual engine buttons with one translation action
 
-## 10. Performance and Maintainability
+## 12. Error Handling
 
-- prefer `LazyColumn` over a fully expanded `Column` with all content rendered at once
-- avoid rendering unrelated credential fields
-- keep option collections immutable and stable
-- isolate provider-specific forms into separate composables
-- keep state writes scoped so changing a switch does not force unrelated form fields to recompute
+### Local translation
 
-This redesign should reduce UI complexity and recomposition noise compared with the current all-in-one screen.
+- download failure should keep current selection unchanged
+- delete failure should keep current state and show brief feedback
 
-## 11. Error Handling
+### Cloud translation
 
-### Local models
+- missing required fields should block `Save and Verify`
+- verification failure should surface brief provider-specific feedback
+- selecting `Do not use cloud translation` should require no credentials and no validation
 
-- download failure should leave current state intact
-- delete failure should surface brief feedback and keep current list state
+### OCR result
 
-### Cloud settings
+- if translation cannot run under current settings, show the existing resolved error message path rather than exposing provider details in the layout
 
-- missing credentials should be validated before save and test
-- failed provider test should surface provider-specific error text
-- selecting `None` as provider should not require any credentials
-
-## 12. Testing Strategy
+## 13. Testing Strategy
 
 Add or update tests to cover:
 
-- overview summary formatting
+- local target language selection summary
+- current local model status visibility
+- action label switching between download and delete for selected model
+- cloud provider dropdown state
 - provider-specific field visibility
-- disabled cloud provider state
-- immediate-apply behavior for target language and Wi-Fi-only switch
-- save gating for cloud credentials
-- local model status rendering and action availability
+- disabled cloud translation state
+- single `Translate` action behavior on OCR result screen
 
 Manual verification should cover:
 
-- mobile-height devices with narrow width
-- switching providers repeatedly
-- opening the page with existing saved credentials
-- model download/delete feedback paths
+- narrow mobile widths
+- switching between `Do not use cloud translation`, `Youdao`, and `Baidu`
+- changing target language and then downloading or deleting the selected model
+- OCR translation behavior after changing settings
 
-## 13. Implementation Notes
+## 14. Implementation Notes
 
-The existing main settings overview should keep only one concise entry into translation settings.
+Main settings overview should keep one concise entry into translation settings.
 
-Recommended summary value in main settings:
+Recommended overview summary value:
 
 - `Local + Cloud`
 
-Do not mirror detailed provider state on the main settings overview, because that makes the overview noisy again. The details belong inside the translation settings flow.
+Do not mirror provider credential state on the main settings overview. Detailed translation state belongs inside the translation settings page itself.
