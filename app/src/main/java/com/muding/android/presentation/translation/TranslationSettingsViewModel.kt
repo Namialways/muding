@@ -154,6 +154,13 @@ class TranslationSettingsViewModel(
         uiState = uiState.copy(youdaoAppSecretDraft = value, cloudMessage = null)
     }
 
+    fun clearTransientMessages() {
+        uiState = uiState.copy(
+            localMessage = null,
+            cloudMessage = null
+        )
+    }
+
     suspend fun performCurrentLocalModelAction() {
         val actionLabel = uiState.localModelActionLabel ?: return
         uiState = uiState.copy(localBusy = true, localMessage = null)

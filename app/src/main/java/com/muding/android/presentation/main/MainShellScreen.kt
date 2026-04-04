@@ -72,7 +72,6 @@ fun MainScreen(
     onRequestPermission: () -> Unit,
     onOpenGalleryPin: () -> Unit,
     onOpenGalleryOcr: () -> Unit,
-    onOpenTranslationSettings: () -> Unit,
     onOpenClipboardTextPin: () -> Unit,
     onStartService: () -> Unit
 ) {
@@ -208,7 +207,10 @@ fun MainScreen(
                 onOpenGalleryPin = onOpenGalleryPin,
                 onOpenGalleryOcr = onOpenGalleryOcr,
                 onOpenClipboardTextPin = onOpenClipboardTextPin,
-                onOpenTranslationSettings = onOpenTranslationSettings,
+                onOpenTranslationSettings = {
+                    currentDestination = MainDestination.SETTINGS
+                    currentSettingsSection = SettingsSection.OCR_AND_TRANSLATION
+                },
                 onRequestPermission = onRequestPermission,
                 onStartService = onStartService,
                 onOpenSettings = { currentDestination = MainDestination.SETTINGS }
@@ -294,7 +296,6 @@ fun MainScreen(
                     onResetApplication()
                 },
                 onRequestPermission = onRequestPermission,
-                onOpenTranslationSettings = onOpenTranslationSettings,
                 onStartService = onStartService
             )
         }

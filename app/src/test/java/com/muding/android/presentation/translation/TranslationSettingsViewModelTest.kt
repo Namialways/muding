@@ -102,6 +102,29 @@ class TranslationSettingsViewModelTest {
         assertNull(viewModel.uiState.localModelActionLabel)
     }
 
+    @Test
+    fun `clear transient messages resets local and cloud feedback when section is reopened`() = runBlocking {
+        val viewModel = TranslationSettingsViewModel(
+            settingsRepository = FakeAppSettingsRepository(),
+            localModelGateway = FakeLocalModelGateway(downloadedLanguageTags = setOf("ja")),
+            cloudVerifier = FakeCloudVerifier()
+        )
+
+        viewModel.refreshDownloadedModels()
+        viewModel.selectCloudProvider(CloudTranslationProvider.YOUDAO)
+        viewModel.updateYoudaoAppKey("demo-key")
+        viewModel.updateYoudaoAppSecret("demo-secret")
+        viewModel.performCurrentLocalModelAction()
+        viewModel.saveAndVerifyCurrentProvider()
+
+        assertTrue(viewModel.uiState.localMessage != null || viewModel.uiState.cloudMessage != null)
+
+        viewModel.clearTransientMessages()
+
+        assertNull(viewModel.uiState.localMessage)
+        assertNull(viewModel.uiState.cloudMessage)
+    }
+
     private class FakeCloudVerifier : CloudTranslationVerifier {
         override suspend fun verify(targetLanguageTag: String): TranslationResult {
             return TranslationResult(

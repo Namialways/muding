@@ -23,7 +23,6 @@ import com.muding.android.presentation.source.ClipboardTextPinActivity
 import com.muding.android.presentation.source.GalleryOcrActivity
 import com.muding.android.presentation.source.GalleryPinActivity
 import com.muding.android.presentation.theme.MudingTheme
-import com.muding.android.presentation.translation.TranslationSettingsActivity
 import com.muding.android.service.FloatingBallService
 import kotlinx.coroutines.launch
 
@@ -162,9 +161,6 @@ class MainActivity : ComponentActivity() {
                     onOpenGalleryOcr = {
                         openGalleryOcr()
                     },
-                    onOpenTranslationSettings = {
-                        openTranslationSettings()
-                    },
                     onOpenClipboardTextPin = {
                         openClipboardTextPin()
                     },
@@ -220,10 +216,6 @@ class MainActivity : ComponentActivity() {
 
     private fun openClipboardTextPin() {
         startActivity(Intent(this, ClipboardTextPinActivity::class.java))
-    }
-
-    private fun openTranslationSettings() {
-        startActivity(Intent(this, TranslationSettingsActivity::class.java))
     }
 
     private fun refreshFloatingBallAppearance() {

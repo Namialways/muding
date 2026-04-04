@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
+import com.muding.android.presentation.translation.TranslationSettingsPage
 import kotlin.math.roundToInt
 
 @Composable
@@ -78,7 +79,6 @@ fun SettingsScreen(
     onClearWorkRecords: () -> Unit,
     onResetApplication: () -> Unit,
     onRequestPermission: () -> Unit,
-    onOpenTranslationSettings: () -> Unit,
     onStartService: () -> Unit
 ) {
     when (selectedSection) {
@@ -117,8 +117,7 @@ fun SettingsScreen(
         )
 
         SettingsSection.OCR_AND_TRANSLATION -> OcrAndTranslationSettingsSection(
-            modifier = modifier,
-            onOpenTranslationSettings = onOpenTranslationSettings
+            modifier = modifier
         )
 
         SettingsSection.STORAGE_AND_RECORDS -> StorageAndRecordsSettingsSection(
@@ -389,42 +388,13 @@ private fun PinAndInteractionSettingsSection(
 
 @Composable
 private fun OcrAndTranslationSettingsSection(
-    modifier: Modifier = Modifier,
-    onOpenTranslationSettings: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    val tokens = rememberMainUiTokens()
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = tokens.spacing.pageGutter),
-        verticalArrangement = Arrangement.spacedBy(tokens.spacing.sectionGap),
-        contentPadding = PaddingValues(vertical = 20.dp)
-    ) {
-        item {
-            SectionHeader(
-                title = SettingsSection.OCR_AND_TRANSLATION.title,
-                description = "把 OCR 和翻译配置收进一个入口，不在这里重复展示细节。"
-            )
-        }
-
-        item {
-            SettingGroup(title = "翻译设置") {
-                Text(
-                    text = "管理本地模型、云翻译密钥和默认引擎。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = rememberMainUiTokens().palette.body
-                )
-                OutlinedButton(
-                    onClick = onOpenTranslationSettings,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Translate, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("打开翻译设置")
-                }
-            }
-        }
-    }
+    TranslationSettingsPage(
+        modifier = modifier,
+        title = SettingsSection.OCR_AND_TRANSLATION.title,
+        description = "直接管理目标语言、本地模型和云翻译服务。"
+    )
 }
 
 @Composable
