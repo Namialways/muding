@@ -79,11 +79,8 @@ class MainActivity : ComponentActivity() {
                     initialSnapshot = MainScreenSnapshot.empty(),
                     onActionChanged = { action -> settingsRepository.setCaptureResultAction(action) },
                     onScaleModeChanged = { mode -> settingsRepository.setPinScaleMode(mode) },
-                    onMaxSessionCountChanged = { count ->
+                    onProjectRecordRetentionChanged = { count, days ->
                         settingsRepository.setMaxSessionCount(count)
-                        pruneRecords()
-                    },
-                    onRetainDaysChanged = { days ->
                         settingsRepository.setRetainDays(days)
                         pruneRecords()
                     },
@@ -108,11 +105,8 @@ class MainActivity : ComponentActivity() {
                     onPinHistoryEnabledChanged = { enabled ->
                         settingsRepository.setPinHistoryEnabled(enabled)
                     },
-                    onMaxPinHistoryCountChanged = { count ->
+                    onPinHistoryRetentionChanged = { count, days ->
                         settingsRepository.setMaxPinHistoryCount(count)
-                        pruneRecords()
-                    },
-                    onPinHistoryRetainDaysChanged = { days ->
                         settingsRepository.setPinHistoryRetainDays(days)
                         pruneRecords()
                     },

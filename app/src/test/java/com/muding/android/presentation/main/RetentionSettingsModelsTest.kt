@@ -1,0 +1,31 @@
+package com.muding.android.presentation.main
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class RetentionSettingsModelsTest {
+
+    @Test
+    fun `sheet model uses fixed pin history presets`() {
+        val model = buildRecordRetentionSheetModel(
+            target = RecordRetentionTarget.PIN_HISTORY,
+            count = 50,
+            days = 14
+        )
+
+        assertEquals(listOf(20, 50, 100, 200), model.countOptions)
+        assertEquals(listOf(7, 14, 30, 90), model.dayOptions)
+    }
+
+    @Test
+    fun `work record sheet model keeps fixed presets even for uncommon values`() {
+        val model = buildRecordRetentionSheetModel(
+            target = RecordRetentionTarget.WORK_RECORDS,
+            count = 75,
+            days = 45
+        )
+
+        assertEquals(listOf(10, 30, 50, 100), model.countOptions)
+        assertEquals(listOf(7, 14, 30, 90), model.dayOptions)
+    }
+}

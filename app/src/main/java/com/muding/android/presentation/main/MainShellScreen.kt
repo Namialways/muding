@@ -55,16 +55,14 @@ fun MainScreen(
     initialSnapshot: MainScreenSnapshot,
     onActionChanged: (CaptureResultAction) -> Unit,
     onScaleModeChanged: (PinScaleMode) -> Unit,
-    onMaxSessionCountChanged: (Int) -> Unit,
-    onRetainDaysChanged: (Int) -> Unit,
+    onProjectRecordRetentionChanged: (Int, Int) -> Unit,
     onDefaultPinShadowChanged: (Boolean) -> Unit,
     onDefaultPinCornerRadiusChanged: (Float) -> Unit,
     onFloatingBallSizeChanged: (Int) -> Unit,
     onFloatingBallOpacityChanged: (Float) -> Unit,
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
-    onMaxPinHistoryCountChanged: (Int) -> Unit,
-    onPinHistoryRetainDaysChanged: (Int) -> Unit,
+    onPinHistoryRetentionChanged: (Int, Int) -> Unit,
     onClearWorkRecords: () -> Unit,
     onResetApplication: () -> Unit,
     onDeleteHistory: (PinHistoryRecord) -> Unit,
@@ -280,21 +278,15 @@ fun MainScreen(
                     pinHistoryEnabled = it
                     runRecordsMutation { onPinHistoryEnabledChanged(it) }
                 },
-                onMaxPinHistoryCountChanged = { value ->
-                    maxPinHistoryCount = value
-                    runRecordsMutation { onMaxPinHistoryCountChanged(value) }
+                onPinHistoryRetentionChanged = { count, days ->
+                    maxPinHistoryCount = count
+                    pinHistoryRetainDays = days
+                    runRecordsMutation { onPinHistoryRetentionChanged(count, days) }
                 },
-                onPinHistoryRetainDaysChanged = { value ->
-                    pinHistoryRetainDays = value
-                    runRecordsMutation { onPinHistoryRetainDaysChanged(value) }
-                },
-                onMaxSessionCountChanged = { value ->
-                    maxSessionCount = value
-                    runRecordsMutation { onMaxSessionCountChanged(value) }
-                },
-                onRetainDaysChanged = { value ->
-                    retainDays = value
-                    runRecordsMutation { onRetainDaysChanged(value) }
+                onProjectRecordRetentionChanged = { count, days ->
+                    maxSessionCount = count
+                    retainDays = days
+                    runRecordsMutation { onProjectRecordRetentionChanged(count, days) }
                 },
                 onClearWorkRecords = { runRecordsMutation { onClearWorkRecords() } },
                 onResetApplication = {

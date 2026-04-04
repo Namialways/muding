@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.BrokenImage
@@ -46,7 +44,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,12 +59,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.muding.android.domain.usecase.FloatingBallTheme
@@ -197,6 +191,55 @@ fun SettingEntryRow(
                     text = value,
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.palette.body
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.ArrowOutward,
+                contentDescription = null,
+                tint = tokens.palette.body
+            )
+        }
+    }
+}
+
+@Composable
+fun CompactSettingValueRow(
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tokens = rememberMainUiTokens()
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(tokens.corners.card),
+        color = tokens.palette.surfaceMuted,
+        border = BorderStroke(1.dp, tokens.palette.outline)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = tokens.palette.title
+            )
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = tokens.palette.surfaceAccent
+            ) {
+                Text(
+                    text = value,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = tokens.palette.accent
                 )
             }
             Icon(
@@ -526,6 +569,7 @@ fun RecordsToolbar(
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = null)
             },
+
             label = { Text("搜索记录") },
             placeholder = { Text("名称、文字、来源") }
         )
@@ -795,52 +839,42 @@ fun FloatingBallAppearancePreview(
 fun NumberSettingRow(
     title: String,
     value: Int,
-    valueRange: IntRange,
     onDecrease: () -> Unit,
-    onIncrease: () -> Unit,
-    onApply: (Int) -> Unit
+    onIncrease: () -> Unit
 ) {
-    var input by remember(value) { mutableStateOf(value.toString()) }
-    val focusManager = LocalFocusManager.current
+    val tokens = rememberMainUiTokens()
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(title, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = tokens.palette.title
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            CompactStepButton(label = "-", onClick = onDecrease)
-            OutlinedTextField(
-                value = input,
-                onValueChange = { next ->
-                    if (next.all { it.isDigit() } && next.length <= 3) {
-                        input = next
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        input.toIntOrNull()?.coerceIn(valueRange)?.let(onApply)
-                        focusManager.clearFocus()
-                    }
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = tokens.palette.surfaceAccent
+            ) {
+                Text(
+                    text = value.toString(),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = tokens.palette.accent
                 )
-            )
-            CompactStepButton(label = "+", onClick = onIncrease)
-        }
-        TextButton(
-            onClick = {
-                input.toIntOrNull()?.coerceIn(valueRange)?.let(onApply)
-                focusManager.clearFocus()
-            },
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text("保存")
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompactStepButton(label = "-", onClick = onDecrease, size = 34.dp)
+                CompactStepButton(label = "+", onClick = onIncrease, size = 34.dp)
+            }
         }
     }
 }
@@ -848,7 +882,8 @@ fun NumberSettingRow(
 @Composable
 private fun CompactStepButton(
     label: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    size: androidx.compose.ui.unit.Dp = 40.dp
 ) {
     val tokens = rememberMainUiTokens()
     Surface(
@@ -858,12 +893,12 @@ private fun CompactStepButton(
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Box(
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(size),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = tokens.palette.body
             )
         }

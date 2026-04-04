@@ -1,9 +1,11 @@
-package com.muding.android.presentation.main
+﻿package com.muding.android.presentation.main
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,15 +23,21 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -65,10 +73,8 @@ fun SettingsScreen(
     onFloatingBallOpacityChanged: (Float) -> Unit,
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
-    onMaxPinHistoryCountChanged: (Int) -> Unit,
-    onPinHistoryRetainDaysChanged: (Int) -> Unit,
-    onMaxSessionCountChanged: (Int) -> Unit,
-    onRetainDaysChanged: (Int) -> Unit,
+    onPinHistoryRetentionChanged: (Int, Int) -> Unit,
+    onProjectRecordRetentionChanged: (Int, Int) -> Unit,
     onClearWorkRecords: () -> Unit,
     onResetApplication: () -> Unit,
     onRequestPermission: () -> Unit,
@@ -124,10 +130,8 @@ fun SettingsScreen(
             retainDays = retainDays,
             snapshot = snapshot,
             onPinHistoryEnabledChanged = onPinHistoryEnabledChanged,
-            onMaxPinHistoryCountChanged = onMaxPinHistoryCountChanged,
-            onPinHistoryRetainDaysChanged = onPinHistoryRetainDaysChanged,
-            onMaxSessionCountChanged = onMaxSessionCountChanged,
-            onRetainDaysChanged = onRetainDaysChanged,
+            onPinHistoryRetentionChanged = onPinHistoryRetentionChanged,
+            onProjectRecordRetentionChanged = onProjectRecordRetentionChanged,
             onClearWorkRecords = onClearWorkRecords,
             onResetApplication = onResetApplication
         )
@@ -278,12 +282,10 @@ private fun CaptureAndFloatingSettingsSection(
                     theme = floatingBallTheme
                 )
                 NumberSettingRow(
-                    title = "大小（${floatingBallSizeDp}dp）",
+                    title = "大小",
                     value = floatingBallSizeDp,
-                    valueRange = 44..96,
                     onDecrease = { onFloatingBallSizeChanged((floatingBallSizeDp - 2).coerceAtLeast(44)) },
-                    onIncrease = { onFloatingBallSizeChanged((floatingBallSizeDp + 2).coerceAtMost(96)) },
-                    onApply = { onFloatingBallSizeChanged(it.coerceIn(44, 96)) }
+                    onIncrease = { onFloatingBallSizeChanged((floatingBallSizeDp + 2).coerceAtMost(96)) }
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -435,15 +437,14 @@ private fun StorageAndRecordsSettingsSection(
     retainDays: Int,
     snapshot: MainScreenSnapshot,
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
-    onMaxPinHistoryCountChanged: (Int) -> Unit,
-    onPinHistoryRetainDaysChanged: (Int) -> Unit,
-    onMaxSessionCountChanged: (Int) -> Unit,
-    onRetainDaysChanged: (Int) -> Unit,
+    onPinHistoryRetentionChanged: (Int, Int) -> Unit,
+    onProjectRecordRetentionChanged: (Int, Int) -> Unit,
     onClearWorkRecords: () -> Unit,
     onResetApplication: () -> Unit
 ) {
     val tokens = rememberMainUiTokens()
     val dialogState = remember { StorageMaintenanceDialogState() }
+    var retentionSheet by remember { mutableStateOf<RecordRetentionSheetModel?>(null) }
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -479,37 +480,35 @@ private fun StorageAndRecordsSettingsSection(
                         onCheckedChange = onPinHistoryEnabledChanged
                     )
                 }
-                NumberSettingRow(
-                    title = "贴图历史最多保留 $maxPinHistoryCount 条",
-                    value = maxPinHistoryCount,
-                    valueRange = 1..500,
-                    onDecrease = { onMaxPinHistoryCountChanged((maxPinHistoryCount - 1).coerceAtLeast(1)) },
-                    onIncrease = { onMaxPinHistoryCountChanged((maxPinHistoryCount + 1).coerceAtMost(500)) },
-                    onApply = onMaxPinHistoryCountChanged
+                CompactSettingValueRow(
+                    title = "贴图历史",
+                    value = formatRecordRetentionSummary(
+                        count = maxPinHistoryCount,
+                        days = pinHistoryRetainDays,
+                        itemUnit = RecordRetentionTarget.PIN_HISTORY.itemUnit
+                    ),
+                    onClick = {
+                        retentionSheet = buildRecordRetentionSheetModel(
+                            target = RecordRetentionTarget.PIN_HISTORY,
+                            count = maxPinHistoryCount,
+                            days = pinHistoryRetainDays
+                        )
+                    }
                 )
-                NumberSettingRow(
-                    title = "贴图历史保留最近 $pinHistoryRetainDays 天",
-                    value = pinHistoryRetainDays,
-                    valueRange = 1..365,
-                    onDecrease = { onPinHistoryRetainDaysChanged((pinHistoryRetainDays - 1).coerceAtLeast(1)) },
-                    onIncrease = { onPinHistoryRetainDaysChanged((pinHistoryRetainDays + 1).coerceAtMost(365)) },
-                    onApply = onPinHistoryRetainDaysChanged
-                )
-                NumberSettingRow(
-                    title = "工程记录最多保留 $maxSessionCount 项",
-                    value = maxSessionCount,
-                    valueRange = 1..500,
-                    onDecrease = { onMaxSessionCountChanged((maxSessionCount - 1).coerceAtLeast(1)) },
-                    onIncrease = { onMaxSessionCountChanged((maxSessionCount + 1).coerceAtMost(500)) },
-                    onApply = onMaxSessionCountChanged
-                )
-                NumberSettingRow(
-                    title = "工程记录保留最近 $retainDays 天",
-                    value = retainDays,
-                    valueRange = 1..365,
-                    onDecrease = { onRetainDaysChanged((retainDays - 1).coerceAtLeast(1)) },
-                    onIncrease = { onRetainDaysChanged((retainDays + 1).coerceAtMost(365)) },
-                    onApply = onRetainDaysChanged
+                CompactSettingValueRow(
+                    title = "工作记录",
+                    value = formatRecordRetentionSummary(
+                        count = maxSessionCount,
+                        days = retainDays,
+                        itemUnit = RecordRetentionTarget.WORK_RECORDS.itemUnit
+                    ),
+                    onClick = {
+                        retentionSheet = buildRecordRetentionSheetModel(
+                            target = RecordRetentionTarget.WORK_RECORDS,
+                            count = maxSessionCount,
+                            days = retainDays
+                        )
+                    }
                 )
             }
         }
@@ -529,6 +528,20 @@ private fun StorageAndRecordsSettingsSection(
                 )
             }
         }
+    }
+
+    retentionSheet?.let { sheetModel ->
+        RecordRetentionBottomSheet(
+            model = sheetModel,
+            onDismiss = { retentionSheet = null },
+            onApply = { count, days ->
+                when (sheetModel.target) {
+                    RecordRetentionTarget.PIN_HISTORY -> onPinHistoryRetentionChanged(count, days)
+                    RecordRetentionTarget.WORK_RECORDS -> onProjectRecordRetentionChanged(count, days)
+                }
+                retentionSheet = null
+            }
+        )
     }
 
     if (dialogState.pendingAction != null) {
@@ -556,6 +569,127 @@ private fun StorageAndRecordsSettingsSection(
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun RecordRetentionBottomSheet(
+    model: RecordRetentionSheetModel,
+    onDismiss: () -> Unit,
+    onApply: (Int, Int) -> Unit
+) {
+    var pendingCount by remember(model) { mutableStateOf(model.count) }
+    var pendingDays by remember(model) { mutableStateOf(model.days) }
+    var editingCustomCount by remember(model) { mutableStateOf(model.count !in model.countOptions) }
+    var editingCustomDays by remember(model) { mutableStateOf(model.days !in model.dayOptions) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            SectionHeader(
+                title = model.target.title,
+                description = "选择更合适的保留数量和保留天数。"
+            )
+            RetentionOptionSection(
+                title = "保留数量",
+                options = model.countOptions,
+                selectedValue = pendingCount,
+                suffix = model.target.itemUnit,
+                isCustomSelected = editingCustomCount,
+                onSelectPreset = {
+                    pendingCount = it
+                    editingCustomCount = false
+                },
+                onSelectCustom = { editingCustomCount = true }
+            )
+            if (editingCustomCount) {
+                NumberSettingRow(
+                    title = "自定义数量",
+                    value = pendingCount,
+                    onDecrease = { pendingCount = (pendingCount - 1).coerceAtLeast(1) },
+                    onIncrease = { pendingCount = (pendingCount + 1).coerceAtMost(500) }
+                )
+            }
+            RetentionOptionSection(
+                title = "保留天数",
+                options = model.dayOptions,
+                selectedValue = pendingDays,
+                suffix = "天",
+                isCustomSelected = editingCustomDays,
+                onSelectPreset = {
+                    pendingDays = it
+                    editingCustomDays = false
+                },
+                onSelectCustom = { editingCustomDays = true }
+            )
+            if (editingCustomDays) {
+                NumberSettingRow(
+                    title = "自定义天数",
+                    value = pendingDays,
+                    onDecrease = { pendingDays = (pendingDays - 1).coerceAtLeast(1) },
+                    onIncrease = { pendingDays = (pendingDays + 1).coerceAtMost(365) }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("取消")
+                }
+                Button(
+                    onClick = { onApply(pendingCount, pendingDays) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("完成")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun RetentionOptionSection(
+    title: String,
+    options: List<Int>,
+    selectedValue: Int,
+    suffix: String,
+    isCustomSelected: Boolean,
+    onSelectPreset: (Int) -> Unit,
+    onSelectCustom: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = rememberMainUiTokens().palette.title
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = !isCustomSelected && option == selectedValue,
+                    onClick = { onSelectPreset(option) },
+                    label = { Text("$option$suffix") }
+                )
+            }
+            FilterChip(
+                selected = isCustomSelected,
+                onClick = onSelectCustom,
+                label = { Text("自定义") }
+            )
+        }
     }
 }
 
