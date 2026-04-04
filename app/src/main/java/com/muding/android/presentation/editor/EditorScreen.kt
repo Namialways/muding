@@ -2,6 +2,9 @@ package com.muding.android.presentation.editor
 
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -128,10 +131,26 @@ fun AnnotationEditorScreenContent(
             )
         }
     ) { paddingValues ->
+        val topInset by animateDpAsState(
+            targetValue = (paddingValues.calculateTopPadding() - 18.dp).coerceAtLeast(0.dp),
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "editorTopInset"
+        )
+        val bottomInset by animateDpAsState(
+            targetValue = (paddingValues.calculateBottomPadding() - 12.dp).coerceAtLeast(0.dp),
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "editorBottomInset"
+        )
+
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .background(
                     Brush.verticalGradient(
                         listOf(
@@ -140,7 +159,7 @@ fun AnnotationEditorScreenContent(
                         )
                     )
                 )
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(top = topInset, bottom = bottomInset)
         ) {
             val imageAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height.toFloat()
             val containerAspect = maxWidth.value / maxHeight.value
