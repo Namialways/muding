@@ -1,10 +1,11 @@
 package com.muding.android.presentation.main
 
-import com.muding.android.domain.usecase.AnnotationSessionFile
 import com.muding.android.domain.usecase.PinHistoryRecord
+import com.muding.android.domain.usecase.PinHistorySourceType
 import com.muding.android.domain.usecase.RuntimeStorageSnapshot
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 enum class MainDestination(
@@ -57,29 +58,59 @@ enum class RecordsSortOrder(
 }
 
 data class MainScreenSnapshot(
-    val sessionFiles: List<AnnotationSessionFile>,
+    val sessionFileCount: Int,
     val recentClosedPinCount: Int,
     val pinHistoryRecords: List<PinHistoryRecord>,
-    val recordsDirectory: String,
-    val pinHistoryDirectory: String,
     val runtimeStorage: RuntimeStorageSnapshot
 ) {
     companion object {
         fun empty(): MainScreenSnapshot {
             return MainScreenSnapshot(
-                sessionFiles = emptyList(),
+                sessionFileCount = 0,
                 recentClosedPinCount = 0,
                 pinHistoryRecords = emptyList(),
-                recordsDirectory = "",
-                pinHistoryDirectory = "",
                 runtimeStorage = RuntimeStorageSnapshot(0, 0, 0, 0, 0)
             )
         }
     }
 }
 
+data class PinHistoryListItemUiModel(
+    val id: String,
+    val imageUri: String,
+    val title: String,
+    val createdAtLabel: String,
+    val sourceLabel: String,
+    val previewText: String?,
+    val dimensionLabel: String?,
+    val editable: Boolean,
+    val rawRecord: PinHistoryRecord,
+    val searchIndex: String
+)
+
+data class RecordsComputedState(
+    val allRecords: List<PinHistoryListItemUiModel>,
+    val filteredRecords: List<PinHistoryListItemUiModel>,
+    val filterCounts: Map<RecordsFilter, Int>
+) {
+    companion object {
+        fun empty(): RecordsComputedState {
+            return RecordsComputedState(
+                allRecords = emptyList(),
+                filteredRecords = emptyList(),
+                filterCounts = RecordsFilter.entries.associateWith { 0 }
+            )
+        }
+    }
+}
+
+private val timestampFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+private val systemZoneId: ZoneId = ZoneId.systemDefault()
+
 fun formatTimestamp(timestamp: Long): String {
-    return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+    return Instant.ofEpochMilli(timestamp)
+        .atZone(systemZoneId)
+        .format(timestampFormatter)
 }
 
 fun formatFileSize(bytes: Long): String {
@@ -90,5 +121,91 @@ fun formatFileSize(bytes: Long): String {
         bytes >= mb -> String.format(Locale.getDefault(), "%.2f MB", bytes / mb)
         bytes >= kb -> String.format(Locale.getDefault(), "%.1f KB", bytes / kb)
         else -> "$bytes B"
+    }
+}
+
+fun buildRecordsComputedState(
+    records: List<PinHistoryRecord>,
+    selectedFilter: RecordsFilter,
+    selectedSort: RecordsSortOrder,
+    searchQuery: String
+): RecordsComputedState {
+    val uiModels = records.map { it.toListItemUiModel() }
+    val filterCounts = RecordsFilter.entries.associateWith { filter ->
+        uiModels.count { it.matches(filter) }
+    }
+    val normalizedQuery = searchQuery.trim().lowercase(Locale.getDefault())
+    val filteredRecords = uiModels.asSequence()
+        .filter { it.matches(selectedFilter) }
+        .filter { it.matchesSearch(normalizedQuery) }
+        .sortedWith(recordsComparator(selectedSort))
+        .toList()
+    return RecordsComputedState(
+        allRecords = uiModels,
+        filteredRecords = filteredRecords,
+        filterCounts = filterCounts
+    )
+}
+
+private fun PinHistoryRecord.toListItemUiModel(): PinHistoryListItemUiModel {
+    val resolvedTitle = displayName ?: imageUri.substringAfterLast('/')
+    val resolvedSourceLabel = historySourceLabel(sourceType)
+    val resolvedCreatedAtLabel = formatTimestamp(createdAt)
+    val resolvedPreviewText = textPreview?.takeIf { it.isNotBlank() }
+    val resolvedDimensionLabel = if (widthPx != null && heightPx != null) {
+        "${widthPx}×${heightPx}"
+    } else {
+        null
+    }
+    val resolvedEditable = !annotationSessionId.isNullOrBlank()
+    val normalizedSearchIndex = buildList {
+        add(resolvedTitle)
+        add(imageUri.substringAfterLast('/'))
+        add(resolvedSourceLabel)
+        add(resolvedCreatedAtLabel)
+        resolvedPreviewText?.let(::add)
+    }.joinToString(separator = "\n")
+        .lowercase(Locale.getDefault())
+    return PinHistoryListItemUiModel(
+        id = id,
+        imageUri = imageUri,
+        title = resolvedTitle,
+        createdAtLabel = resolvedCreatedAtLabel,
+        sourceLabel = resolvedSourceLabel,
+        previewText = resolvedPreviewText,
+        dimensionLabel = resolvedDimensionLabel,
+        editable = resolvedEditable,
+        rawRecord = this,
+        searchIndex = normalizedSearchIndex
+    )
+}
+
+private fun PinHistoryListItemUiModel.matches(filter: RecordsFilter): Boolean {
+    return when (filter) {
+        RecordsFilter.ALL -> true
+        RecordsFilter.IMAGES -> rawRecord.sourceType == PinHistorySourceType.SCREENSHOT ||
+            rawRecord.sourceType == PinHistorySourceType.GALLERY_IMAGE ||
+            rawRecord.sourceType == PinHistorySourceType.EDITOR_EXPORT ||
+            rawRecord.sourceType == PinHistorySourceType.RESTORED_PIN
+
+        RecordsFilter.TEXT -> rawRecord.sourceType == PinHistorySourceType.CLIPBOARD_TEXT ||
+            rawRecord.sourceType == PinHistorySourceType.OCR_TEXT
+
+        RecordsFilter.EDITABLE -> editable
+    }
+}
+
+private fun PinHistoryListItemUiModel.matchesSearch(normalizedQuery: String): Boolean {
+    if (normalizedQuery.isBlank()) return true
+    return searchIndex.contains(normalizedQuery)
+}
+
+fun recordsComparator(sortOrder: RecordsSortOrder): Comparator<PinHistoryListItemUiModel> {
+    return when (sortOrder) {
+        RecordsSortOrder.NEWEST -> compareByDescending<PinHistoryListItemUiModel> { it.rawRecord.createdAt }
+        RecordsSortOrder.OLDEST -> compareBy<PinHistoryListItemUiModel> { it.rawRecord.createdAt }
+        RecordsSortOrder.SOURCE -> compareBy<PinHistoryListItemUiModel>({ it.sourceLabel }, { -it.rawRecord.createdAt })
+        RecordsSortOrder.EDITABLE -> compareByDescending<PinHistoryListItemUiModel> { it.editable }
+            .thenByDescending { it.rawRecord.createdAt }
     }
 }

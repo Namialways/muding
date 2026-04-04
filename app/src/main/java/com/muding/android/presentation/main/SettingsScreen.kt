@@ -195,7 +195,7 @@ private fun SettingsOverviewScreen(
                 MetricsCard(
                     modifier = Modifier.weight(1f),
                     title = "工程记录",
-                    value = snapshot.sessionFiles.size.toString(),
+                    value = snapshot.sessionFileCount.toString(),
                     hint = "当前工程"
                 )
             }
@@ -586,7 +586,7 @@ private fun StorageAndRecordsSettingsSection(
                             emphasized = true
                         )
                         SummaryPill(text = "贴图记录 ${snapshot.pinHistoryRecords.size}")
-                        SummaryPill(text = "工程记录 ${snapshot.sessionFiles.size}")
+                        SummaryPill(text = "工程记录 ${snapshot.sessionFileCount}")
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),

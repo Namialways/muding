@@ -29,15 +29,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.muding.android.domain.usecase.PinHistoryRecord
-import com.muding.android.domain.usecase.PinHistorySourceType
-import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -56,7 +56,29 @@ fun RecordsScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedRecordId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val selectedRecord = snapshot.pinHistoryRecords.firstOrNull { it.id == selectedRecordId }
+    val recordsState by produceState(
+        initialValue = buildRecordsComputedState(
+            records = snapshot.pinHistoryRecords,
+            selectedFilter = selectedFilter,
+            selectedSort = selectedSort,
+            searchQuery = searchQuery
+        ),
+        snapshot.pinHistoryRecords,
+        selectedFilter,
+        selectedSort,
+        searchQuery
+    ) {
+        value = withContext(Dispatchers.Default) {
+            buildRecordsComputedState(
+                records = snapshot.pinHistoryRecords,
+                selectedFilter = selectedFilter,
+                selectedSort = selectedSort,
+                searchQuery = searchQuery
+            )
+        }
+    }
+
+    val selectedRecord = recordsState.allRecords.firstOrNull { it.id == selectedRecordId }?.rawRecord
     LaunchedEffect(selectedRecordId, selectedRecord) {
         if (selectedRecordId != null && selectedRecord == null) {
             selectedRecordId = null
@@ -76,15 +98,6 @@ fun RecordsScreen(
             }
         )
         return
-    }
-
-    val filteredRecords = remember(snapshot.pinHistoryRecords, selectedFilter, selectedSort, searchQuery) {
-        snapshot.pinHistoryRecords
-            .asSequence()
-            .filter { it.matches(selectedFilter) }
-            .filter { it.matchesSearch(searchQuery) }
-            .sortedWith(recordsComparator(selectedSort))
-            .toList()
     }
 
     LazyColumn(
@@ -109,7 +122,7 @@ fun RecordsScreen(
                 MetricsCard(
                     modifier = Modifier.weight(1f),
                     title = "工程记录",
-                    value = snapshot.sessionFiles.size.toString(),
+                    value = snapshot.sessionFileCount.toString(),
                     hint = "可继续编辑"
                 )
             }
@@ -178,7 +191,7 @@ fun RecordsScreen(
                     ) {
                         RecordsFilter.entries.forEach { filter ->
                             SelectablePill(
-                                text = "${filter.title} ${snapshot.pinHistoryRecords.count { it.matches(filter) }}",
+                                text = "${filter.title} ${recordsState.filterCounts[filter] ?: 0}",
                                 selected = selectedFilter == filter,
                                 onClick = { selectedFilter = filter }
                             )
@@ -205,7 +218,7 @@ fun RecordsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("结果", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    text = "${filteredRecords.size} 条",
+                    text = "${recordsState.filteredRecords.size} 条",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -232,7 +245,7 @@ fun RecordsScreen(
                     description = "完成贴图后，历史会自动出现在这里。"
                 )
             }
-        } else if (filteredRecords.isEmpty()) {
+        } else if (recordsState.filteredRecords.isEmpty()) {
             item {
                 EmptyStateCard(
                     title = "没有匹配结果",
@@ -240,55 +253,16 @@ fun RecordsScreen(
                 )
             }
         } else {
-            items(filteredRecords, key = { it.id }) { item ->
+            items(
+                recordsState.filteredRecords,
+                key = { item: PinHistoryListItemUiModel -> item.id }
+            ) { item: PinHistoryListItemUiModel ->
                 PinHistoryRecordCard(
                     item = item,
-                    onRestore = { onRestoreHistory(item) },
+                    onRestore = { onRestoreHistory(item.rawRecord) },
                     onOpenDetails = { selectedRecordId = item.id }
                 )
             }
         }
-    }
-}
-
-private fun PinHistoryRecord.matches(filter: RecordsFilter): Boolean {
-    return when (filter) {
-        RecordsFilter.ALL -> true
-        RecordsFilter.IMAGES -> sourceType in setOf(
-            PinHistorySourceType.SCREENSHOT,
-            PinHistorySourceType.GALLERY_IMAGE,
-            PinHistorySourceType.EDITOR_EXPORT,
-            PinHistorySourceType.RESTORED_PIN
-        )
-
-        RecordsFilter.TEXT -> sourceType in setOf(
-            PinHistorySourceType.CLIPBOARD_TEXT,
-            PinHistorySourceType.OCR_TEXT
-        )
-
-        RecordsFilter.EDITABLE -> !annotationSessionId.isNullOrBlank()
-    }
-}
-
-private fun PinHistoryRecord.matchesSearch(query: String): Boolean {
-    val normalizedQuery = query.trim().lowercase(Locale.getDefault())
-    if (normalizedQuery.isBlank()) return true
-    val haystacks = listOfNotNull(
-        displayName,
-        textPreview,
-        imageUri.substringAfterLast('/'),
-        historySourceLabel(sourceType),
-        formatTimestamp(createdAt)
-    )
-    return haystacks.any { it.lowercase(Locale.getDefault()).contains(normalizedQuery) }
-}
-
-private fun recordsComparator(sortOrder: RecordsSortOrder): Comparator<PinHistoryRecord> {
-    return when (sortOrder) {
-        RecordsSortOrder.NEWEST -> compareByDescending<PinHistoryRecord> { it.createdAt }
-        RecordsSortOrder.OLDEST -> compareBy<PinHistoryRecord> { it.createdAt }
-        RecordsSortOrder.SOURCE -> compareBy<PinHistoryRecord>({ historySourceLabel(it.sourceType) }, { -it.createdAt })
-        RecordsSortOrder.EDITABLE -> compareByDescending<PinHistoryRecord> { !it.annotationSessionId.isNullOrBlank() }
-            .thenByDescending { it.createdAt }
     }
 }

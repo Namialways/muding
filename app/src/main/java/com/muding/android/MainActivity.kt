@@ -199,11 +199,9 @@ class MainActivity : ComponentActivity() {
 
     private fun buildSnapshot(): MainScreenSnapshot {
         return MainScreenSnapshot(
-            sessionFiles = annotationSessionRepository.listSessionFiles(),
+            sessionFileCount = annotationSessionRepository.count(),
             recentClosedPinCount = recentPinRepository.count(),
             pinHistoryRecords = pinHistoryRepository.list(),
-            recordsDirectory = annotationSessionRepository.visibleDirectoryPath(),
-            pinHistoryDirectory = pinHistoryRepository.visibleDirectoryPath(),
             runtimeStorage = runtimeStorageRepository.snapshot()
         )
     }

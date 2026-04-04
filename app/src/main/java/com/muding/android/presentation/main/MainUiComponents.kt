@@ -1,7 +1,5 @@
 package com.muding.android.presentation.main
 
-import android.net.Uri
-import android.widget.ImageView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,15 +47,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.muding.android.domain.usecase.FloatingBallTheme
-import com.muding.android.domain.usecase.PinHistoryRecord
 import com.muding.android.domain.usecase.PinHistorySourceType
 import com.muding.android.presentation.theme.floatingBallThemeColors
 
@@ -311,7 +312,7 @@ fun EmptyStateCard(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PinHistoryRecordCard(
-    item: PinHistoryRecord,
+    item: PinHistoryListItemUiModel,
     onRestore: () -> Unit,
     onOpenDetails: () -> Unit
 ) {
@@ -339,13 +340,13 @@ fun PinHistoryRecordCard(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = item.displayName ?: item.imageUri.substringAfterLast('/'),
+                        text = item.title,
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = formatTimestamp(item.createdAt),
+                        text = item.createdAtLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -353,16 +354,15 @@ fun PinHistoryRecordCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SummaryPill(text = historySourceLabel(item.sourceType), emphasized = true)
-                        if (!item.annotationSessionId.isNullOrBlank()) {
+                        SummaryPill(text = item.sourceLabel, emphasized = true)
+                        if (item.editable) {
                             SummaryPill(text = "可继续编辑")
                         }
-                        item.widthPx?.let { width ->
-                            val height = item.heightPx ?: return@let
-                            SummaryPill(text = "${width}×$height")
+                        item.dimensionLabel?.let { dimensionLabel ->
+                            SummaryPill(text = dimensionLabel)
                         }
                     }
-                    item.textPreview?.takeIf { it.isNotBlank() }?.let { preview ->
+                    item.previewText?.let { preview ->
                         Text(
                             text = preview,
                             style = MaterialTheme.typography.bodySmall,
@@ -394,34 +394,30 @@ fun RecordThumbnail(
     imageUri: String,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        AndroidView(
-            factory = { context ->
-                ImageView(context).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    adjustViewBounds = false
-                    clipToOutline = true
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            update = { imageView ->
-                runCatching {
-                    imageView.setImageURI(Uri.parse(imageUri))
-                }.onFailure {
-                    imageView.setImageDrawable(null)
-                }
-            }
-        )
         if (imageUri.isBlank()) {
             Icon(
                 imageVector = Icons.Default.BrokenImage,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(imageUri)
+                    .crossfade(false)
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                error = rememberVectorPainter(Icons.Default.BrokenImage),
+                fallback = rememberVectorPainter(Icons.Default.BrokenImage)
             )
         }
     }
