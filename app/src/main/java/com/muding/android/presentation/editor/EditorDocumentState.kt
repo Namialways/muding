@@ -10,6 +10,7 @@ data class EditorDocumentState(
     val paths: List<DrawingPath>,
     val currentTool: DrawingTool?,
     val currentColor: Color,
+    val recentColors: List<Color>,
     val strokeWidth: Float,
     val eraserSize: Float,
     val eraserMode: EraserMode,
@@ -18,8 +19,7 @@ data class EditorDocumentState(
     val shapeFilled: Boolean,
     val selectedPathIndex: Int?,
     val canUndo: Boolean,
-    val canRedo: Boolean,
-    val availableColors: List<Color>
+    val canRedo: Boolean
 )
 
 data class EditorScreenActions(
@@ -46,6 +46,7 @@ fun AnnotationViewModel.buildDocumentState(): EditorDocumentState {
         paths = paths.toList(),
         currentTool = currentTool.value,
         currentColor = currentColor.value,
+        recentColors = recentColors.toList(),
         strokeWidth = strokeWidth.value,
         eraserSize = eraserSize.value,
         eraserMode = eraserMode.value,
@@ -54,8 +55,7 @@ fun AnnotationViewModel.buildDocumentState(): EditorDocumentState {
         shapeFilled = shapeFilled.value,
         selectedPathIndex = selectedPathIndex.value,
         canUndo = canUndo(),
-        canRedo = canRedo(),
-        availableColors = availableColors
+        canRedo = canRedo()
     )
 }
 

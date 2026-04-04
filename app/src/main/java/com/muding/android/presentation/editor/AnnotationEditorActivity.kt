@@ -34,7 +34,9 @@ import kotlinx.coroutines.withContext
 
 class AnnotationEditorActivity : ComponentActivity() {
 
-    private val viewModel: AnnotationViewModel by viewModels()
+    private val viewModel: AnnotationViewModel by viewModels {
+        AnnotationViewModel.factory(AppGraph.appSettingsRepository(applicationContext))
+    }
     private lateinit var imageExportRepository: ImageExportRepository
     private lateinit var cachedImageRepository: CachedImageRepository
     private lateinit var settingsRepository: AppSettingsRepository

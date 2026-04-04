@@ -46,6 +46,9 @@ interface AppSettingsRepository {
     fun getCaptureResultAction(): CaptureResultAction
     fun setCaptureResultAction(action: CaptureResultAction)
 
+    fun getRecentEditorColors(): List<Int>
+    fun setRecentEditorColors(colors: List<Int>)
+
     fun getPinScaleMode(): PinScaleMode
     fun setPinScaleMode(mode: PinScaleMode)
 

@@ -3,7 +3,10 @@ package com.muding.android.presentation.editor
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import com.muding.android.data.settings.AppSettingsRepository
 import com.muding.android.domain.model.DrawingPath
 import com.muding.android.domain.model.DrawingTool
 
@@ -12,10 +15,12 @@ enum class EraserMode {
     PARTIAL
 }
 
-class AnnotationViewModel : ViewModel() {
+class AnnotationViewModel(
+    private val settingsRepository: AppSettingsRepository
+) : ViewModel() {
 
     val currentTool = mutableStateOf<DrawingTool?>(null)
-    val currentColor = mutableStateOf(Color(0xFFF44336))
+    val currentColor = mutableStateOf(Color(0xFFFF453A))
     val strokeWidth = mutableStateOf(6f)
     val eraserSize = mutableStateOf(28f)
     val eraserMode = mutableStateOf(EraserMode.OBJECT)
@@ -26,18 +31,18 @@ class AnnotationViewModel : ViewModel() {
 
     val paths = mutableStateListOf<DrawingPath>()
     private val undoPaths = mutableStateListOf<DrawingPath>()
+    private val recentColorSwatches = mutableStateListOf<Color>()
+    val recentColors: List<Color>
+        get() = recentColorSwatches
 
-    val availableColors = listOf(
-        Color(0xFFF44336),
-        Color(0xFFFF7A00),
-        Color(0xFFFFC107),
-        Color(0xFF4CAF50),
-        Color(0xFF00BCD4),
-        Color(0xFF3F51B5),
-        Color(0xFF7E57C2),
-        Color(0xFF263238),
-        Color.White
-    )
+    init {
+        val restoredRecentColors = settingsRepository.getRecentEditorColors()
+            .map(::Color)
+            .distinctBy { it.toArgb() }
+            .take(MAX_RECENT_COLORS)
+        recentColorSwatches.addAll(restoredRecentColors)
+        restoredRecentColors.firstOrNull()?.let { currentColor.value = it }
+    }
 
     val selectedTextIndex: Int?
         get() = selectedPathIndex.value?.takeIf { paths.getOrNull(it) is DrawingPath.TextPath }
@@ -121,6 +126,7 @@ class AnnotationViewModel : ViewModel() {
 
     fun selectColor(color: Color) {
         currentColor.value = color
+        recordRecentColor(color)
         applyCurrentStyleToSelectedPath()
     }
 
@@ -247,5 +253,31 @@ class AnnotationViewModel : ViewModel() {
         paths.clear()
         undoPaths.clear()
         selectedPathIndex.value = null
+    }
+
+    private fun recordRecentColor(color: Color) {
+        val argb = color.toArgb()
+        recentColorSwatches.removeAll { it.toArgb() == argb }
+        recentColorSwatches.add(0, Color(argb))
+        while (recentColorSwatches.size > MAX_RECENT_COLORS) {
+            recentColorSwatches.removeLast()
+        }
+        settingsRepository.setRecentEditorColors(recentColorSwatches.map { it.toArgb() })
+    }
+
+    companion object {
+        private const val MAX_RECENT_COLORS = 3
+
+        fun factory(settingsRepository: AppSettingsRepository): ViewModelProvider.Factory {
+            return object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    require(modelClass.isAssignableFrom(AnnotationViewModel::class.java)) {
+                        "Unknown ViewModel class: ${modelClass.name}"
+                    }
+                    return AnnotationViewModel(settingsRepository) as T
+                }
+            }
+        }
     }
 }

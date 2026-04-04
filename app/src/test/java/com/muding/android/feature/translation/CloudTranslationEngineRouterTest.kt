@@ -93,6 +93,10 @@ class CloudTranslationEngineRouterTest {
 
         override fun setCaptureResultAction(action: CaptureResultAction) = Unit
 
+        override fun getRecentEditorColors(): List<Int> = emptyList()
+
+        override fun setRecentEditorColors(colors: List<Int>) = Unit
+
         override fun getPinScaleMode(): PinScaleMode = PinScaleMode.LOCK_ASPECT
 
         override fun setPinScaleMode(mode: PinScaleMode) = Unit

@@ -36,6 +36,12 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
         settings.setResultAction(action)
     }
 
+    override fun getRecentEditorColors(): List<Int> = settings.getRecentEditorColors()
+
+    override fun setRecentEditorColors(colors: List<Int>) {
+        settings.setRecentEditorColors(colors)
+    }
+
     override fun getPinScaleMode(): PinScaleMode = settings.getPinScaleMode()
 
     override fun setPinScaleMode(mode: PinScaleMode) {

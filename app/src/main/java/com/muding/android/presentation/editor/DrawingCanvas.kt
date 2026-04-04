@@ -38,8 +38,6 @@ fun DrawingCanvas(
     textOutlineEnabled: Boolean,
     shapeFilled: Boolean,
     selectedPathIndex: Int?,
-    viewportScale: Float,
-    viewportOffset: Offset,
     onPathAdded: (DrawingPath) -> Unit,
     onPathUpdated: (Int, DrawingPath) -> Unit,
     onPathReplaced: (Int, List<DrawingPath>) -> Unit,
@@ -66,20 +64,9 @@ fun DrawingCanvas(
         )
     }
 
-    fun toCanvasOffset(rawOffset: Offset): Offset {
-        if (viewportScale == 1f && viewportOffset == Offset.Zero) return rawOffset
-        val pivot = Offset(localCanvasSize.value.width / 2f, localCanvasSize.value.height / 2f)
-        val scale = viewportScale.coerceAtLeast(0.01f)
-        return Offset(
-            x = ((rawOffset.x - viewportOffset.x - pivot.x) / scale) + pivot.x,
-            y = ((rawOffset.y - viewportOffset.y - pivot.y) / scale) + pivot.y
-        )
-    }
+    fun toCanvasOffset(rawOffset: Offset): Offset = rawOffset
 
-    fun toCanvasDelta(rawDelta: Offset): Offset {
-        val scale = viewportScale.coerceAtLeast(0.01f)
-        return Offset(rawDelta.x / scale, rawDelta.y / scale)
-    }
+    fun toCanvasDelta(rawDelta: Offset): Offset = rawDelta
 
     val canvasModifier = modifier
         .fillMaxSize()
