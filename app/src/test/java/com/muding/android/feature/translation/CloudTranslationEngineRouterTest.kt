@@ -20,7 +20,7 @@ class CloudTranslationEngineRouterTest {
     @Test
     fun `router delegates to baidu engine`() = runBlocking {
         val baiduEngine = RecordingEngine("百度翻译")
-        val youdaoEngine = RecordingEngine("有道智云")
+        val youdaoEngine = RecordingEngine("有道翻译")
         val router = CloudTranslationEngineRouter(
             settingsRepository = FakeAppSettingsRepository(CloudTranslationProvider.BAIDU),
             baiduEngine = baiduEngine,
@@ -37,7 +37,7 @@ class CloudTranslationEngineRouterTest {
     @Test
     fun `router delegates to youdao engine`() = runBlocking {
         val baiduEngine = RecordingEngine("百度翻译")
-        val youdaoEngine = RecordingEngine("有道智云")
+        val youdaoEngine = RecordingEngine("有道翻译")
         val router = CloudTranslationEngineRouter(
             settingsRepository = FakeAppSettingsRepository(CloudTranslationProvider.YOUDAO),
             baiduEngine = baiduEngine,
@@ -46,7 +46,7 @@ class CloudTranslationEngineRouterTest {
 
         val result = router.translate("hello", "en")
 
-        assertEquals("有道智云", result.providerLabel)
+        assertEquals("有道翻译", result.providerLabel)
         assertEquals(0, baiduEngine.callCount)
         assertEquals(1, youdaoEngine.callCount)
     }
@@ -56,7 +56,7 @@ class CloudTranslationEngineRouterTest {
         val router = CloudTranslationEngineRouter(
             settingsRepository = FakeAppSettingsRepository(CloudTranslationProvider.NONE),
             baiduEngine = RecordingEngine("百度翻译"),
-            youdaoEngine = RecordingEngine("有道智云")
+            youdaoEngine = RecordingEngine("有道翻译")
         )
 
         val result = runCatching {

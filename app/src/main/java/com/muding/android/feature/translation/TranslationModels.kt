@@ -34,6 +34,6 @@ fun CloudTranslationProvider.displayName(): String {
     return when (this) {
         CloudTranslationProvider.NONE -> "不使用云翻译"
         CloudTranslationProvider.BAIDU -> "百度翻译"
-        CloudTranslationProvider.YOUDAO -> "有道智云"
+        CloudTranslationProvider.YOUDAO -> "有道翻译"
     }
 }

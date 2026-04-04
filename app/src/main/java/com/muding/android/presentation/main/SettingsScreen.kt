@@ -185,7 +185,7 @@ private fun SettingsOverviewScreen(
             SettingEntryRow(
                 icon = Icons.Default.Translate,
                 title = SettingsSection.OCR_AND_TRANSLATION.title,
-                value = "本地模型与云翻译",
+                value = "本地与云翻译",
                 onClick = { onOpenSection(SettingsSection.OCR_AND_TRANSLATION) }
             )
         }

@@ -3,7 +3,6 @@ package com.muding.android.presentation.ocr
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -36,13 +35,14 @@ import androidx.lifecycle.lifecycleScope
 import com.muding.android.app.AppGraph
 import com.muding.android.core.model.PinSourceType
 import com.muding.android.data.settings.AppSettingsRepository
+import com.muding.android.data.settings.CloudTranslationProvider
+import com.muding.android.data.settings.TranslationSettings
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.feature.pin.creation.PinCreationCoordinator
-import com.muding.android.feature.translation.TranslationErrorMessages
 import com.muding.android.feature.translation.TranslationEngine
+import com.muding.android.feature.translation.TranslationErrorMessages
 import com.muding.android.feature.translation.TranslationLanguageCatalog
 import com.muding.android.presentation.theme.MudingTheme
-import com.muding.android.presentation.translation.TranslationSettingsActivity
 import com.muding.android.service.FloatingBallService
 import kotlinx.coroutines.launch
 
@@ -67,6 +67,7 @@ class OcrResultActivity : ComponentActivity() {
         val targetLanguageDisplayName = TranslationLanguageCatalog.findByAppTag(
             settingsRepository.getTranslationSettings().localTargetLanguageTag
         ).displayName
+
         if (initialText.isBlank()) {
             Toast.makeText(this, "OCR 结果为空", Toast.LENGTH_SHORT).show()
             finishFlow()
@@ -81,16 +82,18 @@ class OcrResultActivity : ComponentActivity() {
                 ) {
                     OcrResultScreen(
                         initialText = initialText,
+                        targetLanguageDisplayName = targetLanguageDisplayName,
                         onCreateTextPin = { text -> createTextPin(text) },
                         onCopyText = { text -> copyText(text) },
-                        onTranslateLocally = { text, onComplete ->
-                            translateWithEngine(text, localTranslationEngine, onComplete)
+                        onTranslate = { text, onComplete ->
+                            val settings = settingsRepository.getTranslationSettings()
+                            val translationEngine = resolveOcrTranslationEngine(
+                                settings = settings,
+                                localEngine = localTranslationEngine,
+                                cloudEngine = cloudTranslationEngine
+                            )
+                            translateWithEngine(text, translationEngine, onComplete)
                         },
-                        onTranslateInCloud = { text, onComplete ->
-                            translateWithEngine(text, cloudTranslationEngine, onComplete)
-                        },
-                        targetLanguageDisplayName = targetLanguageDisplayName,
-                        onOpenTranslationSettings = { openTranslationSettings() },
                         onClose = { finishFlow() }
                     )
                 }
@@ -156,10 +159,6 @@ class OcrResultActivity : ComponentActivity() {
         }
     }
 
-    private fun openTranslationSettings() {
-        startActivity(Intent(this, TranslationSettingsActivity::class.java))
-    }
-
     private fun finishFlow() {
         if (restoreFloatingBall) {
             startService(FloatingBallService.createRestoreVisibilityIntent(this))
@@ -183,15 +182,25 @@ class OcrResultActivity : ComponentActivity() {
     }
 }
 
+internal fun resolveOcrTranslationEngine(
+    settings: TranslationSettings,
+    localEngine: TranslationEngine,
+    cloudEngine: TranslationEngine
+): TranslationEngine {
+    return if (settings.cloudProvider == CloudTranslationProvider.NONE) {
+        localEngine
+    } else {
+        cloudEngine
+    }
+}
+
 @Composable
 private fun OcrResultScreen(
     initialText: String,
+    targetLanguageDisplayName: String,
     onCreateTextPin: (String) -> Unit,
     onCopyText: (String) -> Unit,
-    onTranslateLocally: (String, (String) -> Unit) -> Unit,
-    onTranslateInCloud: (String, (String) -> Unit) -> Unit,
-    targetLanguageDisplayName: String,
-    onOpenTranslationSettings: () -> Unit,
+    onTranslate: (String, (String) -> Unit) -> Unit,
     onClose: () -> Unit
 ) {
     var text by remember(initialText) { mutableStateOf(initialText) }
@@ -209,7 +218,7 @@ private fun OcrResultScreen(
             style = MaterialTheme.typography.headlineSmall
         )
         Text(
-            text = "可以先修改识别结果，再决定复制文本或生成文字贴图。",
+            text = "可先修正识别文字，再生成贴图或执行翻译。",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -240,30 +249,12 @@ private fun OcrResultScreen(
                 Text("复制文本")
             }
         }
-        Row(
+        Button(
+            onClick = { onTranslate(text.trim()) { translatedText = it } },
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            enabled = text.isNotBlank()
         ) {
-            OutlinedButton(
-                onClick = { onTranslateLocally(text.trim()) { translatedText = it } },
-                modifier = Modifier.weight(1f),
-                enabled = text.isNotBlank()
-            ) {
-                Text("本地翻译")
-            }
-            OutlinedButton(
-                onClick = { onTranslateInCloud(text.trim()) { translatedText = it } },
-                modifier = Modifier.weight(1f),
-                enabled = text.isNotBlank()
-            ) {
-                Text("云翻译")
-            }
-        }
-        OutlinedButton(
-            onClick = onOpenTranslationSettings,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("翻译设置")
+            Text("翻译")
         }
         if (translatedText.isNotBlank()) {
             Text(

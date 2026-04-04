@@ -91,7 +91,7 @@ class YoudaoCloudTranslationEngine(
 ) : TranslationEngine {
 
     override suspend fun translate(text: String, targetLanguageTag: String): TranslationResult {
-        val providerLabel = "有道智云"
+        val providerLabel = "有道翻译"
         val settings = settingsRepository.getTranslationSettings()
         if (settings.youdaoAppKey.isBlank() || settings.youdaoAppSecret.isBlank()) {
             throw TranslationException(

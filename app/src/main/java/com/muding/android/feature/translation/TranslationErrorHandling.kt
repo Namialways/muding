@@ -38,11 +38,13 @@ object TranslationErrorMessages {
             TranslationFailureType.MISSING_CREDENTIALS -> {
                 "请先在翻译设置中配置${error.providerLabel ?: "云翻译"}密钥"
             }
+
             TranslationFailureType.NETWORK_UNAVAILABLE -> "网络不可用，请检查网络后重试"
             TranslationFailureType.NETWORK_TIMEOUT -> "${error.providerLabel ?: "翻译服务"}连接超时，请稍后重试"
             TranslationFailureType.SERVICE_REJECTED -> {
                 error.message ?: "${error.providerLabel ?: "翻译服务"}暂时不可用，请稍后重试"
             }
+
             TranslationFailureType.EMPTY_RESULT -> "${error.providerLabel ?: "翻译服务"}没有返回有效结果"
             TranslationFailureType.UNKNOWN -> "翻译失败，请稍后重试"
         }
@@ -59,11 +61,13 @@ object TranslationErrorMessages {
                 providerLabel = providerLabel,
                 cause = throwable
             )
+
             is UnknownHostException, is ConnectException, is IOException -> TranslationException(
                 type = TranslationFailureType.NETWORK_UNAVAILABLE,
                 providerLabel = providerLabel,
                 cause = throwable
             )
+
             else -> TranslationException(
                 type = TranslationFailureType.UNKNOWN,
                 providerLabel = providerLabel,
