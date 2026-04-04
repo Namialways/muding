@@ -48,12 +48,12 @@ class ImageSaver(private val context: Context) {
             // Android 9 及以下使用传统方式
             @Suppress("DEPRECATION")
             val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            val pixpinDir = File(imagesDir, "幕钉")
-            if (!pixpinDir.exists()) {
-                pixpinDir.mkdirs()
+            val mudingDir = File(imagesDir, "幕钉")
+            if (!mudingDir.exists()) {
+                mudingDir.mkdirs()
             }
 
-            val imageFile = File(pixpinDir, filename)
+            val imageFile = File(mudingDir, filename)
             FileOutputStream(imageFile).use { outputStream ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
             }

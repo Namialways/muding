@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PixPin Android"
+rootProject.name = "幕钉 Android"
 include(":app")
