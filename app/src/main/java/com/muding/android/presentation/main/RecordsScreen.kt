@@ -3,27 +3,14 @@ package com.muding.android.presentation.main
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,7 +26,6 @@ import com.muding.android.domain.usecase.PinHistoryRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RecordsScreen(
     modifier: Modifier = Modifier,
@@ -100,128 +86,59 @@ fun RecordsScreen(
         return
     }
 
+    val tokens = rememberMainUiTokens()
+    val criteriaSummary = recordsCriteriaSummary(
+        filter = selectedFilter,
+        sort = selectedSort,
+        query = searchQuery
+    )
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = tokens.spacing.pageGutter),
+        verticalArrangement = Arrangement.spacedBy(tokens.spacing.sectionGap),
         contentPadding = PaddingValues(vertical = 20.dp)
     ) {
         item {
-            SectionHeader(title = "记录中心")
+            SectionHeader(
+                title = "记录",
+                description = "把历史贴图当作工作列表来查找、恢复和继续编辑。"
+            )
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricsCard(
-                    modifier = Modifier.weight(1f),
-                    title = "贴图历史",
-                    value = snapshot.pinHistoryRecords.size.toString(),
-                    hint = "可恢复"
-                )
-                MetricsCard(
-                    modifier = Modifier.weight(1f),
-                    title = "工程记录",
-                    value = snapshot.sessionFileCount.toString(),
-                    hint = "可继续编辑"
-                )
-            }
-        }
-
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricsCard(
-                    modifier = Modifier.weight(1f),
-                    title = "最近关闭",
-                    value = snapshot.recentClosedPinCount.toString(),
-                    hint = "待恢复"
-                )
-                MetricsCard(
-                    modifier = Modifier.weight(1f),
-                    title = "缓存占用",
-                    value = formatFileSize(snapshot.runtimeStorage.totalBytes),
-                    hint = "运行文件"
-                )
-            }
-        }
-
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null)
-                        },
-                        label = { Text("搜索记录") },
-                        placeholder = { Text("名称、文字、来源") }
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = onRefreshRecords, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.Refresh, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("刷新")
-                        }
-                        OutlinedButton(onClick = onOpenStorageSettings, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.Storage, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("设置")
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("筛选", style = MaterialTheme.typography.titleMedium)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        RecordsFilter.entries.forEach { filter ->
-                            SelectablePill(
-                                text = "${filter.title} ${recordsState.filterCounts[filter] ?: 0}",
-                                selected = selectedFilter == filter,
-                                onClick = { selectedFilter = filter }
-                            )
-                        }
-                    }
-                    Text("排序", style = MaterialTheme.typography.titleMedium)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        RecordsSortOrder.entries.forEach { sortOrder ->
-                            SelectablePill(
-                                text = sortOrder.title,
-                                selected = selectedSort == sortOrder,
-                                onClick = { selectedSort = sortOrder }
-                            )
-                        }
-                    }
-                }
-            }
+            RecordsToolbar(
+                searchQuery = searchQuery,
+                selectedFilter = selectedFilter,
+                selectedSort = selectedSort,
+                filterCounts = recordsState.filterCounts,
+                onSearchQueryChange = { searchQuery = it },
+                onSelectFilter = { selectedFilter = it },
+                onSelectSort = { selectedSort = it },
+                onRefreshRecords = onRefreshRecords,
+                onOpenStorageSettings = onOpenStorageSettings
+            )
         }
 
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("结果", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    text = "${recordsState.filteredRecords.size} 条",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "结果",
+                    style = MaterialTheme.typography.titleLarge
                 )
+                Text(
+                    text = "${recordsState.filteredRecords.size} 条记录",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+                criteriaSummary?.let { summary ->
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.palette.body
+                    )
+                }
             }
         }
 
@@ -241,15 +158,15 @@ fun RecordsScreen(
         if (snapshot.pinHistoryRecords.isEmpty()) {
             item {
                 EmptyStateCard(
-                    title = "当前还没有贴图记录",
-                    description = "完成贴图后，历史会自动出现在这里。"
+                    title = "还没有贴图记录",
+                    description = "完成一次贴图后，历史会自动出现在这里。"
                 )
             }
         } else if (recordsState.filteredRecords.isEmpty()) {
             item {
                 EmptyStateCard(
                     title = "没有匹配结果",
-                    description = "换一个关键词、筛选或排序试试。"
+                    description = "换个关键词，或者调整筛选和排序试试。"
                 )
             }
         } else {

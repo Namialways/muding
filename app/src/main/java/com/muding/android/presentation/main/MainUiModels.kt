@@ -158,6 +158,37 @@ fun storageSettingsSummary(pinHistoryEnabled: Boolean): String {
     }
 }
 
+fun recordsCriteriaSummary(
+    filter: RecordsFilter,
+    sort: RecordsSortOrder,
+    query: String
+): String? {
+    val parts = buildList {
+        if (filter != RecordsFilter.ALL) {
+            add(filter.title)
+        }
+        query.trim().takeIf { it.isNotBlank() }?.let { trimmedQuery ->
+            add("搜索 \"$trimmedQuery\"")
+        }
+        if (sort != RecordsSortOrder.NEWEST) {
+            add(sort.title)
+        }
+    }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+fun recordsFilterButtonLabel(filter: RecordsFilter): String {
+    return if (filter == RecordsFilter.ALL) {
+        "全部"
+    } else {
+        filter.title
+    }
+}
+
+fun recordsSortButtonLabel(sort: RecordsSortOrder): String {
+    return sort.title
+}
+
 fun buildRecordsComputedState(
     records: List<PinHistoryRecord>,
     selectedFilter: RecordsFilter,

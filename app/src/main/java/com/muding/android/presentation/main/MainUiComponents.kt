@@ -27,9 +27,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Camera
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -434,6 +441,113 @@ fun SelectablePill(
                 tokens.palette.body
             }
         )
+    }
+}
+
+@Composable
+fun FilterMenuButton(
+    selectedFilter: RecordsFilter,
+    filterCounts: Map<RecordsFilter, Int>,
+    onSelect: (RecordsFilter) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { expanded = true }) {
+        Icon(Icons.Default.FilterList, contentDescription = null)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(recordsFilterButtonLabel(selectedFilter))
+    }
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false }
+    ) {
+        RecordsFilter.entries.forEach { filter ->
+            DropdownMenuItem(
+                text = { Text("${filter.title} ${filterCounts[filter] ?: 0}") },
+                onClick = {
+                    expanded = false
+                    onSelect(filter)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun SortMenuButton(
+    selectedSort: RecordsSortOrder,
+    onSelect: (RecordsSortOrder) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    OutlinedButton(onClick = { expanded = true }) {
+        Icon(Icons.Default.Sort, contentDescription = null)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(recordsSortButtonLabel(selectedSort))
+    }
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false }
+    ) {
+        RecordsSortOrder.entries.forEach { sortOrder ->
+            DropdownMenuItem(
+                text = { Text(sortOrder.title) },
+                onClick = {
+                    expanded = false
+                    onSelect(sortOrder)
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun RecordsToolbar(
+    searchQuery: String,
+    selectedFilter: RecordsFilter,
+    selectedSort: RecordsSortOrder,
+    filterCounts: Map<RecordsFilter, Int>,
+    onSearchQueryChange: (String) -> Unit,
+    onSelectFilter: (RecordsFilter) -> Unit,
+    onSelectSort: (RecordsSortOrder) -> Unit,
+    onRefreshRecords: () -> Unit,
+    onOpenStorageSettings: () -> Unit
+) {
+    SettingGroup(title = "搜索与筛选") {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = null)
+            },
+            label = { Text("搜索记录") },
+            placeholder = { Text("名称、文字、来源") }
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            FilterMenuButton(
+                selectedFilter = selectedFilter,
+                filterCounts = filterCounts,
+                onSelect = onSelectFilter
+            )
+            SortMenuButton(
+                selectedSort = selectedSort,
+                onSelect = onSelectSort
+            )
+            OutlinedButton(onClick = onRefreshRecords) {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("刷新")
+            }
+            OutlinedButton(onClick = onOpenStorageSettings) {
+                Icon(Icons.Default.Storage, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("记录设置")
+            }
+        }
     }
 }
 

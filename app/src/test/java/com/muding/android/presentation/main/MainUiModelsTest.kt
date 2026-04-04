@@ -3,6 +3,8 @@ package com.muding.android.presentation.main
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.PinScaleMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MainUiModelsTest {
@@ -39,5 +41,28 @@ class MainUiModelsTest {
         val summary = storageSettingsSummary(pinHistoryEnabled = true)
 
         assertEquals("自动清理开启", summary)
+    }
+
+    @Test
+    fun recordsCriteriaSummary_returnsNullForDefaultState() {
+        val summary = recordsCriteriaSummary(
+            filter = RecordsFilter.ALL,
+            sort = RecordsSortOrder.NEWEST,
+            query = ""
+        )
+
+        assertNull(summary)
+    }
+
+    @Test
+    fun recordsCriteriaSummary_includesFilterAndQueryWhenActive() {
+        val summary = recordsCriteriaSummary(
+            filter = RecordsFilter.TEXT,
+            sort = RecordsSortOrder.NEWEST,
+            query = "ocr"
+        )
+
+        assertTrue(summary?.contains(RecordsFilter.TEXT.title) == true)
+        assertTrue(summary?.contains("ocr") == true)
     }
 }

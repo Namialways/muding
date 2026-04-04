@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,32 +40,27 @@ fun RecordDetailScreen(
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
+    val tokens = rememberMainUiTokens()
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = tokens.spacing.pageGutter),
+        verticalArrangement = Arrangement.spacedBy(tokens.spacing.sectionGap),
         contentPadding = PaddingValues(vertical = 20.dp)
     ) {
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                    Column {
-                        Text("记录详情", style = MaterialTheme.typography.headlineSmall)
-                        Text(
-                            text = historySourceLabel(record.sourceType),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                 }
+                SectionHeader(
+                    title = "记录详情",
+                    description = historySourceLabel(record.sourceType)
+                )
             }
         }
 
@@ -81,69 +74,59 @@ fun RecordDetailScreen(
         }
 
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = record.displayName ?: record.imageUri.substringAfterLast('/'),
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    LabeledValueRow(label = "时间", value = formatTimestamp(record.createdAt))
-                    LabeledValueRow(label = "来源", value = historySourceLabel(record.sourceType))
-                    LabeledValueRow(
-                        label = "编辑",
-                        value = if (record.annotationSessionId.isNullOrBlank()) "无工程" else "可继续编辑"
-                    )
-                    record.widthPx?.let { width ->
-                        val height = record.heightPx ?: return@let
-                        LabeledValueRow(label = "尺寸", value = "${width} × $height")
-                    }
+            SettingGroup(title = "基本信息") {
+                Text(
+                    text = record.displayName ?: record.imageUri.substringAfterLast('/'),
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                InlineValueRow(label = "时间", value = formatTimestamp(record.createdAt))
+                InlineValueRow(label = "来源", value = historySourceLabel(record.sourceType))
+                InlineValueRow(
+                    label = "编辑状态",
+                    value = if (record.annotationSessionId.isNullOrBlank()) "无工程" else "可继续编辑"
+                )
+                record.widthPx?.let { width ->
+                    val height = record.heightPx ?: return@let
+                    InlineValueRow(label = "尺寸", value = "${width} x $height")
                 }
             }
         }
 
         record.textPreview?.takeIf { it.isNotBlank() }?.let { preview ->
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("文字摘要", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = preview,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                SettingGroup(title = "文字摘要") {
+                    Text(
+                        text = preview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = tokens.palette.body
+                    )
                 }
             }
         }
 
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+            SettingGroup(title = "文件") {
+                Text(
+                    text = record.imageUri,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+                OutlinedButton(
+                    onClick = {
+                        copyToClipboard(
+                            context = context,
+                            label = "image_path",
+                            value = record.imageUri,
+                            message = "已复制路径"
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("文件", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = record.imageUri,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(
-                        onClick = { copyToClipboard(context, "image_path", record.imageUri, "已复制路径") },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("复制路径")
-                    }
+                    Icon(Icons.Default.ContentCopy, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("复制路径")
                 }
             }
         }
@@ -151,7 +134,7 @@ fun RecordDetailScreen(
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(onClick = onRestore, modifier = Modifier.weight(1f)) {
                     Text("恢复贴图")
