@@ -1,7 +1,9 @@
 # ===== Android / Gradle =====
 .gradle/
 **/.gradle/
+.android-user-home/
 .gradle-user-home/
+.codex/
 build/
 **/build/
 
