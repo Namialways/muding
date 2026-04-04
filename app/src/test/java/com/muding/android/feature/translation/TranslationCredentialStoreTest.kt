@@ -74,6 +74,29 @@ class TranslationCredentialStoreTest {
         assertTrue(legacySource.cleared)
     }
 
+    @Test
+    fun `clearAllCredentials removes every stored provider secret`() {
+        val secretStore = InMemorySecretStore().apply {
+            put(TranslationCredentialStore.KEY_BAIDU_APP_ID, "id")
+            put(TranslationCredentialStore.KEY_BAIDU_SECRET_KEY, "secret")
+            put(TranslationCredentialStore.KEY_YOUDAO_APP_KEY, "key")
+            put(TranslationCredentialStore.KEY_YOUDAO_APP_SECRET, "secret")
+        }
+        val store = TranslationCredentialStore(secretStore)
+
+        store.clearAllCredentials()
+
+        assertEquals(
+            TranslationCredentialBundle(
+                baiduAppId = "",
+                baiduSecretKey = "",
+                youdaoAppKey = "",
+                youdaoAppSecret = ""
+            ),
+            store.getCredentials()
+        )
+    }
+
     private class InMemorySecretStore : SecretStore {
         private val values = linkedMapOf<String, String>()
 

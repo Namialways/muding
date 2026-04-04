@@ -74,6 +74,13 @@ class TranslationCredentialStore(
         source.clearLegacySecrets()
     }
 
+    fun clearAllCredentials() {
+        secretStore.remove(KEY_BAIDU_APP_ID)
+        secretStore.remove(KEY_BAIDU_SECRET_KEY)
+        secretStore.remove(KEY_YOUDAO_APP_KEY)
+        secretStore.remove(KEY_YOUDAO_APP_SECRET)
+    }
+
     private fun putOrRemove(key: String, value: String) {
         val normalized = value.trim()
         if (normalized.isBlank()) {

@@ -27,7 +27,9 @@ import com.muding.android.feature.pin.source.TextBitmapRenderer
 import com.muding.android.feature.pin.source.TextPinSourceAdapter
 import com.muding.android.feature.translation.BaiduCloudTranslationEngine
 import com.muding.android.feature.translation.CloudTranslationEngineRouter
+import com.muding.android.feature.translation.DefaultLocalTranslationModelResetter
 import com.muding.android.feature.translation.LocalTranslationModelManager
+import com.muding.android.feature.translation.LocalTranslationModelResetter
 import com.muding.android.feature.translation.MlKitLocalTranslationEngine
 import com.muding.android.feature.translation.YoudaoCloudTranslationEngine
 
@@ -101,6 +103,10 @@ object AppGraph {
 
     fun localTranslationModelManager(): LocalTranslationModelManager {
         return LocalTranslationModelManager()
+    }
+
+    fun localTranslationModelResetter(): LocalTranslationModelResetter {
+        return DefaultLocalTranslationModelResetter(localTranslationModelManager())
     }
 
     fun localTranslationEngine(): MlKitLocalTranslationEngine {

@@ -71,7 +71,7 @@ data class MainScreenSnapshot(
                 sessionFileCount = 0,
                 recentClosedPinCount = 0,
                 pinHistoryRecords = emptyList(),
-                runtimeStorage = RuntimeStorageSnapshot(0, 0, 0, 0, 0)
+                runtimeStorage = RuntimeStorageSnapshot(0, 0, 0, 0, 0, 0, 0)
             )
         }
     }

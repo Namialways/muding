@@ -7,12 +7,20 @@ data class RuntimeStorageSnapshot(
     val screenshotsCacheBytes: Long,
     val pinnedCacheBytes: Long,
     val shareCacheBytes: Long,
+    val importCacheBytes: Long,
+    val textPinCacheBytes: Long,
     val annotationSessionBytes: Long,
     val pinHistoryBytes: Long
 ) {
-    val totalBytes: Long
+    val imageCacheBytes: Long
         get() = screenshotsCacheBytes + pinnedCacheBytes + shareCacheBytes +
-            annotationSessionBytes + pinHistoryBytes
+            importCacheBytes + textPinCacheBytes
+
+    val recordBytes: Long
+        get() = annotationSessionBytes + pinHistoryBytes
+
+    val totalBytes: Long
+        get() = imageCacheBytes + recordBytes
 }
 
 object RuntimeStorageManager {
@@ -22,6 +30,8 @@ object RuntimeStorageManager {
             screenshotsCacheBytes = directorySize(File(context.cacheDir, "screenshots")),
             pinnedCacheBytes = directorySize(File(context.cacheDir, "pinned")),
             shareCacheBytes = directorySize(File(context.cacheDir, "images")),
+            importCacheBytes = directorySize(File(context.cacheDir, "imports")),
+            textPinCacheBytes = directorySize(File(context.cacheDir, "text_pins")),
             annotationSessionBytes = directorySize(File(recordsRoot(context), "annotation_sessions")),
             pinHistoryBytes = directorySize(File(recordsRoot(context), "pin_history"))
         )
@@ -31,6 +41,8 @@ object RuntimeStorageManager {
         deleteDirectoryContents(File(context.cacheDir, "screenshots"))
         deleteDirectoryContents(File(context.cacheDir, "pinned"))
         deleteDirectoryContents(File(context.cacheDir, "images"))
+        deleteDirectoryContents(File(context.cacheDir, "imports"))
+        deleteDirectoryContents(File(context.cacheDir, "text_pins"))
     }
 
     fun clearRecordCaches(context: Context) {

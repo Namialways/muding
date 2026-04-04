@@ -225,6 +225,10 @@ class CaptureFlowSettings(context: Context) {
             .apply()
     }
 
+    fun clearAll() {
+        prefs.edit().clear().apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "muding_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"

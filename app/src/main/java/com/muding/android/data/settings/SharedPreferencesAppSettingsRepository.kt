@@ -160,4 +160,9 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
         credentialStore.saveYoudaoCredentials(appKey, appSecret)
         settings.clearLegacyTranslationCredentials()
     }
+
+    override fun resetAllSettings() {
+        credentialStore.clearAllCredentials()
+        settings.clearAll()
+    }
 }

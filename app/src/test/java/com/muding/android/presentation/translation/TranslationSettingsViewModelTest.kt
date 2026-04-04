@@ -217,5 +217,7 @@ class TranslationSettingsViewModelTest {
                 youdaoAppSecret = appSecret
             )
         }
+
+        override fun resetAllSettings() = Unit
     }
 }

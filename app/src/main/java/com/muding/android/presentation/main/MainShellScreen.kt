@@ -65,10 +65,8 @@ fun MainScreen(
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
     onMaxPinHistoryCountChanged: (Int) -> Unit,
     onPinHistoryRetainDaysChanged: (Int) -> Unit,
-    onClearAllRecords: () -> Unit,
-    onClearImageCaches: () -> Unit,
-    onClearAllRuntimeFiles: () -> Unit,
-    onClearPinHistory: () -> Unit,
+    onClearWorkRecords: () -> Unit,
+    onResetApplication: () -> Unit,
     onDeleteHistory: (PinHistoryRecord) -> Unit,
     onRestoreHistory: (PinHistoryRecord) -> Unit,
     onEditHistory: (PinHistoryRecord) -> Unit,
@@ -298,10 +296,11 @@ fun MainScreen(
                     retainDays = value
                     runRecordsMutation { onRetainDaysChanged(value) }
                 },
-                onClearPinHistory = { runRecordsMutation { onClearPinHistory() } },
-                onClearAllRecords = { runRecordsMutation { onClearAllRecords() } },
-                onClearImageCaches = { runRecordsMutation { onClearImageCaches() } },
-                onClearAllRuntimeFiles = { runRecordsMutation { onClearAllRuntimeFiles() } },
+                onClearWorkRecords = { runRecordsMutation { onClearWorkRecords() } },
+                onResetApplication = {
+                    recordsLoading = true
+                    onResetApplication()
+                },
                 onRequestPermission = onRequestPermission,
                 onOpenTranslationSettings = onOpenTranslationSettings,
                 onStartService = onStartService

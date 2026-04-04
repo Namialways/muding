@@ -67,6 +67,12 @@ class LocalTranslationModelManager(
         }
     }
 
+    suspend fun clearDownloadedModels() {
+        getDownloadedLanguageTags().forEach { languageTag ->
+            delete(languageTag)
+        }
+    }
+
     private fun normalizeMlKitTag(languageTag: String): String? {
         return when (languageTag) {
             "en" -> TranslateLanguage.ENGLISH

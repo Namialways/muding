@@ -166,5 +166,7 @@ class CloudTranslationEngineRouterTest {
         override fun setBaiduTranslationCredentials(appId: String, secretKey: String) = Unit
 
         override fun setYoudaoTranslationCredentials(appKey: String, appSecret: String) = Unit
+
+        override fun resetAllSettings() = Unit
     }
 }

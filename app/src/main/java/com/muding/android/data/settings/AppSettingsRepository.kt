@@ -78,4 +78,5 @@ interface AppSettingsRepository {
     fun setCloudTranslationProvider(provider: CloudTranslationProvider)
     fun setBaiduTranslationCredentials(appId: String, secretKey: String)
     fun setYoudaoTranslationCredentials(appKey: String, appSecret: String)
+    fun resetAllSettings()
 }

@@ -24,9 +24,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,10 +69,8 @@ fun SettingsScreen(
     onPinHistoryRetainDaysChanged: (Int) -> Unit,
     onMaxSessionCountChanged: (Int) -> Unit,
     onRetainDaysChanged: (Int) -> Unit,
-    onClearPinHistory: () -> Unit,
-    onClearAllRecords: () -> Unit,
-    onClearImageCaches: () -> Unit,
-    onClearAllRuntimeFiles: () -> Unit,
+    onClearWorkRecords: () -> Unit,
+    onResetApplication: () -> Unit,
     onRequestPermission: () -> Unit,
     onOpenTranslationSettings: () -> Unit,
     onStartService: () -> Unit
@@ -128,10 +128,8 @@ fun SettingsScreen(
             onPinHistoryRetainDaysChanged = onPinHistoryRetainDaysChanged,
             onMaxSessionCountChanged = onMaxSessionCountChanged,
             onRetainDaysChanged = onRetainDaysChanged,
-            onClearPinHistory = onClearPinHistory,
-            onClearAllRecords = onClearAllRecords,
-            onClearImageCaches = onClearImageCaches,
-            onClearAllRuntimeFiles = onClearAllRuntimeFiles
+            onClearWorkRecords = onClearWorkRecords,
+            onResetApplication = onResetApplication
         )
     }
 }
@@ -199,6 +197,7 @@ private fun SettingsOverviewScreen(
             )
         }
     }
+
 }
 
 @Composable
@@ -440,12 +439,11 @@ private fun StorageAndRecordsSettingsSection(
     onPinHistoryRetainDaysChanged: (Int) -> Unit,
     onMaxSessionCountChanged: (Int) -> Unit,
     onRetainDaysChanged: (Int) -> Unit,
-    onClearPinHistory: () -> Unit,
-    onClearAllRecords: () -> Unit,
-    onClearImageCaches: () -> Unit,
-    onClearAllRuntimeFiles: () -> Unit
+    onClearWorkRecords: () -> Unit,
+    onResetApplication: () -> Unit
 ) {
     val tokens = rememberMainUiTokens()
+    val dialogState = remember { StorageMaintenanceDialogState() }
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -462,13 +460,8 @@ private fun StorageAndRecordsSettingsSection(
 
         item {
             SettingGroup(title = "存储占用") {
-                InlineValueRow("截图缓存", formatFileSize(snapshot.runtimeStorage.screenshotsCacheBytes))
-                InlineValueRow("贴图缓存", formatFileSize(snapshot.runtimeStorage.pinnedCacheBytes))
-                InlineValueRow("分享缓存", formatFileSize(snapshot.runtimeStorage.shareCacheBytes))
-                InlineValueRow(
-                    "记录文件",
-                    formatFileSize(snapshot.runtimeStorage.annotationSessionBytes + snapshot.runtimeStorage.pinHistoryBytes)
-                )
+                InlineValueRow("图片缓存", formatFileSize(snapshot.runtimeStorage.imageCacheBytes))
+                InlineValueRow("工作记录", formatFileSize(snapshot.runtimeStorage.recordBytes))
                 InlineValueRow("总占用", formatFileSize(snapshot.runtimeStorage.totalBytes))
             }
         }
@@ -523,38 +516,46 @@ private fun StorageAndRecordsSettingsSection(
 
         item {
             SettingGroup(title = "清理操作") {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StorageActionCard(
-                        modifier = Modifier.weight(1f),
-                        title = "清理图片缓存",
-                        description = "清空截图、贴图和分享缓存",
-                        onClick = onClearImageCaches
-                    )
-                    StorageActionCard(
-                        modifier = Modifier.weight(1f),
-                        title = "清空贴图历史",
-                        description = "只删除贴图历史记录",
-                        onClick = onClearPinHistory
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StorageActionCard(
-                        modifier = Modifier.weight(1f),
-                        title = "清空全部记录",
-                        description = "删除贴图历史和工程记录",
-                        onClick = onClearAllRecords,
-                        danger = true
-                    )
-                    StorageActionCard(
-                        modifier = Modifier.weight(1f),
-                        title = "清理全部缓存",
-                        description = "删除运行时生成的全部缓存",
-                        onClick = onClearAllRuntimeFiles,
-                        danger = true
-                    )
-                }
+                StorageActionCard(
+                    title = "清空工作记录",
+                    description = "删除贴图历史、可继续编辑数据和临时图片缓存",
+                    onClick = { dialogState.request(StorageMaintenanceAction.CLEAR_WORK_RECORDS) }
+                )
+                StorageActionCard(
+                    title = "恢复初始状态",
+                    description = "清空工作记录，并重置软件设置、翻译配置和本地翻译模型",
+                    onClick = { dialogState.request(StorageMaintenanceAction.RESET_APPLICATION) },
+                    danger = true
+                )
             }
         }
+    }
+
+    if (dialogState.pendingAction != null) {
+        AlertDialog(
+            onDismissRequest = dialogState::dismiss,
+            title = { Text(dialogState.dialogTitle.orEmpty()) },
+            text = { Text(dialogState.dialogMessage.orEmpty()) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        dialogState.confirm { action ->
+                            when (action) {
+                                StorageMaintenanceAction.CLEAR_WORK_RECORDS -> onClearWorkRecords()
+                                StorageMaintenanceAction.RESET_APPLICATION -> onResetApplication()
+                            }
+                        }
+                    }
+                ) {
+                    Text(dialogState.confirmLabel.orEmpty())
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = dialogState::dismiss) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 

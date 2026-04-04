@@ -12,6 +12,7 @@ import com.muding.android.data.repository.PinHistoryRepository
 import com.muding.android.data.repository.RecentPinRepository
 import com.muding.android.data.repository.RuntimeStorageRepository
 import com.muding.android.data.settings.AppSettingsRepository
+import com.muding.android.domain.usecase.AppMaintenanceCoordinator
 import com.muding.android.domain.usecase.PermissionHandler
 import com.muding.android.domain.usecase.PinHistoryMetadata
 import com.muding.android.feature.pin.creation.EditorLaunchRequest
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var recentPinRepository: RecentPinRepository
     private lateinit var runtimeStorageRepository: RuntimeStorageRepository
     private lateinit var pinCreationCoordinator: PinCreationCoordinator
+    private lateinit var appMaintenanceCoordinator: AppMaintenanceCoordinator
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +48,14 @@ class MainActivity : ComponentActivity() {
         recentPinRepository = AppGraph.recentPinRepository(this)
         runtimeStorageRepository = AppGraph.runtimeStorageRepository(this)
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
+        appMaintenanceCoordinator = AppMaintenanceCoordinator(
+            annotationSessionRepository = annotationSessionRepository,
+            pinHistoryRepository = pinHistoryRepository,
+            recentPinRepository = recentPinRepository,
+            runtimeStorageRepository = runtimeStorageRepository,
+            settingsRepository = settingsRepository,
+            localTranslationModelResetter = AppGraph.localTranslationModelResetter()
+        )
         val projectRecordSettings = settingsRepository.getProjectRecordSettings()
         val floatingBallSettings = settingsRepository.getFloatingBallSettings()
         val pinHistorySettings = settingsRepository.getPinHistorySettings()
@@ -106,19 +116,14 @@ class MainActivity : ComponentActivity() {
                         settingsRepository.setPinHistoryRetainDays(days)
                         pruneRecords()
                     },
-                    onClearAllRecords = {
-                        annotationSessionRepository.clearAll()
-                        recentPinRepository.clear()
-                        pinHistoryRepository.clear()
+                    onClearWorkRecords = {
+                        appMaintenanceCoordinator.clearWorkRecords()
                     },
-                    onClearImageCaches = {
-                        runtimeStorageRepository.clearImageCaches()
-                    },
-                    onClearAllRuntimeFiles = {
-                        runtimeStorageRepository.clearAllRuntimeFiles()
-                    },
-                    onClearPinHistory = {
-                        pinHistoryRepository.clear()
+                    onResetApplication = {
+                        lifecycleScope.launch {
+                            appMaintenanceCoordinator.resetApplication()
+                            recreate()
+                        }
                     },
                     onDeleteHistory = { record ->
                         pinHistoryRepository.delete(record.id)
