@@ -1,7 +1,9 @@
 package com.muding.android.presentation.main
 
+import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.PinHistoryRecord
 import com.muding.android.domain.usecase.PinHistorySourceType
+import com.muding.android.domain.usecase.PinScaleMode
 import com.muding.android.domain.usecase.RuntimeStorageSnapshot
 import java.time.Instant
 import java.time.ZoneId
@@ -121,6 +123,38 @@ fun formatFileSize(bytes: Long): String {
         bytes >= mb -> String.format(Locale.getDefault(), "%.2f MB", bytes / mb)
         bytes >= kb -> String.format(Locale.getDefault(), "%.1f KB", bytes / kb)
         else -> "$bytes B"
+    }
+}
+
+fun captureSettingsSummary(
+    action: CaptureResultAction,
+    permissionGranted: Boolean
+): String {
+    if (!permissionGranted) {
+        return "等待悬浮窗授权"
+    }
+    return captureActionLabel(action)
+}
+
+fun captureActionLabel(action: CaptureResultAction): String {
+    return when (action) {
+        CaptureResultAction.PIN_DIRECTLY -> "截图后直接贴图"
+        CaptureResultAction.OPEN_EDITOR -> "截图后进入编辑"
+    }
+}
+
+fun pinInteractionSettingsSummary(scaleMode: PinScaleMode): String {
+    return when (scaleMode) {
+        PinScaleMode.LOCK_ASPECT -> "等比缩放"
+        PinScaleMode.FREE_SCALE -> "自由缩放"
+    }
+}
+
+fun storageSettingsSummary(pinHistoryEnabled: Boolean): String {
+    return if (pinHistoryEnabled) {
+        "自动清理开启"
+    } else {
+        "自动清理关闭"
     }
 }
 

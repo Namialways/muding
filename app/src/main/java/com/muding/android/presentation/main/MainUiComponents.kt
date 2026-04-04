@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -99,6 +100,129 @@ fun SectionHeader(
                 color = tokens.palette.body
             )
         }
+    }
+}
+
+@Composable
+fun SettingGroup(
+    title: String,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val tokens = rememberMainUiTokens()
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(tokens.corners.group),
+        color = tokens.palette.surfaceStrong,
+        border = BorderStroke(1.dp, tokens.palette.outline),
+        tonalElevation = tokens.elevations.flat
+    ) {
+        Column(
+            modifier = Modifier.padding(tokens.spacing.contentPadding),
+            verticalArrangement = Arrangement.spacedBy(tokens.spacing.rowGap),
+            content = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = tokens.palette.title
+                )
+                if (!description.isNullOrBlank()) {
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.palette.body
+                    )
+                }
+                content()
+            }
+        )
+    }
+}
+
+@Composable
+fun SettingEntryRow(
+    icon: ImageVector,
+    title: String,
+    value: String?,
+    onClick: () -> Unit
+) {
+    val tokens = rememberMainUiTokens()
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(tokens.corners.group),
+        color = tokens.palette.surfaceStrong,
+        border = BorderStroke(1.dp, tokens.palette.outline),
+        tonalElevation = tokens.elevations.flat
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = tokens.spacing.contentPadding, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = CircleShape,
+                color = tokens.palette.surfaceAccent
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = tokens.palette.accent
+                    )
+                }
+            }
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                color = tokens.palette.title
+            )
+            if (!value.isNullOrBlank()) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.ArrowOutward,
+                contentDescription = null,
+                tint = tokens.palette.body
+            )
+        }
+    }
+}
+
+@Composable
+fun InlineValueRow(
+    label: String,
+    value: String
+) {
+    val tokens = rememberMainUiTokens()
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = tokens.palette.body
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = value,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.bodyMedium,
+            color = tokens.palette.title
+        )
     }
 }
 
