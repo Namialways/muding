@@ -548,6 +548,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun restoreLastClosedPin() {
+        setFloatingMenuExpanded(false)
         if (!recentPinRepository.hasRecent()) {
             return
         }
@@ -559,6 +560,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun openPinManager() {
+        setFloatingMenuExpanded(false)
         startService(
             Intent(this, PinOverlayService::class.java).apply {
                 action = PinOverlayService.ACTION_OPEN_MANAGER
