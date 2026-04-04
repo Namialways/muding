@@ -28,4 +28,23 @@ class RetentionSettingsModelsTest {
         assertEquals(listOf(10, 30, 50, 100), model.countOptions)
         assertEquals(listOf(7, 14, 30, 90), model.dayOptions)
     }
+
+    @Test
+    fun `custom editor config uses full count range with discrete slider steps`() {
+        val config = buildRetentionCustomEditorConfig(
+            target = RecordRetentionTarget.PIN_HISTORY,
+            field = RetentionCustomField.COUNT
+        )
+
+        assertEquals(1..500, config.valueRange)
+        assertEquals(498, config.sliderSteps)
+        assertEquals("条", config.suffix)
+    }
+
+    @Test
+    fun `snap retention slider value rounds and clamps into range`() {
+        assertEquals(1, snapRetentionSliderValue(0.4f, 1..500))
+        assertEquals(43, snapRetentionSliderValue(42.6f, 1..500))
+        assertEquals(365, snapRetentionSliderValue(400f, 1..365))
+    }
 }

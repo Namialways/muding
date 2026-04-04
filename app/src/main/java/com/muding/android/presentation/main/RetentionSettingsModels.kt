@@ -1,5 +1,7 @@
 package com.muding.android.presentation.main
 
+import kotlin.math.roundToInt
+
 enum class RecordRetentionTarget(
     val title: String,
     val itemUnit: String,
@@ -31,6 +33,17 @@ data class RecordRetentionSheetModel(
         get() = formatRecordRetentionSummary(count = count, days = days, itemUnit = target.itemUnit)
 }
 
+enum class RetentionCustomField {
+    COUNT,
+    DAYS
+}
+
+data class RetentionCustomEditorConfig(
+    val valueRange: IntRange,
+    val sliderSteps: Int,
+    val suffix: String
+)
+
 fun buildRecordRetentionSheetModel(
     target: RecordRetentionTarget,
     count: Int,
@@ -43,6 +56,32 @@ fun buildRecordRetentionSheetModel(
         countOptions = target.countOptionsPreset,
         dayOptions = target.dayOptionsPreset
     )
+}
+
+fun buildRetentionCustomEditorConfig(
+    target: RecordRetentionTarget,
+    field: RetentionCustomField
+): RetentionCustomEditorConfig {
+    val valueRange = when (field) {
+        RetentionCustomField.COUNT -> 1..500
+        RetentionCustomField.DAYS -> 1..365
+    }
+    val suffix = when (field) {
+        RetentionCustomField.COUNT -> target.itemUnit
+        RetentionCustomField.DAYS -> "\u5929"
+    }
+    return RetentionCustomEditorConfig(
+        valueRange = valueRange,
+        sliderSteps = (valueRange.last - valueRange.first - 1).coerceAtLeast(0),
+        suffix = suffix
+    )
+}
+
+fun snapRetentionSliderValue(
+    rawValue: Float,
+    range: IntRange
+): Int {
+    return rawValue.roundToInt().coerceIn(range)
 }
 
 fun formatRecordRetentionSummary(

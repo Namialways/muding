@@ -583,6 +583,18 @@ private fun RecordRetentionBottomSheet(
     var pendingDays by remember(model) { mutableStateOf(model.days) }
     var editingCustomCount by remember(model) { mutableStateOf(model.count !in model.countOptions) }
     var editingCustomDays by remember(model) { mutableStateOf(model.days !in model.dayOptions) }
+    val countConfig = remember(model.target) {
+        buildRetentionCustomEditorConfig(
+            target = model.target,
+            field = RetentionCustomField.COUNT
+        )
+    }
+    val dayConfig = remember(model.target) {
+        buildRetentionCustomEditorConfig(
+            target = model.target,
+            field = RetentionCustomField.DAYS
+        )
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -608,11 +620,11 @@ private fun RecordRetentionBottomSheet(
                 onSelectCustom = { editingCustomCount = true }
             )
             if (editingCustomCount) {
-                NumberSettingRow(
+                RetentionCustomEditor(
                     title = "自定义数量",
                     value = pendingCount,
-                    onDecrease = { pendingCount = (pendingCount - 1).coerceAtLeast(1) },
-                    onIncrease = { pendingCount = (pendingCount + 1).coerceAtMost(500) }
+                    config = countConfig,
+                    onValueChange = { pendingCount = it }
                 )
             }
             RetentionOptionSection(
@@ -628,11 +640,11 @@ private fun RecordRetentionBottomSheet(
                 onSelectCustom = { editingCustomDays = true }
             )
             if (editingCustomDays) {
-                NumberSettingRow(
+                RetentionCustomEditor(
                     title = "自定义天数",
                     value = pendingDays,
-                    onDecrease = { pendingDays = (pendingDays - 1).coerceAtLeast(1) },
-                    onIncrease = { pendingDays = (pendingDays + 1).coerceAtMost(365) }
+                    config = dayConfig,
+                    onValueChange = { pendingDays = it }
                 )
             }
             Row(
@@ -688,6 +700,97 @@ private fun RetentionOptionSection(
                 selected = isCustomSelected,
                 onClick = onSelectCustom,
                 label = { Text("自定义") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun RetentionCustomEditor(
+    title: String,
+    value: Int,
+    config: RetentionCustomEditorConfig,
+    onValueChange: (Int) -> Unit
+) {
+    val tokens = rememberMainUiTokens()
+    Card(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(tokens.corners.card),
+        border = BorderStroke(1.dp, tokens.palette.outline),
+        colors = CardDefaults.cardColors(containerColor = tokens.palette.surfaceMuted)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.palette.title
+                )
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = tokens.palette.surfaceAccent)
+                ) {
+                    Text(
+                        text = "$value${config.suffix}",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = tokens.palette.accent
+                    )
+                }
+                RetentionAdjustButton(
+                    label = "-",
+                    onClick = {
+                        onValueChange((value - 1).coerceAtLeast(config.valueRange.first))
+                    }
+                )
+                RetentionAdjustButton(
+                    label = "+",
+                    onClick = {
+                        onValueChange((value + 1).coerceAtMost(config.valueRange.last))
+                    }
+                )
+            }
+            Slider(
+                value = value.toFloat(),
+                onValueChange = {
+                    onValueChange(snapRetentionSliderValue(it, config.valueRange))
+                },
+                valueRange = config.valueRange.first.toFloat()..config.valueRange.last.toFloat(),
+                steps = config.sliderSteps
+            )
+        }
+    }
+}
+
+@Composable
+private fun RetentionAdjustButton(
+    label: String,
+    onClick: () -> Unit
+) {
+    val tokens = rememberMainUiTokens()
+    Card(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = androidx.compose.foundation.shape.CircleShape,
+        border = BorderStroke(1.dp, tokens.palette.outline),
+        colors = CardDefaults.cardColors(containerColor = tokens.palette.surfaceStrong)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                color = tokens.palette.body
             )
         }
     }
