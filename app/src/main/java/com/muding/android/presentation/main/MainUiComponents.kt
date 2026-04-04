@@ -1,6 +1,8 @@
 package com.muding.android.presentation.main
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,17 +65,38 @@ import com.muding.android.domain.usecase.PinHistorySourceType
 import com.muding.android.presentation.theme.floatingBallThemeColors
 
 @Composable
+private fun mainUiBorder(): BorderStroke {
+    val tokens = rememberMainUiTokens()
+    return BorderStroke(1.dp, tokens.palette.outline)
+}
+
+@Composable
+private fun mainUiMutedCardColors() = CardDefaults.cardColors(
+    containerColor = rememberMainUiTokens().palette.surfaceMuted
+)
+
+@Composable
+private fun mainUiStrongCardColors() = CardDefaults.cardColors(
+    containerColor = rememberMainUiTokens().palette.surfaceStrong
+)
+
+@Composable
 fun SectionHeader(
     title: String,
     description: String? = null
 ) {
+    val tokens = rememberMainUiTokens()
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = tokens.palette.title
+        )
         if (!description.isNullOrBlank()) {
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = tokens.palette.body
             )
         }
     }
@@ -87,36 +110,42 @@ fun HomeActionTile(
     description: String,
     onClick: () -> Unit
 ) {
+    val tokens = rememberMainUiTokens()
     Card(
         modifier = modifier.clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-        )
+        shape = RoundedCornerShape(tokens.corners.tile),
+        border = mainUiBorder(),
+        elevation = CardDefaults.cardElevation(defaultElevation = tokens.elevations.lifted),
+        colors = mainUiStrongCardColors()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(tokens.spacing.contentPadding),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Surface(
                 modifier = Modifier.size(42.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer
+                color = tokens.palette.surfaceAccent
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        tint = tokens.palette.accent
                     )
                 }
             }
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = tokens.palette.title
+            )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = tokens.palette.body
             )
         }
     }
@@ -130,16 +159,17 @@ fun SettingsCategoryCard(
     summary: List<String>,
     onClick: () -> Unit
 ) {
+    val tokens = rememberMainUiTokens()
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
-        )
+        shape = RoundedCornerShape(tokens.corners.group),
+        border = mainUiBorder(),
+        colors = mainUiMutedCardColors()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(tokens.spacing.contentPadding),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -149,25 +179,26 @@ fun SettingsCategoryCard(
                 Surface(
                     modifier = Modifier.size(44.dp),
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer
+                    color = tokens.palette.surfaceAccent
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            tint = tokens.palette.accent
                         )
                     }
                 }
                 Text(
                     text = section.title,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    color = tokens.palette.title
                 )
                 Icon(
                     imageVector = Icons.Default.ArrowOutward,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = tokens.palette.body
                 )
             }
             FlowRow(
@@ -192,26 +223,31 @@ fun MetricsCard(
     value: String,
     hint: String
 ) {
+    val tokens = rememberMainUiTokens()
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
-        )
+        shape = RoundedCornerShape(tokens.corners.group),
+        border = mainUiBorder(),
+        colors = mainUiMutedCardColors()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(tokens.spacing.contentPadding),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = tokens.palette.body
             )
-            Text(value, style = MaterialTheme.typography.headlineSmall)
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                color = tokens.palette.title
+            )
             Text(
                 hint,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = tokens.palette.body
             )
         }
     }
@@ -222,19 +258,21 @@ fun SummaryPill(
     text: String,
     emphasized: Boolean = false
 ) {
+    val tokens = rememberMainUiTokens()
     val containerColor = if (emphasized) {
-        MaterialTheme.colorScheme.primaryContainer
+        tokens.palette.surfaceAccent
     } else {
-        MaterialTheme.colorScheme.surfaceVariant
+        tokens.palette.surfaceMuted
     }
     val contentColor = if (emphasized) {
-        MaterialTheme.colorScheme.onPrimaryContainer
+        tokens.palette.accent
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        tokens.palette.body
     }
     Surface(
         shape = CircleShape,
-        color = containerColor
+        color = containerColor,
+        border = BorderStroke(1.dp, tokens.palette.outline)
     ) {
         Text(
             text = text,
@@ -251,13 +289,15 @@ fun SelectablePill(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val tokens = rememberMainUiTokens()
     Surface(
         shape = CircleShape,
         color = if (selected) {
-            MaterialTheme.colorScheme.primary
+            tokens.palette.accent
         } else {
-            MaterialTheme.colorScheme.surfaceVariant
+            tokens.palette.surface
         },
+        border = BorderStroke(1.dp, tokens.palette.outline),
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Text(
@@ -267,7 +307,7 @@ fun SelectablePill(
             color = if (selected) {
                 MaterialTheme.colorScheme.onPrimary
             } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+                tokens.palette.body
             }
         )
     }
@@ -278,9 +318,12 @@ fun EmptyStateCard(
     title: String,
     description: String
 ) {
+    val tokens = rememberMainUiTokens()
     Surface(
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(tokens.corners.card),
+        tonalElevation = tokens.elevations.lifted,
+        border = BorderStroke(1.dp, tokens.palette.outline),
+        color = tokens.palette.surfaceStrong,
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(
@@ -293,15 +336,19 @@ fun EmptyStateCard(
                 Icon(
                     Icons.Default.History,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = tokens.palette.accent
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = tokens.palette.title
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = tokens.palette.body,
                     textAlign = TextAlign.Center
                 )
             }
@@ -316,11 +363,12 @@ fun PinHistoryRecordCard(
     onRestore: () -> Unit,
     onOpenDetails: () -> Unit
 ) {
+    val tokens = rememberMainUiTokens()
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        shape = RoundedCornerShape(tokens.corners.card),
+        border = mainUiBorder(),
+        colors = mainUiStrongCardColors()
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -342,13 +390,14 @@ fun PinHistoryRecordCard(
                     Text(
                         text = item.title,
                         style = MaterialTheme.typography.titleSmall,
+                        color = tokens.palette.title,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = item.createdAtLabel,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = tokens.palette.body
                     )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -366,7 +415,7 @@ fun PinHistoryRecordCard(
                         Text(
                             text = preview,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = tokens.palette.body,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -395,17 +444,22 @@ fun RecordThumbnail(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val tokens = rememberMainUiTokens()
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .clip(RoundedCornerShape(tokens.corners.thumbnail))
+            .background(tokens.palette.surfaceMuted)
+            .border(
+                border = BorderStroke(1.dp, tokens.palette.outline),
+                shape = RoundedCornerShape(tokens.corners.thumbnail)
+            ),
         contentAlignment = Alignment.Center
     ) {
         if (imageUri.isBlank()) {
             Icon(
                 imageVector = Icons.Default.BrokenImage,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = tokens.palette.body
             )
         } else {
             AsyncImage(
@@ -428,6 +482,7 @@ fun LabeledValueRow(
     label: String,
     value: String
 ) {
+    val tokens = rememberMainUiTokens()
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -436,13 +491,14 @@ fun LabeledValueRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = tokens.palette.body
         )
         Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = value,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
+            color = tokens.palette.title,
             textAlign = TextAlign.End
         )
     }
@@ -455,6 +511,7 @@ fun FloatingBallAppearancePreview(
     theme: FloatingBallTheme
 ) {
     val colors = floatingBallThemeColors(theme)
+    val tokens = rememberMainUiTokens()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -463,7 +520,9 @@ fun FloatingBallAppearancePreview(
         Surface(
             modifier = Modifier.size(sizeDp.dp),
             shape = CircleShape,
-            shadowElevation = 8.dp
+            shadowElevation = tokens.elevations.preview,
+            border = BorderStroke(1.dp, tokens.palette.outline),
+            color = tokens.palette.surfaceStrong
         ) {
             Box(
                 modifier = Modifier
@@ -545,9 +604,11 @@ private fun CompactStepButton(
     label: String,
     onClick: () -> Unit
 ) {
+    val tokens = rememberMainUiTokens()
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = tokens.palette.surfaceMuted,
+        border = BorderStroke(1.dp, tokens.palette.outline),
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Box(
@@ -557,7 +618,7 @@ private fun CompactStepButton(
             Text(
                 text = label,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = tokens.palette.body
             )
         }
     }
