@@ -3,7 +3,6 @@ package com.muding.android.presentation.main
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.PinScaleMode
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -44,14 +43,14 @@ class MainUiModelsTest {
     }
 
     @Test
-    fun recordsCriteriaSummary_returnsNullForDefaultState() {
+    fun recordsCriteriaSummary_returnsDefaultSummaryForDefaultState() {
         val summary = recordsCriteriaSummary(
             filter = RecordsFilter.ALL,
             sort = RecordsSortOrder.NEWEST,
             query = ""
         )
 
-        assertNull(summary)
+        assertEquals("分类：全部 · 排序：最新", summary)
     }
 
     @Test
@@ -62,7 +61,19 @@ class MainUiModelsTest {
             query = "ocr"
         )
 
-        assertTrue(summary?.contains(RecordsFilter.TEXT.title) == true)
-        assertTrue(summary?.contains("ocr") == true)
+        assertTrue(summary.contains(RecordsFilter.TEXT.title))
+        assertTrue(summary.contains("ocr"))
+    }
+
+    @Test
+    fun recordsFilterButtonLabel_returnsFixedCategoryLabel() {
+        assertEquals("分类", recordsFilterButtonLabel(RecordsFilter.ALL))
+        assertEquals("分类", recordsFilterButtonLabel(RecordsFilter.TEXT))
+    }
+
+    @Test
+    fun recordsSortButtonLabel_returnsFixedSortLabel() {
+        assertEquals("排序", recordsSortButtonLabel(RecordsSortOrder.NEWEST))
+        assertEquals("排序", recordsSortButtonLabel(RecordsSortOrder.SOURCE))
     }
 }

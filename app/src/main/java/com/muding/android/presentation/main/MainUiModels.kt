@@ -13,7 +13,7 @@ import java.util.Locale
 enum class MainDestination(
     val title: String
 ) {
-    HOME("主页"),
+    HOME("首页"),
     RECORDS("记录"),
     SETTINGS("设置")
 }
@@ -162,31 +162,23 @@ fun recordsCriteriaSummary(
     filter: RecordsFilter,
     sort: RecordsSortOrder,
     query: String
-): String? {
-    val parts = buildList {
-        if (filter != RecordsFilter.ALL) {
-            add(filter.title)
-        }
-        query.trim().takeIf { it.isNotBlank() }?.let { trimmedQuery ->
-            add("搜索 \"$trimmedQuery\"")
-        }
-        if (sort != RecordsSortOrder.NEWEST) {
-            add(sort.title)
-        }
+): String {
+    val parts = mutableListOf(
+        "分类：${filter.title}",
+        "排序：${sort.title}"
+    )
+    query.trim().takeIf { it.isNotBlank() }?.let { trimmedQuery ->
+        parts += "搜索 \"$trimmedQuery\""
     }
-    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+    return parts.joinToString(" · ")
 }
 
-fun recordsFilterButtonLabel(filter: RecordsFilter): String {
-    return if (filter == RecordsFilter.ALL) {
-        "全部"
-    } else {
-        filter.title
-    }
+fun recordsFilterButtonLabel(@Suppress("UNUSED_PARAMETER") filter: RecordsFilter): String {
+    return "分类"
 }
 
-fun recordsSortButtonLabel(sort: RecordsSortOrder): String {
-    return sort.title
+fun recordsSortButtonLabel(@Suppress("UNUSED_PARAMETER") sort: RecordsSortOrder): String {
+    return "排序"
 }
 
 fun buildRecordsComputedState(
@@ -218,7 +210,7 @@ private fun PinHistoryRecord.toListItemUiModel(): PinHistoryListItemUiModel {
     val resolvedCreatedAtLabel = formatTimestamp(createdAt)
     val resolvedPreviewText = textPreview?.takeIf { it.isNotBlank() }
     val resolvedDimensionLabel = if (widthPx != null && heightPx != null) {
-        "${widthPx}×${heightPx}"
+        "${widthPx}x${heightPx}"
     } else {
         null
     }

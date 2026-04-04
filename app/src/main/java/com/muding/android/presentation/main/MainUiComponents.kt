@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -451,23 +453,25 @@ fun FilterMenuButton(
     onSelect: (RecordsFilter) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    OutlinedButton(onClick = { expanded = true }) {
-        Icon(Icons.Default.FilterList, contentDescription = null)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(recordsFilterButtonLabel(selectedFilter))
-    }
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = { expanded = false }
-    ) {
-        RecordsFilter.entries.forEach { filter ->
-            DropdownMenuItem(
-                text = { Text("${filter.title} ${filterCounts[filter] ?: 0}") },
-                onClick = {
-                    expanded = false
-                    onSelect(filter)
-                }
-            )
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Icon(Icons.Default.FilterList, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(recordsFilterButtonLabel(selectedFilter))
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            RecordsFilter.entries.forEach { filter ->
+                DropdownMenuItem(
+                    text = { Text("${filter.title} ${filterCounts[filter] ?: 0}") },
+                    onClick = {
+                        expanded = false
+                        onSelect(filter)
+                    }
+                )
+            }
         }
     }
 }
@@ -478,28 +482,29 @@ fun SortMenuButton(
     onSelect: (RecordsSortOrder) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    OutlinedButton(onClick = { expanded = true }) {
-        Icon(Icons.Default.Sort, contentDescription = null)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(recordsSortButtonLabel(selectedSort))
-    }
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = { expanded = false }
-    ) {
-        RecordsSortOrder.entries.forEach { sortOrder ->
-            DropdownMenuItem(
-                text = { Text(sortOrder.title) },
-                onClick = {
-                    expanded = false
-                    onSelect(sortOrder)
-                }
-            )
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Icon(Icons.Default.Sort, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(recordsSortButtonLabel(selectedSort))
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            RecordsSortOrder.entries.forEach { sortOrder ->
+                DropdownMenuItem(
+                    text = { Text(sortOrder.title) },
+                    onClick = {
+                        expanded = false
+                        onSelect(sortOrder)
+                    }
+                )
+            }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RecordsToolbar(
     searchQuery: String,
@@ -524,9 +529,12 @@ fun RecordsToolbar(
             label = { Text("搜索记录") },
             placeholder = { Text("名称、文字、来源") }
         )
-        FlowRow(
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             FilterMenuButton(
                 selectedFilter = selectedFilter,
@@ -545,7 +553,7 @@ fun RecordsToolbar(
             OutlinedButton(onClick = onOpenStorageSettings) {
                 Icon(Icons.Default.Storage, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("记录设置")
+                Text("设置")
             }
         }
     }

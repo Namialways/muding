@@ -132,13 +132,11 @@ fun RecordsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.palette.body
                 )
-                criteriaSummary?.let { summary ->
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = tokens.palette.body
-                    )
-                }
+                Text(
+                    text = criteriaSummary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
             }
         }
 
@@ -166,7 +164,7 @@ fun RecordsScreen(
             item {
                 EmptyStateCard(
                     title = "没有匹配结果",
-                    description = "换个关键词，或者调整筛选和排序试试。"
+                    description = "换个关键词，或者调整分类和排序试试。"
                 )
             }
         } else {
