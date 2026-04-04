@@ -130,10 +130,26 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var snapAnimator: ValueAnimator? = null
     private var snapRunnable: Runnable? = null
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val projectionSessionTimeoutController = ProjectionSessionTimeoutController(
+        timeoutMs = PROJECTION_IDLE_TIMEOUT_MS,
+        scheduler = ProjectionSessionTimeoutController.Scheduler { delayMs, action ->
+            val runnable = Runnable(action)
+            mainHandler.postDelayed(runnable, delayMs)
+            ProjectionSessionTimeoutController.Cancellable {
+                mainHandler.removeCallbacks(runnable)
+            }
+        },
+        onTimeout = {
+            if (screenshotManager.hasActiveProjection()) {
+                releaseProjectionSession()
+            }
+        }
+    )
     private val floatingMenuExpanded = mutableStateOf(false)
     private val floatingBallX = mutableIntStateOf(100)
     private val floatingBallY = mutableIntStateOf(100)
     private var pendingCaptureMode: CaptureEntryMode = CaptureEntryMode.PIN
+    private var projectionForegroundActive: Boolean = false
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -185,8 +201,16 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     } else {
                         startForeground(NOTIFICATION_ID, createNotification())
                     }
-                    screenshotManager.initMediaProjection(resultCode, resultData)
-                    captureAndShowCropOverlay(captureAfterPermission = captureAfterPermission)
+                    projectionForegroundActive = true
+                    try {
+                        screenshotManager.initMediaProjection(resultCode, resultData)
+                        projectionSessionTimeoutController.startSession()
+                        captureAndShowCropOverlay(captureAfterPermission = captureAfterPermission)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        releaseProjectionSession()
+                        restoreFloatingBall()
+                    }
                 } else {
                     floatingView?.visibility = View.VISIBLE
                 }
@@ -300,6 +324,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun handleScreenshot() {
         setFloatingMenuExpanded(false)
         if (screenshotManager.hasActiveProjection()) {
+            projectionSessionTimeoutController.recordActivity()
             floatingView?.visibility = View.GONE
             captureAndShowCropOverlay()
             return
@@ -381,9 +406,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     dropFirstFrame = captureAfterPermission
                 )
                 showCropOverlay(bitmap)
+                projectionSessionTimeoutController.recordActivity()
             } catch (e: Exception) {
                 e.printStackTrace()
-                screenshotManager.release()
+                releaseProjectionSession()
                 restoreFloatingBall()
             }
         }
@@ -531,6 +557,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun restoreFloatingBall() {
         mainHandler.post {
+            if (screenshotManager.hasActiveProjection()) {
+                projectionSessionTimeoutController.recordActivity()
+            }
             setFloatingMenuExpanded(false)
             floatingView?.visibility = View.VISIBLE
             floatingBallParams?.let { params ->
@@ -544,6 +573,27 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
                 scheduleSnapToEdge(params)
             }
+        }
+    }
+
+    private fun releaseProjectionSession() {
+        projectionSessionTimeoutController.clearSession()
+        try {
+            screenshotManager.release()
+        } catch (_: Exception) {
+        }
+        if (projectionForegroundActive) {
+            stopForegroundCompat()
+            projectionForegroundActive = false
+        }
+    }
+
+    private fun stopForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
         }
     }
 
@@ -850,14 +900,11 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     override fun onDestroy() {
+        releaseProjectionSession()
         super.onDestroy()
         cancelSnap()
         setFloatingMenuExpanded(false)
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
-        try {
-            screenshotManager.release()
-        } catch (_: Exception) {
-        }
         dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
         floatingView?.let {
             try {
@@ -886,6 +933,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         const val EXTRA_RESULT_DATA = "extra_result_data"
         const val EXTRA_CAPTURE_AFTER_PERMISSION = "extra_capture_after_permission"
         private const val FIRST_CAPTURE_AFTER_PERMISSION_DELAY_MS = 360L
+        private const val PROJECTION_IDLE_TIMEOUT_MS = 2 * 60 * 1000L
 
         fun createRestoreVisibilityIntent(context: Context): Intent {
             return Intent(context, FloatingBallService::class.java).apply {
