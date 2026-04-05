@@ -4,8 +4,10 @@
 .android-user-home/
 .gradle-user-home/
 .codex/
+.superpowers/
 build/
 **/build/
+/captures/
 
 # ===== Local config =====
 local.properties
@@ -31,9 +33,11 @@ Thumbs.db
 # ===== APK/AAB outputs =====
 *.apk
 *.aab
+/app/release/
 
 # ===== Kotlin/Java compilation caches =====
 .kotlin/
+*.hprof
 
 # ===== NDK (if ever used) =====
 .externalNativeBuild/
