@@ -41,26 +41,20 @@ class CaptureFlowSettings(context: Context) {
         prefs.edit().putString(KEY_RESULT_ACTION, action.value).apply()
     }
 
+    fun getFavoriteEditorColors(): List<Int> {
+        return getStoredColorList(KEY_FAVORITE_EDITOR_COLORS)
+    }
+
+    fun setFavoriteEditorColors(colors: List<Int>) {
+        setStoredColorList(KEY_FAVORITE_EDITOR_COLORS, colors)
+    }
+
     fun getRecentEditorColors(): List<Int> {
-        val raw = prefs.getString(KEY_RECENT_EDITOR_COLORS, "") ?: ""
-        return raw.split(',')
-            .mapNotNull { value ->
-                value.trim()
-                    .takeIf { it.isNotEmpty() }
-                    ?.toLongOrNull(16)
-                    ?.toInt()
-            }
-            .take(MAX_RECENT_EDITOR_COLORS)
+        return getStoredColorList(KEY_RECENT_EDITOR_COLORS)
     }
 
     fun setRecentEditorColors(colors: List<Int>) {
-        val serialized = colors
-            .distinct()
-            .take(MAX_RECENT_EDITOR_COLORS)
-            .joinToString(",") { color ->
-                String.format(Locale.US, "%08X", color)
-            }
-        prefs.edit().putString(KEY_RECENT_EDITOR_COLORS, serialized).apply()
+        setStoredColorList(KEY_RECENT_EDITOR_COLORS, colors)
     }
 
     fun getPinScaleMode(): PinScaleMode {
@@ -229,9 +223,32 @@ class CaptureFlowSettings(context: Context) {
         prefs.edit().clear().apply()
     }
 
+    private fun getStoredColorList(key: String): List<Int> {
+        val raw = prefs.getString(key, "") ?: ""
+        return raw.split(',')
+            .mapNotNull { value ->
+                value.trim()
+                    .takeIf { it.isNotEmpty() }
+                    ?.toLongOrNull(16)
+                    ?.toInt()
+            }
+            .take(MAX_EDITOR_COLOR_SWATCHES)
+    }
+
+    private fun setStoredColorList(key: String, colors: List<Int>) {
+        val serialized = colors
+            .distinct()
+            .take(MAX_EDITOR_COLOR_SWATCHES)
+            .joinToString(",") { color ->
+                String.format(Locale.US, "%08X", color)
+            }
+        prefs.edit().putString(key, serialized).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "muding_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"
+        private const val KEY_FAVORITE_EDITOR_COLORS = "favorite_editor_colors"
         private const val KEY_RECENT_EDITOR_COLORS = "recent_editor_colors"
         private const val KEY_PIN_SCALE_MODE = "pin_scale_mode"
         private const val KEY_MAX_SESSION_COUNT = "max_session_count"
@@ -251,6 +268,6 @@ class CaptureFlowSettings(context: Context) {
         private const val KEY_BAIDU_TRANSLATION_SECRET_KEY = "baidu_translation_secret_key"
         private const val KEY_YOUDAO_TRANSLATION_APP_KEY = "youdao_translation_app_key"
         private const val KEY_YOUDAO_TRANSLATION_APP_SECRET = "youdao_translation_app_secret"
-        private const val MAX_RECENT_EDITOR_COLORS = 3
+        private const val MAX_EDITOR_COLOR_SWATCHES = 3
     }
 }

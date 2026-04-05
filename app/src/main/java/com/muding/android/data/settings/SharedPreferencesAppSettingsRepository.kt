@@ -36,6 +36,12 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
         settings.setResultAction(action)
     }
 
+    override fun getFavoriteEditorColors(): List<Int> = settings.getFavoriteEditorColors()
+
+    override fun setFavoriteEditorColors(colors: List<Int>) {
+        settings.setFavoriteEditorColors(colors)
+    }
+
     override fun getRecentEditorColors(): List<Int> = settings.getRecentEditorColors()
 
     override fun setRecentEditorColors(colors: List<Int>) {

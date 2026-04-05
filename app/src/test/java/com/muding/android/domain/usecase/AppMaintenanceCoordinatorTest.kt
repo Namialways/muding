@@ -172,6 +172,10 @@ class AppMaintenanceCoordinatorTest {
 
         override fun setCaptureResultAction(action: CaptureResultAction) = Unit
 
+        override fun getFavoriteEditorColors(): List<Int> = emptyList()
+
+        override fun setFavoriteEditorColors(colors: List<Int>) = Unit
+
         override fun getRecentEditorColors(): List<Int> = emptyList()
 
         override fun setRecentEditorColors(colors: List<Int>) = Unit

@@ -46,6 +46,9 @@ interface AppSettingsRepository {
     fun getCaptureResultAction(): CaptureResultAction
     fun setCaptureResultAction(action: CaptureResultAction)
 
+    fun getFavoriteEditorColors(): List<Int>
+    fun setFavoriteEditorColors(colors: List<Int>)
+
     fun getRecentEditorColors(): List<Int>
     fun setRecentEditorColors(colors: List<Int>)
 

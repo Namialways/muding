@@ -31,17 +31,24 @@ class AnnotationViewModel(
 
     val paths = mutableStateListOf<DrawingPath>()
     private val undoPaths = mutableStateListOf<DrawingPath>()
+    private var colorCollections = EditorColorCollections()
+    private val favoriteColorSwatches = mutableStateListOf<Color>()
     private val recentColorSwatches = mutableStateListOf<Color>()
+    private val quickAccessColorSwatches = mutableStateListOf<Color>()
+    val favoriteColors: List<Color>
+        get() = favoriteColorSwatches
     val recentColors: List<Color>
         get() = recentColorSwatches
+    val quickAccessColors: List<Color>
+        get() = quickAccessColorSwatches
 
     init {
-        val restoredRecentColors = settingsRepository.getRecentEditorColors()
-            .map(::Color)
-            .distinctBy { it.toArgb() }
-            .take(MAX_RECENT_COLORS)
-        recentColorSwatches.addAll(restoredRecentColors)
-        restoredRecentColors.firstOrNull()?.let { currentColor.value = it }
+        colorCollections = EditorColorCollections(
+            favorites = settingsRepository.getFavoriteEditorColors(),
+            recents = settingsRepository.getRecentEditorColors()
+        )
+        syncColorSwatches()
+        recentColors.firstOrNull()?.let { currentColor.value = it }
     }
 
     val selectedTextIndex: Int?
@@ -125,9 +132,27 @@ class AnnotationViewModel(
     }
 
     fun selectColor(color: Color) {
-        currentColor.value = color
-        recordRecentColor(color)
+        applyConfirmedColor(color)
+    }
+
+    fun applyConfirmedColor(color: Color) {
+        val normalizedColor = Color(color.toArgb())
+        currentColor.value = normalizedColor
+        colorCollections = colorCollections.recordRecent(normalizedColor.toArgb())
+        settingsRepository.setRecentEditorColors(colorCollections.recents)
+        syncColorSwatches()
         applyCurrentStyleToSelectedPath()
+    }
+
+    fun toggleFavoriteColor(color: Color) {
+        colorCollections = colorCollections.toggleFavorite(color.toArgb())
+        settingsRepository.setFavoriteEditorColors(colorCollections.favorites)
+        syncColorSwatches()
+    }
+
+    fun isFavoriteColor(color: Color): Boolean {
+        val argb = color.toArgb()
+        return favoriteColorSwatches.any { it.toArgb() == argb }
     }
 
     fun selectStrokeWidth(width: Float) {
@@ -255,19 +280,18 @@ class AnnotationViewModel(
         selectedPathIndex.value = null
     }
 
-    private fun recordRecentColor(color: Color) {
-        val argb = color.toArgb()
-        recentColorSwatches.removeAll { it.toArgb() == argb }
-        recentColorSwatches.add(0, Color(argb))
-        while (recentColorSwatches.size > MAX_RECENT_COLORS) {
-            recentColorSwatches.removeLast()
-        }
-        settingsRepository.setRecentEditorColors(recentColorSwatches.map { it.toArgb() })
+    private fun syncColorSwatches() {
+        replaceColorSwatches(favoriteColorSwatches, colorCollections.favorites)
+        replaceColorSwatches(recentColorSwatches, colorCollections.recents)
+        replaceColorSwatches(quickAccessColorSwatches, colorCollections.quickAccessColors())
+    }
+
+    private fun replaceColorSwatches(target: MutableList<Color>, colors: List<Int>) {
+        target.clear()
+        target.addAll(colors.map(::Color))
     }
 
     companion object {
-        private const val MAX_RECENT_COLORS = 3
-
         fun factory(settingsRepository: AppSettingsRepository): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
