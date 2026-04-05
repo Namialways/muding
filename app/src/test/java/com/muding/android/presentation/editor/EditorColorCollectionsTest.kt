@@ -30,6 +30,15 @@ class EditorColorCollectionsTest {
   }
 
   @Test
+  fun `toggle existing favorite removes color`() {
+    val collections = EditorColorCollections(favorites = listOf(red, green))
+    val updated = collections.toggleFavorite(green)
+
+    assertEquals(listOf(red), updated.favorites)
+    assertEquals(collections.recents, updated.recents)
+  }
+
+  @Test
   fun `recents deduplicate when recording repeated color`() {
     val initial = EditorColorCollections(recents = listOf(red, red, green))
     assertEquals(listOf(red, green), initial.recents)
