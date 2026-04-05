@@ -4,15 +4,15 @@ package com.muding.android.presentation.editor
  * Tracks editor color preferences across favorites and recents.
  *
  * Favorites are stored from oldest to newest. Recents are stored from newest to oldest.
- * Both exposed lists return immutable snapshots so callers cannot mutate the tracked state.
+ * Both exposed lists return normalized read-only snapshots for downstream UI and state code.
  */
 class EditorColorCollections(
   favorites: List<Int> = emptyList(),
   recents: List<Int> = emptyList()
 ) {
-  /** Favorites ordered oldest-to-newest and copied to an immutable snapshot. */
+  /** Favorites ordered oldest-to-newest and copied to a read-only snapshot. */
   val favorites: List<Int> = normalizeFavorites(favorites)
-  /** Recents ordered newest-to-oldest and copied to an immutable snapshot. */
+  /** Recents ordered newest-to-oldest and copied to a read-only snapshot. */
   val recents: List<Int> = normalizeRecents(recents)
 
   fun toggleFavorite(color: Int): EditorColorCollections {
