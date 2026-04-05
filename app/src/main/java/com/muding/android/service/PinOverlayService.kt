@@ -27,6 +27,7 @@ import com.muding.android.data.repository.RecentPinRepository
 import com.muding.android.data.settings.AppSettingsRepository
 import com.muding.android.feature.pin.creation.EditorLaunchRequest
 import com.muding.android.feature.pin.creation.PinCreationCoordinator
+import com.muding.android.feature.pin.source.PinDecodeTargetSizing
 import com.muding.android.domain.usecase.ClosedPinRecord
 import com.muding.android.domain.usecase.PinHistoryMetadata
 import com.muding.android.domain.usecase.PinHistorySourceType
@@ -38,7 +39,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
-import kotlin.math.max
 
 class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
@@ -154,12 +154,12 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     ): Bitmap? {
         return try {
             withContext(Dispatchers.IO) {
-                val targetWidth = preferredWidth
-                    ?.coerceAtLeast(resources.displayMetrics.widthPixels)
-                    ?: max(resources.displayMetrics.widthPixels * 2, 1440)
-                val targetHeight = preferredHeight
-                    ?.coerceAtLeast(resources.displayMetrics.heightPixels)
-                    ?: max(resources.displayMetrics.heightPixels * 2, 1440)
+                val decodeTarget = PinDecodeTargetSizing.overlayDecodeTarget(
+                    screenWidthPx = resources.displayMetrics.widthPixels,
+                    screenHeightPx = resources.displayMetrics.heightPixels,
+                    preferredWidthPx = preferredWidth,
+                    preferredHeightPx = preferredHeight
+                )
                 val bounds = BitmapFactory.Options().apply {
                     inJustDecodeBounds = true
                 }
@@ -170,8 +170,8 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     inSampleSize = calculateInSampleSize(
                         width = bounds.outWidth,
                         height = bounds.outHeight,
-                        targetWidth = targetWidth,
-                        targetHeight = targetHeight
+                        targetWidth = decodeTarget.widthPx,
+                        targetHeight = decodeTarget.heightPx
                     )
                 }
                 contentResolver.openInputStream(uri)?.use { input ->

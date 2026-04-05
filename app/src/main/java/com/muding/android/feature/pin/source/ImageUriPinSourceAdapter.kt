@@ -61,8 +61,8 @@ class ImageUriPinSourceAdapter(
         val originalDimensions = readImageDimensions(uriString)
         val bitmap = decodeSampledBitmap(
             uriString = uriString,
-            targetWidth = maxImportWidthPx(),
-            targetHeight = maxImportHeightPx()
+            targetWidth = importDecodeTarget().widthPx,
+            targetHeight = importDecodeTarget().heightPx
         ) ?: throw IllegalStateException("Failed to decode gallery image")
         return try {
             val fittedSize = fitToScreen(
@@ -126,14 +126,12 @@ class ImageUriPinSourceAdapter(
         return sampleSize.coerceAtLeast(1)
     }
 
-    private fun maxImportWidthPx(): Int {
+    private fun importDecodeTarget(): PinDecodeTarget {
         val metrics = context.resources.displayMetrics
-        return (metrics.widthPixels * 2f).roundToInt().coerceAtLeast(2048)
-    }
-
-    private fun maxImportHeightPx(): Int {
-        val metrics = context.resources.displayMetrics
-        return (metrics.heightPixels * 2f).roundToInt().coerceAtLeast(2048)
+        return PinDecodeTargetSizing.galleryImportTarget(
+            screenWidthPx = metrics.widthPixels,
+            screenHeightPx = metrics.heightPixels
+        )
     }
 
     private fun fitToScreen(width: Int, height: Int): Pair<Int, Int> {

@@ -136,8 +136,12 @@ class AnnotationEditorActivity : ComponentActivity() {
     private fun pinImage(originalBitmap: Bitmap) {
         lifecycleScope.launch {
             try {
-                val bitmap = createAnnotatedBitmap(originalBitmap)
-                val uri = cachedImageRepository.writePngToCache(bitmap, "pinned", "pinned_image")
+                val bitmap = withContext(Dispatchers.Default) {
+                    createAnnotatedBitmap(originalBitmap)
+                }
+                val uri = withContext(Dispatchers.IO) {
+                    cachedImageRepository.writePngToCache(bitmap, "pinned", "pinned_image")
+                }
                 val sessionId = sourceImageUriString?.let { imageUri ->
                     annotationSessionRepository.save(
                         AnnotationSession(
