@@ -7,6 +7,7 @@ import com.muding.android.data.settings.PinAppearanceSettings
 import com.muding.android.data.settings.PinHistorySettings
 import com.muding.android.data.settings.ProjectRecordSettings
 import com.muding.android.data.settings.TranslationSettings
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
@@ -198,7 +199,13 @@ class TranslationSettingsViewModelTest {
         override fun setDefaultPinCornerRadiusDp(radiusDp: Float) = Unit
 
         override fun getFloatingBallSettings(): FloatingBallSettings {
-            return FloatingBallSettings(sizeDp = 60, opacity = 0.92f, theme = FloatingBallTheme.BLUE_PURPLE)
+            return FloatingBallSettings(
+                sizeDp = 60,
+                opacity = 0.92f,
+                theme = FloatingBallTheme.BLUE_PURPLE,
+                appearanceMode = FloatingBallAppearanceMode.THEME,
+                customImageUri = null
+            )
         }
 
         override fun setFloatingBallSizeDp(sizeDp: Int) = Unit
@@ -206,6 +213,10 @@ class TranslationSettingsViewModelTest {
         override fun setFloatingBallOpacity(opacity: Float) = Unit
 
         override fun setFloatingBallTheme(theme: FloatingBallTheme) = Unit
+
+        override fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode) = Unit
+
+        override fun setFloatingBallCustomImageUri(uri: String?) = Unit
 
         override fun getPinHistorySettings(): PinHistorySettings {
             return PinHistorySettings(enabled = true, maxCount = 50, retainDays = 14)

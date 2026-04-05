@@ -73,6 +73,40 @@ class CaptureFlowSettingsTest {
         assertTrue(settings.getFloatingBallOpacity() >= 0.01f)
     }
 
+    @Test
+    fun floatingBallAppearance_defaultsToThemeModeWithoutCustomImage() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        assertEquals(FloatingBallAppearanceMode.THEME, settings.getFloatingBallAppearanceMode())
+        assertEquals(null, settings.getFloatingBallCustomImageUri())
+    }
+
+    @Test
+    fun floatingBallAppearance_storesCustomImageModeAndUri() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        settings.setFloatingBallAppearanceMode(FloatingBallAppearanceMode.CUSTOM_IMAGE)
+        settings.setFloatingBallCustomImageUri("content://floating-ball/custom.png")
+
+        assertEquals(FloatingBallAppearanceMode.CUSTOM_IMAGE, settings.getFloatingBallAppearanceMode())
+        assertEquals("content://floating-ball/custom.png", settings.getFloatingBallCustomImageUri())
+    }
+
+    @Test
+    fun clearingFloatingBallCustomImageUri_preservesOtherFloatingBallSettings() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        settings.setFloatingBallTheme(FloatingBallTheme.EMERALD)
+        settings.setFloatingBallAppearanceMode(FloatingBallAppearanceMode.CUSTOM_IMAGE)
+        settings.setFloatingBallCustomImageUri("content://floating-ball/custom.png")
+
+        settings.setFloatingBallCustomImageUri(null)
+
+        assertEquals(FloatingBallTheme.EMERALD, settings.getFloatingBallTheme())
+        assertEquals(FloatingBallAppearanceMode.CUSTOM_IMAGE, settings.getFloatingBallAppearanceMode())
+        assertEquals(null, settings.getFloatingBallCustomImageUri())
+    }
+
     private class InMemorySharedPreferences : SharedPreferences {
         private val values = linkedMapOf<String, Any?>()
 

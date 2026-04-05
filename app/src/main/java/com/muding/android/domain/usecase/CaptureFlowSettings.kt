@@ -169,6 +169,25 @@ class CaptureFlowSettings private constructor(
         prefs.edit().putString(KEY_FLOATING_BALL_THEME, theme.value).apply()
     }
 
+    fun getFloatingBallAppearanceMode(): FloatingBallAppearanceMode {
+        return FloatingBallAppearanceMode.fromValue(
+            prefs.getString(KEY_FLOATING_BALL_APPEARANCE_MODE, FloatingBallAppearanceMode.THEME.value)
+        )
+    }
+
+    fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode) {
+        prefs.edit().putString(KEY_FLOATING_BALL_APPEARANCE_MODE, mode.value).apply()
+    }
+
+    fun getFloatingBallCustomImageUri(): String? {
+        return prefs.getString(KEY_FLOATING_BALL_CUSTOM_IMAGE_URI, null)
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    fun setFloatingBallCustomImageUri(uri: String?) {
+        prefs.edit().putString(KEY_FLOATING_BALL_CUSTOM_IMAGE_URI, uri?.takeIf { it.isNotBlank() }).apply()
+    }
+
     fun getLocalTranslationTargetLanguageTag(): String {
         return prefs.getString(KEY_LOCAL_TRANSLATION_TARGET_LANGUAGE, "en") ?: "en"
     }
@@ -282,6 +301,8 @@ class CaptureFlowSettings private constructor(
         private const val KEY_FLOATING_BALL_SIZE_DP = "floating_ball_size_dp"
         private const val KEY_FLOATING_BALL_OPACITY = "floating_ball_opacity"
         private const val KEY_FLOATING_BALL_THEME = "floating_ball_theme"
+        private const val KEY_FLOATING_BALL_APPEARANCE_MODE = "floating_ball_appearance_mode"
+        private const val KEY_FLOATING_BALL_CUSTOM_IMAGE_URI = "floating_ball_custom_image_uri"
         private const val KEY_LOCAL_TRANSLATION_TARGET_LANGUAGE = "local_translation_target_language"
         private const val KEY_LOCAL_TRANSLATION_WIFI_ONLY = "local_translation_wifi_only"
         private const val KEY_CLOUD_TRANSLATION_PROVIDER = "cloud_translation_provider"

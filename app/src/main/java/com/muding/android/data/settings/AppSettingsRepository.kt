@@ -1,13 +1,16 @@
 package com.muding.android.data.settings
 
 import com.muding.android.domain.usecase.CaptureResultAction
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
 
 data class FloatingBallSettings(
     val sizeDp: Int,
     val opacity: Float,
-    val theme: FloatingBallTheme
+    val theme: FloatingBallTheme,
+    val appearanceMode: FloatingBallAppearanceMode,
+    val customImageUri: String?
 )
 
 data class ProjectRecordSettings(
@@ -69,6 +72,8 @@ interface AppSettingsRepository {
     fun setFloatingBallSizeDp(sizeDp: Int)
     fun setFloatingBallOpacity(opacity: Float)
     fun setFloatingBallTheme(theme: FloatingBallTheme)
+    fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode)
+    fun setFloatingBallCustomImageUri(uri: String?)
 
     fun getPinHistorySettings(): PinHistorySettings
     fun setPinHistoryEnabled(enabled: Boolean)

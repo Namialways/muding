@@ -2,6 +2,7 @@ package com.muding.android.data.settings
 
 import android.content.Context
 import com.muding.android.domain.usecase.CaptureFlowSettings
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
@@ -96,7 +97,9 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
         return FloatingBallSettings(
             sizeDp = settings.getFloatingBallSizeDp(),
             opacity = settings.getFloatingBallOpacity(),
-            theme = settings.getFloatingBallTheme()
+            theme = settings.getFloatingBallTheme(),
+            appearanceMode = settings.getFloatingBallAppearanceMode(),
+            customImageUri = settings.getFloatingBallCustomImageUri()
         )
     }
 
@@ -110,6 +113,14 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
 
     override fun setFloatingBallTheme(theme: FloatingBallTheme) {
         settings.setFloatingBallTheme(theme)
+    }
+
+    override fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode) {
+        settings.setFloatingBallAppearanceMode(mode)
+    }
+
+    override fun setFloatingBallCustomImageUri(uri: String?) {
+        settings.setFloatingBallCustomImageUri(uri)
     }
 
     override fun getPinHistorySettings(): PinHistorySettings {

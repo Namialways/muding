@@ -205,7 +205,13 @@ class AppMaintenanceCoordinatorTest {
         override fun setDefaultPinCornerRadiusDp(radiusDp: Float) = Unit
 
         override fun getFloatingBallSettings(): FloatingBallSettings {
-            return FloatingBallSettings(sizeDp = 60, opacity = 0.92f, theme = FloatingBallTheme.BLUE_PURPLE)
+            return FloatingBallSettings(
+                sizeDp = 60,
+                opacity = 0.92f,
+                theme = FloatingBallTheme.BLUE_PURPLE,
+                appearanceMode = FloatingBallAppearanceMode.THEME,
+                customImageUri = null
+            )
         }
 
         override fun setFloatingBallSizeDp(sizeDp: Int) = Unit
@@ -213,6 +219,10 @@ class AppMaintenanceCoordinatorTest {
         override fun setFloatingBallOpacity(opacity: Float) = Unit
 
         override fun setFloatingBallTheme(theme: FloatingBallTheme) = Unit
+
+        override fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode) = Unit
+
+        override fun setFloatingBallCustomImageUri(uri: String?) = Unit
 
         override fun getPinHistorySettings(): PinHistorySettings {
             return PinHistorySettings(enabled = true, maxCount = 50, retainDays = 14)
