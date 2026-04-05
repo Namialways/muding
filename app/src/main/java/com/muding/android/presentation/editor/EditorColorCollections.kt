@@ -1,0 +1,68 @@
+package com.muding.android.presentation.editor
+
+class EditorColorCollections(
+  favorites: List<Int> = emptyList(),
+  recents: List<Int> = emptyList()
+) {
+  val favorites: List<Int> = dedupOrdered(favorites)
+  val recents: List<Int> = dedupOrdered(recents)
+
+  fun toggleFavorite(color: Int): EditorColorCollections {
+    val updatedFavorites = if (favorites.contains(color)) {
+      favorites.filter { it != color }
+    } else {
+      val appended = favorites + color
+      if (appended.size <= MAX_FAVORITES) appended else appended.takeLast(MAX_FAVORITES)
+    }
+
+    return EditorColorCollections(updatedFavorites, recents)
+  }
+
+  fun recordRecent(color: Int): EditorColorCollections {
+    val withoutDuplicates = recents.filter { it != color }
+    val updatedRecents = listOf(color) + withoutDuplicates
+    val limitedRecents = if (updatedRecents.size <= MAX_RECENTS) {
+      updatedRecents
+    } else {
+      updatedRecents.take(MAX_RECENTS)
+    }
+
+    return EditorColorCollections(favorites, limitedRecents)
+  }
+
+  fun quickAccessColors(limit: Int = MAX_QUICK_ACCESS): List<Int> {
+    val seen = LinkedHashSet<Int>()
+    val colors = mutableListOf<Int>()
+
+    for (favorite in favorites) {
+      if (colors.size >= limit) break
+      if (seen.add(favorite)) colors += favorite
+    }
+
+    for (recent in recents) {
+      if (colors.size >= limit) break
+      if (seen.add(recent)) colors += recent
+    }
+
+    return colors
+  }
+
+  companion object {
+    private const val MAX_FAVORITES = 3
+    private const val MAX_RECENTS = 3
+    private const val MAX_QUICK_ACCESS = 3
+
+    private fun dedupOrdered(input: List<Int>): List<Int> {
+      val seen = LinkedHashSet<Int>()
+      val ordered = mutableListOf<Int>()
+
+      for (color in input) {
+        if (seen.add(color)) {
+          ordered += color
+        }
+      }
+
+      return ordered
+    }
+  }
+}
