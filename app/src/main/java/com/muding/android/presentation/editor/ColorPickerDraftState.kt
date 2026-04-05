@@ -17,6 +17,8 @@ data class ColorPickerDraftState(
         return fromArgb(parsedArgb)
     }
 
+    fun updateColor(color: Color): ColorPickerDraftState = fromColor(color)
+
     fun updateRed(input: String): ColorPickerDraftState = updateRgb(redText = input)
 
     fun updateGreen(input: String): ColorPickerDraftState = updateRgb(greenText = input)

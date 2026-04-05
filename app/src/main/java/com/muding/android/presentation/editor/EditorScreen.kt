@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -48,6 +50,8 @@ import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Tune
@@ -56,6 +60,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -86,6 +91,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.muding.android.R
@@ -459,7 +465,7 @@ fun EditorBottomBar(
 
                     EditorColorRail(
                         currentColor = documentState.currentColor,
-                        recentColors = documentState.recentColors,
+                        quickAccessColors = documentState.quickAccessColors,
                         onSelectColor = screenActions.onSelectColor,
                         onOpenCustomColor = { showColorPaletteDialog = true }
                     )
@@ -471,9 +477,12 @@ fun EditorBottomBar(
     if (showColorPaletteDialog) {
         ColorPaletteDialog(
             initialColor = documentState.currentColor,
+            favoriteColors = documentState.favoriteColors,
+            recentColors = documentState.recentColors,
             onDismiss = { showColorPaletteDialog = false },
+            onToggleFavorite = screenActions.onToggleFavoriteColor,
             onConfirm = { color ->
-                screenActions.onSelectColor(color)
+                screenActions.onApplyColor(color)
                 showColorPaletteDialog = false
             }
         )
@@ -592,12 +601,12 @@ private fun EditorModeButton(
 @Composable
 private fun EditorColorRail(
     currentColor: Color,
-    recentColors: List<Color>,
+    quickAccessColors: List<Color>,
     onSelectColor: (Color) -> Unit,
     onOpenCustomColor: () -> Unit
 ) {
-    val displayedRecentColors = remember(currentColor, recentColors) {
-        (listOf(currentColor) + recentColors)
+    val displayedColors = remember(quickAccessColors) {
+        quickAccessColors
             .distinctBy { it.toArgb() }
             .take(3)
     }
@@ -613,7 +622,7 @@ private fun EditorColorRail(
             verticalAlignment = Alignment.CenterVertically
         ) {
             repeat(3) { index ->
-                val color = displayedRecentColors.getOrNull(index)
+                val color = displayedColors.getOrNull(index)
                 if (color != null) {
                     ColorButton(
                         color = color,
@@ -841,19 +850,22 @@ fun ColorButton(
 @Composable
 private fun ColorPaletteDialog(
     initialColor: Color,
+    favoriteColors: List<Color>,
+    recentColors: List<Color>,
     onDismiss: () -> Unit,
+    onToggleFavorite: (Color) -> Unit,
     onConfirm: (Color) -> Unit
 ) {
-    val initialArgb = remember(initialColor) { initialColor.toArgb() }
-    var red by remember(initialColor) { mutableFloatStateOf(AndroidColor.red(initialArgb).toFloat()) }
-    var green by remember(initialColor) { mutableFloatStateOf(AndroidColor.green(initialArgb).toFloat()) }
-    var blue by remember(initialColor) { mutableFloatStateOf(AndroidColor.blue(initialArgb).toFloat()) }
-    val previewColor = Color(
-        red = red / 255f,
-        green = green / 255f,
-        blue = blue / 255f,
-        alpha = 1f
-    )
+    var draftState by remember(initialColor) {
+        mutableStateOf(ColorPickerDraftState.fromColor(initialColor))
+    }
+    val previewColor = draftState.previewColor
+    val isFavorite = remember(draftState.previewColor, favoriteColors) {
+        favoriteColors.any { it.toArgb() == draftState.previewColor.toArgb() }
+    }
+    val currentHue = remember(draftState.previewColor) {
+        draftState.previewColor.hueDegrees()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -864,7 +876,22 @@ private fun ColorPaletteDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                HueSpectrumField(
+                    hue = currentHue,
+                    onHueChange = { hue ->
+                        draftState = draftState.updateColor(
+                            colorFromHueChange(
+                                currentColor = draftState.previewColor,
+                                hue = hue
+                            )
+                        )
+                    }
+                )
+
                 Surface(
                     shape = RoundedCornerShape(18.dp),
                     color = previewColor
@@ -876,48 +903,90 @@ private fun ColorPaletteDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "自定义颜色",
-                            color = previewColor.readableForeground(),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = previewColor.toHexString(),
-                            color = previewColor.readableForeground().copy(alpha = 0.82f),
-                            style = MaterialTheme.typography.labelMedium
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.editor_color_preview),
+                                color = previewColor.readableForeground(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = previewColor.toHexString(),
+                                color = previewColor.readableForeground().copy(alpha = 0.82f),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Surface(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable { onToggleFavorite(previewColor) },
+                            shape = CircleShape,
+                            color = previewColor.readableForeground().copy(alpha = 0.14f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = stringResource(
+                                        if (isFavorite) {
+                                            R.string.editor_color_remove_favorite
+                                        } else {
+                                            R.string.editor_color_add_favorite
+                                        }
+                                    ),
+                                    tint = previewColor.readableForeground(),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
-                EditorPaletteSlider(
-                    label = "R",
-                    value = red,
-                    valueLabel = red.toInt().toString(),
-                    valueRange = 0f..255f,
-                    activeTrackColor = Color(red = 1f, green = 0.2f, blue = 0.2f),
-                    onValueChange = { red = it }
+
+                OutlinedTextField(
+                    value = draftState.hexText,
+                    onValueChange = { draftState = draftState.updateHex(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.editor_color_hex)) },
+                    singleLine = true
                 )
-                EditorPaletteSlider(
-                    label = "G",
-                    value = green,
-                    valueLabel = green.toInt().toString(),
-                    valueRange = 0f..255f,
-                    activeTrackColor = Color(red = 0.18f, green = 0.82f, blue = 0.35f),
-                    onValueChange = { green = it }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ColorValueField(
+                        label = stringResource(R.string.editor_color_red),
+                        value = draftState.redText,
+                        modifier = Modifier.weight(1f),
+                        onValueChange = { draftState = draftState.updateRed(it) }
+                    )
+                    ColorValueField(
+                        label = stringResource(R.string.editor_color_green),
+                        value = draftState.greenText,
+                        modifier = Modifier.weight(1f),
+                        onValueChange = { draftState = draftState.updateGreen(it) }
+                    )
+                    ColorValueField(
+                        label = stringResource(R.string.editor_color_blue),
+                        value = draftState.blueText,
+                        modifier = Modifier.weight(1f),
+                        onValueChange = { draftState = draftState.updateBlue(it) }
+                    )
+                }
+
+                EditorColorSwatchSection(
+                    label = stringResource(R.string.editor_color_favorites),
+                    colors = favoriteColors,
+                    onSelect = { draftState = draftState.updateColor(it) }
                 )
-                EditorPaletteSlider(
-                    label = "B",
-                    value = blue,
-                    valueLabel = blue.toInt().toString(),
-                    valueRange = 0f..255f,
-                    activeTrackColor = Color(red = 0.22f, green = 0.45f, blue = 1f),
-                    onValueChange = { blue = it }
+                EditorColorSwatchSection(
+                    label = stringResource(R.string.editor_color_recents),
+                    colors = recentColors,
+                    onSelect = { draftState = draftState.updateColor(it) }
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(previewColor) }) {
-                Text(stringResource(R.string.action_done))
+                Text(stringResource(R.string.action_apply))
             }
         },
         dismissButton = {
@@ -929,42 +998,114 @@ private fun ColorPaletteDialog(
 }
 
 @Composable
-private fun EditorPaletteSlider(
-    label: String,
-    value: Float,
-    valueLabel: String,
-    valueRange: ClosedFloatingPointRange<Float>,
-    activeTrackColor: Color,
-    onValueChange: (Float) -> Unit
+private fun HueSpectrumField(
+    hue: Float,
+    onHueChange: (Float) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Medium
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFFFF4D4D),
+                                Color(0xFFFFB84D),
+                                Color(0xFFF7F36B),
+                                Color(0xFF7DDD28),
+                                Color(0xFF18D7D1),
+                                Color(0xFF3B82F6),
+                                Color(0xFFA855F7),
+                                Color(0xFFFF4D4D)
+                            )
+                        )
+                    )
             )
-            Text(
-                text = valueLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            Slider(
+                value = hue,
+                onValueChange = onHueChange,
+                valueRange = 0f..360f,
+                modifier = Modifier.fillMaxSize(),
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Color.Transparent,
+                    inactiveTrackColor = Color.Transparent
+                )
             )
         }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            colors = SliderDefaults.colors(
-                thumbColor = activeTrackColor,
-                activeTrackColor = activeTrackColor,
-                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        )
     }
+}
+
+@Composable
+private fun ColorValueField(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+    )
+}
+
+@Composable
+private fun EditorColorSwatchSection(
+    label: String,
+    colors: List<Color>,
+    onSelect: (Color) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(3) { index ->
+                val color = colors.getOrNull(index)
+                if (color == null) {
+                    EditorEmptyColorSlot()
+                } else {
+                    ColorButton(
+                        color = color,
+                        isSelected = false,
+                        onClick = { onSelect(color) },
+                        size = 32.dp
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun colorFromHueChange(currentColor: Color, hue: Float): Color {
+    val hsv = FloatArray(3)
+    AndroidColor.colorToHSV(currentColor.toArgb(), hsv)
+    hsv[0] = hue
+    if (hsv[1] < 0.55f) hsv[1] = 0.72f
+    if (hsv[2] < 0.55f) hsv[2] = 0.88f
+    return Color(AndroidColor.HSVToColor(hsv))
+}
+
+private fun Color.hueDegrees(): Float {
+    val hsv = FloatArray(3)
+    AndroidColor.colorToHSV(toArgb(), hsv)
+    return hsv[0]
 }
 
 private fun currentToolLabelRes(tool: DrawingTool?): Int {

@@ -31,6 +31,7 @@
     <string name="action_pin">贴图</string>
     <string name="action_share">分享</string>
     <string name="action_cancel">取消</string>
+    <string name="action_apply">应用</string>
     <string name="action_done">完成</string>
     <string name="action_close">关闭</string>
     <string name="action_recrop">重新选区</string>
@@ -53,6 +54,15 @@
     <string name="editor_eraser_object">整体擦除</string>
     <string name="editor_eraser_partial">局部擦除</string>
     <string name="editor_color_palette">颜色</string>
+    <string name="editor_color_preview">预览</string>
+    <string name="editor_color_favorites">收藏颜色</string>
+    <string name="editor_color_recents">最近使用</string>
+    <string name="editor_color_add_favorite">收藏当前颜色</string>
+    <string name="editor_color_remove_favorite">取消收藏当前颜色</string>
+    <string name="editor_color_hex">Hex</string>
+    <string name="editor_color_red">R</string>
+    <string name="editor_color_green">G</string>
+    <string name="editor_color_blue">B</string>
     <string name="editor_add_text">添加文字</string>
     <string name="editor_edit_text">编辑文字</string>
     <string name="editor_text_input_label">输入内容</string>
