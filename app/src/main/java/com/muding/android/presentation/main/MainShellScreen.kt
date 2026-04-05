@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.unit.dp
 import com.muding.android.domain.usecase.CaptureResultAction
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinHistoryRecord
 import com.muding.android.domain.usecase.PinScaleMode
@@ -49,6 +50,8 @@ fun MainScreen(
     initialFloatingBallSizeDp: Int,
     initialFloatingBallOpacity: Float,
     initialFloatingBallTheme: FloatingBallTheme,
+    initialFloatingBallAppearanceMode: FloatingBallAppearanceMode,
+    initialFloatingBallCustomImageUri: String?,
     initialPinHistoryEnabled: Boolean,
     initialMaxPinHistoryCount: Int,
     initialPinHistoryRetainDays: Int,
@@ -61,6 +64,8 @@ fun MainScreen(
     onFloatingBallSizeChanged: (Int) -> Unit,
     onFloatingBallOpacityChanged: (Float) -> Unit,
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
+    onFloatingBallAppearanceCommitted: (FloatingBallAppearanceMode, String?) -> Unit,
+    onChooseFloatingBallCustomImage: () -> Unit,
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
     onPinHistoryRetentionChanged: (Int, Int) -> Unit,
     onClearWorkRecords: () -> Unit,
@@ -88,6 +93,12 @@ fun MainScreen(
     var floatingBallSizeDp by remember { mutableIntStateOf(initialFloatingBallSizeDp) }
     var floatingBallOpacity by remember { mutableStateOf(initialFloatingBallOpacity) }
     var floatingBallTheme by remember { mutableStateOf(initialFloatingBallTheme) }
+    var floatingBallAppearanceMode by remember(initialFloatingBallAppearanceMode) {
+        mutableStateOf(initialFloatingBallAppearanceMode)
+    }
+    var floatingBallCustomImageUri by remember(initialFloatingBallCustomImageUri) {
+        mutableStateOf(initialFloatingBallCustomImageUri)
+    }
     var pinHistoryEnabled by remember { mutableStateOf(initialPinHistoryEnabled) }
     var maxPinHistoryCount by remember { mutableIntStateOf(initialMaxPinHistoryCount) }
     var pinHistoryRetainDays by remember { mutableIntStateOf(initialPinHistoryRetainDays) }
@@ -112,6 +123,21 @@ fun MainScreen(
                 onRefreshRecords()
             }
             recordsLoading = false
+        }
+    }
+
+    fun applyFloatingBallAppearanceTransition(
+        transition: FloatingBallAppearanceSourceState.Transition
+    ) {
+        floatingBallAppearanceMode = transition.state.mode
+        floatingBallCustomImageUri = transition.state.customImageUri
+        when (val effect = transition.effect) {
+            FloatingBallAppearanceSourceState.Effect.RequestImagePicker -> onChooseFloatingBallCustomImage()
+            is FloatingBallAppearanceSourceState.Effect.CommitAppearance -> {
+                onFloatingBallAppearanceCommitted(effect.mode, effect.customImageUri)
+            }
+
+            null -> Unit
         }
     }
 
@@ -203,6 +229,7 @@ fun MainScreen(
                 defaultPinShadowEnabled = defaultPinShadowEnabled,
                 defaultPinCornerRadiusDp = defaultPinCornerRadiusDp,
                 floatingBallTheme = floatingBallTheme,
+                floatingBallAppearanceMode = floatingBallAppearanceMode,
                 floatingBallSizeDp = floatingBallSizeDp,
                 onOpenGalleryPin = onOpenGalleryPin,
                 onOpenGalleryOcr = onOpenGalleryOcr,
@@ -241,6 +268,8 @@ fun MainScreen(
                 floatingBallSizeDp = floatingBallSizeDp,
                 floatingBallOpacity = floatingBallOpacity,
                 floatingBallTheme = floatingBallTheme,
+                floatingBallAppearanceMode = floatingBallAppearanceMode,
+                floatingBallCustomImageUri = floatingBallCustomImageUri,
                 pinHistoryEnabled = pinHistoryEnabled,
                 maxPinHistoryCount = maxPinHistoryCount,
                 pinHistoryRetainDays = pinHistoryRetainDays,
@@ -276,6 +305,23 @@ fun MainScreen(
                     floatingBallTheme = it
                     onFloatingBallThemeChanged(it)
                 },
+                onFloatingBallUseDefaultAppearance = {
+                    applyFloatingBallAppearanceTransition(
+                        FloatingBallAppearanceSourceState(
+                            mode = floatingBallAppearanceMode,
+                            customImageUri = floatingBallCustomImageUri
+                        ).restoreDefault()
+                    )
+                },
+                onFloatingBallCustomImageModeSelected = {
+                    applyFloatingBallAppearanceTransition(
+                        FloatingBallAppearanceSourceState(
+                            mode = floatingBallAppearanceMode,
+                            customImageUri = floatingBallCustomImageUri
+                        ).selectCustomImageMode()
+                    )
+                },
+                onChooseFloatingBallCustomImage = onChooseFloatingBallCustomImage,
                 onPinHistoryEnabledChanged = {
                     pinHistoryEnabled = it
                     runRecordsMutation { onPinHistoryEnabledChanged(it) }

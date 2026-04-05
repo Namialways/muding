@@ -50,17 +50,23 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.animation.doOnEnd
@@ -78,6 +84,7 @@ import com.muding.android.app.AppGraph
 import com.muding.android.core.model.PinSourceType
 import com.muding.android.data.repository.RecentPinRepository
 import com.muding.android.data.settings.AppSettingsRepository
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.ScreenshotManager
 import com.muding.android.domain.usecase.CaptureResultAction
@@ -92,6 +99,8 @@ import com.muding.android.presentation.source.GalleryOcrActivity
 import com.muding.android.presentation.source.GalleryPinActivity
 import com.muding.android.presentation.theme.floatingBallThemeColors
 import com.muding.android.presentation.theme.MudingTheme
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -100,7 +109,9 @@ private data class FloatingBallAppearance(
     val opacity: Float,
     val iconSizeDp: Int,
     val dragBoundPx: Int,
-    val theme: FloatingBallTheme
+    val theme: FloatingBallTheme,
+    val appearanceMode: FloatingBallAppearanceMode,
+    val customImageUri: String?
 )
 
 private enum class CaptureEntryMode {
@@ -317,7 +328,9 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             opacity = floatingBallSettings.opacity,
             iconSizeDp = (sizeDp * 0.52f).roundToInt().coerceIn(24, 42),
             dragBoundPx = (sizeDp * density).roundToInt(),
-            theme = floatingBallSettings.theme
+            theme = floatingBallSettings.theme,
+            appearanceMode = floatingBallSettings.appearanceMode,
+            customImageUri = floatingBallSettings.customImageUri
         )
     }
 
@@ -987,6 +1000,13 @@ private fun FloatingBall(
     onClick: () -> Unit
 ) {
     val colors = floatingBallThemeColors(appearance.theme)
+    val context = LocalContext.current
+    var imageFailed by remember(appearance.appearanceMode, appearance.customImageUri) {
+        mutableStateOf(false)
+    }
+    val showCustomImage = appearance.appearanceMode == FloatingBallAppearanceMode.CUSTOM_IMAGE &&
+        !appearance.customImageUri.isNullOrBlank() &&
+        !imageFailed
     Surface(
         modifier = Modifier
             .size(appearance.sizeDp.dp)
@@ -1000,20 +1020,41 @@ private fun FloatingBall(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .alpha(appearance.opacity)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(colors.start, colors.end)
-                    )
-                ),
+                .clip(CircleShape)
+                .alpha(appearance.opacity),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.Camera,
-                contentDescription = "截图",
-                tint = Color.White,
-                modifier = Modifier.size(appearance.iconSizeDp.dp)
-            )
+            if (showCustomImage) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(appearance.customImageUri)
+                        .crossfade(false)
+                        .build(),
+                    contentDescription = "自定义悬浮球图片",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    onSuccess = { imageFailed = false },
+                    onError = { imageFailed = true }
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(colors.start, colors.end)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Camera,
+                        contentDescription = "截图",
+                        tint = Color.White,
+                        modifier = Modifier.size(appearance.iconSizeDp.dp)
+                    )
+                }
+            }
         }
     }
 }

@@ -69,6 +69,11 @@
             android:theme="@style/Theme.MudingAndroid" />
 
         <activity
+            android:name=".presentation.source.FloatingBallImagePickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MudingAndroid" />
+
+        <activity
             android:name=".presentation.source.ClipboardTextPinActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />

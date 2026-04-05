@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinHistorySourceType
 import com.muding.android.presentation.theme.floatingBallThemeColors
@@ -798,10 +799,17 @@ fun LabeledValueRow(
 fun FloatingBallAppearancePreview(
     sizeDp: Int,
     opacity: Float,
-    theme: FloatingBallTheme
+    theme: FloatingBallTheme,
+    appearanceMode: FloatingBallAppearanceMode = FloatingBallAppearanceMode.THEME,
+    customImageUri: String? = null
 ) {
     val colors = floatingBallThemeColors(theme)
     val tokens = rememberMainUiTokens()
+    val context = LocalContext.current
+    var imageFailed by remember(appearanceMode, customImageUri) { mutableStateOf(false) }
+    val showCustomImage = appearanceMode == FloatingBallAppearanceMode.CUSTOM_IMAGE &&
+        !customImageUri.isNullOrBlank() &&
+        !imageFailed
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -817,19 +825,41 @@ fun FloatingBallAppearancePreview(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .alpha(opacity)
-                    .background(
-                        brush = Brush.linearGradient(listOf(colors.start, colors.end)),
-                        shape = CircleShape
-                    ),
+                    .clip(CircleShape)
+                    .alpha(opacity),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Camera,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size((sizeDp * 0.5f).dp)
-                )
+                if (showCustomImage) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(customImageUri)
+                            .crossfade(false)
+                            .build(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        onSuccess = { imageFailed = false },
+                        onError = { imageFailed = true },
+                        fallback = rememberVectorPainter(Icons.Default.Camera)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.linearGradient(listOf(colors.start, colors.end)),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Camera,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size((sizeDp * 0.5f).dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -928,6 +958,16 @@ fun floatingBallThemeLabel(theme: FloatingBallTheme): String {
         FloatingBallTheme.BLUE_PURPLE -> "蓝紫渐变"
         FloatingBallTheme.SUNSET -> "日落橙红"
         FloatingBallTheme.EMERALD -> "青绿渐变"
+    }
+}
+
+fun floatingBallAppearanceSummaryLabel(
+    mode: FloatingBallAppearanceMode,
+    theme: FloatingBallTheme
+): String {
+    return when (mode) {
+        FloatingBallAppearanceMode.CUSTOM_IMAGE -> "自定义图片"
+        FloatingBallAppearanceMode.THEME -> floatingBallThemeLabel(theme)
     }
 }
 

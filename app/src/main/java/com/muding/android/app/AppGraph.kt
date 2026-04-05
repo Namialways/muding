@@ -17,6 +17,7 @@ import com.muding.android.data.settings.AppSettingsRepository
 import com.muding.android.data.settings.SharedPreferencesAppSettingsRepository
 import com.muding.android.feature.capture.BitmapCropper
 import com.muding.android.feature.capture.CaptureFlowCoordinator
+import com.muding.android.feature.floatingball.FloatingBallImageProcessor
 import com.muding.android.feature.ocr.MlKitOcrEngine
 import com.muding.android.feature.ocr.OcrEngine
 import com.muding.android.feature.ocr.OcrFlowCoordinator
@@ -130,5 +131,9 @@ object AppGraph {
             bitmapCropper = BitmapCropper(),
             pinCreationCoordinator = pinCreationCoordinator(context)
         )
+    }
+
+    fun floatingBallImageProcessor(context: Context): FloatingBallImageProcessor {
+        return FloatingBallImageProcessor(context.applicationContext)
     }
 }

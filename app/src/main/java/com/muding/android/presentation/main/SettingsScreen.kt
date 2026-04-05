@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.muding.android.domain.usecase.CaptureResultAction
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
 import com.muding.android.presentation.translation.TranslationSettingsPage
@@ -59,6 +60,8 @@ fun SettingsScreen(
     floatingBallSizeDp: Int,
     floatingBallOpacity: Float,
     floatingBallTheme: FloatingBallTheme,
+    floatingBallAppearanceMode: FloatingBallAppearanceMode,
+    floatingBallCustomImageUri: String?,
     pinHistoryEnabled: Boolean,
     maxPinHistoryCount: Int,
     pinHistoryRetainDays: Int,
@@ -73,6 +76,9 @@ fun SettingsScreen(
     onFloatingBallSizeChanged: (Int) -> Unit,
     onFloatingBallOpacityChanged: (Float) -> Unit,
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
+    onFloatingBallUseDefaultAppearance: () -> Unit,
+    onFloatingBallCustomImageModeSelected: () -> Unit,
+    onChooseFloatingBallCustomImage: () -> Unit,
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
     onPinHistoryRetentionChanged: (Int, Int) -> Unit,
     onProjectRecordRetentionChanged: (Int, Int) -> Unit,
@@ -95,10 +101,15 @@ fun SettingsScreen(
             floatingBallSizeDp = floatingBallSizeDp,
             floatingBallOpacity = floatingBallOpacity,
             floatingBallTheme = floatingBallTheme,
+            floatingBallAppearanceMode = floatingBallAppearanceMode,
+            floatingBallCustomImageUri = floatingBallCustomImageUri,
             onActionChanged = onActionChanged,
             onFloatingBallSizeChanged = onFloatingBallSizeChanged,
             onFloatingBallOpacityChanged = onFloatingBallOpacityChanged,
-            onFloatingBallThemeChanged = onFloatingBallThemeChanged
+            onFloatingBallThemeChanged = onFloatingBallThemeChanged,
+            onFloatingBallUseDefaultAppearance = onFloatingBallUseDefaultAppearance,
+            onFloatingBallCustomImageModeSelected = onFloatingBallCustomImageModeSelected,
+            onChooseFloatingBallCustomImage = onChooseFloatingBallCustomImage
         )
 
         SettingsSection.PIN_AND_INTERACTION -> PinAndInteractionSettingsSection(
@@ -205,10 +216,15 @@ private fun CaptureAndFloatingSettingsSection(
     floatingBallSizeDp: Int,
     floatingBallOpacity: Float,
     floatingBallTheme: FloatingBallTheme,
+    floatingBallAppearanceMode: FloatingBallAppearanceMode,
+    floatingBallCustomImageUri: String?,
     onActionChanged: (CaptureResultAction) -> Unit,
     onFloatingBallSizeChanged: (Int) -> Unit,
     onFloatingBallOpacityChanged: (Float) -> Unit,
-    onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit
+    onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
+    onFloatingBallUseDefaultAppearance: () -> Unit,
+    onFloatingBallCustomImageModeSelected: () -> Unit,
+    onChooseFloatingBallCustomImage: () -> Unit
 ) {
     val tokens = rememberMainUiTokens()
     LazyColumn(
@@ -254,8 +270,25 @@ private fun CaptureAndFloatingSettingsSection(
                 FloatingBallAppearancePreview(
                     sizeDp = appearanceDraft.previewSizeDp,
                     opacity = appearanceDraft.previewOpacity,
-                    theme = floatingBallTheme
+                    theme = floatingBallTheme,
+                    appearanceMode = floatingBallAppearanceMode,
+                    customImageUri = floatingBallCustomImageUri
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SelectablePill(
+                        text = "默认样式",
+                        selected = floatingBallAppearanceMode == FloatingBallAppearanceMode.THEME,
+                        onClick = onFloatingBallUseDefaultAppearance
+                    )
+                    SelectablePill(
+                        text = "自定义图片",
+                        selected = floatingBallAppearanceMode == FloatingBallAppearanceMode.CUSTOM_IMAGE,
+                        onClick = onFloatingBallCustomImageModeSelected
+                    )
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "大小（${appearanceDraft.sizeProgress}/100）",
@@ -292,21 +325,41 @@ private fun CaptureAndFloatingSettingsSection(
                         steps = 98
                     )
                 }
-                CaptureOptionRow(
-                    title = "蓝紫渐变",
-                    selected = floatingBallTheme == FloatingBallTheme.BLUE_PURPLE,
-                    onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.BLUE_PURPLE) }
-                )
-                CaptureOptionRow(
-                    title = "落日橙红",
-                    selected = floatingBallTheme == FloatingBallTheme.SUNSET,
-                    onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.SUNSET) }
-                )
-                CaptureOptionRow(
-                    title = "青绿渐变",
-                    selected = floatingBallTheme == FloatingBallTheme.EMERALD,
-                    onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.EMERALD) }
-                )
+                if (floatingBallAppearanceMode == FloatingBallAppearanceMode.CUSTOM_IMAGE) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onChooseFloatingBallCustomImage,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("选择图片")
+                        }
+                        OutlinedButton(
+                            onClick = onFloatingBallUseDefaultAppearance,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("恢复默认样式")
+                        }
+                    }
+                } else {
+                    CaptureOptionRow(
+                        title = "蓝紫渐变",
+                        selected = floatingBallTheme == FloatingBallTheme.BLUE_PURPLE,
+                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.BLUE_PURPLE) }
+                    )
+                    CaptureOptionRow(
+                        title = "落日橙红",
+                        selected = floatingBallTheme == FloatingBallTheme.SUNSET,
+                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.SUNSET) }
+                    )
+                    CaptureOptionRow(
+                        title = "青绿渐变",
+                        selected = floatingBallTheme == FloatingBallTheme.EMERALD,
+                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.EMERALD) }
+                    )
+                }
             }
         }
     }

@@ -3,7 +3,11 @@ package com.muding.android
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.muding.android.app.AppGraph
 import com.muding.android.core.model.PinSourceType
@@ -12,14 +16,19 @@ import com.muding.android.data.repository.PinHistoryRepository
 import com.muding.android.data.repository.RecentPinRepository
 import com.muding.android.data.repository.RuntimeStorageRepository
 import com.muding.android.data.settings.AppSettingsRepository
+import com.muding.android.data.settings.FloatingBallSettings
 import com.muding.android.domain.usecase.AppMaintenanceCoordinator
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
+import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PermissionHandler
 import com.muding.android.domain.usecase.PinHistoryMetadata
+import com.muding.android.feature.floatingball.FloatingBallImageProcessor
 import com.muding.android.feature.pin.creation.EditorLaunchRequest
 import com.muding.android.feature.pin.creation.PinCreationCoordinator
 import com.muding.android.presentation.main.MainScreen
 import com.muding.android.presentation.main.MainScreenSnapshot
 import com.muding.android.presentation.source.ClipboardTextPinActivity
+import com.muding.android.presentation.source.FloatingBallImagePickerActivity
 import com.muding.android.presentation.source.GalleryOcrActivity
 import com.muding.android.presentation.source.GalleryPinActivity
 import com.muding.android.presentation.theme.MudingTheme
@@ -36,6 +45,17 @@ class MainActivity : ComponentActivity() {
     private lateinit var runtimeStorageRepository: RuntimeStorageRepository
     private lateinit var pinCreationCoordinator: PinCreationCoordinator
     private lateinit var appMaintenanceCoordinator: AppMaintenanceCoordinator
+    private lateinit var floatingBallImageProcessor: FloatingBallImageProcessor
+
+    private var floatingBallSettings by mutableStateOf(defaultFloatingBallSettings())
+
+    private val floatingBallImagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            floatingBallSettings = settingsRepository.getFloatingBallSettings()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +67,7 @@ class MainActivity : ComponentActivity() {
         recentPinRepository = AppGraph.recentPinRepository(this)
         runtimeStorageRepository = AppGraph.runtimeStorageRepository(this)
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
+        floatingBallImageProcessor = AppGraph.floatingBallImageProcessor(this)
         appMaintenanceCoordinator = AppMaintenanceCoordinator(
             annotationSessionRepository = annotationSessionRepository,
             pinHistoryRepository = pinHistoryRepository,
@@ -56,7 +77,7 @@ class MainActivity : ComponentActivity() {
             localTranslationModelResetter = AppGraph.localTranslationModelResetter()
         )
         val projectRecordSettings = settingsRepository.getProjectRecordSettings()
-        val floatingBallSettings = settingsRepository.getFloatingBallSettings()
+        floatingBallSettings = settingsRepository.getFloatingBallSettings()
         val pinHistorySettings = settingsRepository.getPinHistorySettings()
 
         setContent {
@@ -72,6 +93,8 @@ class MainActivity : ComponentActivity() {
                     initialFloatingBallSizeDp = floatingBallSettings.sizeDp,
                     initialFloatingBallOpacity = floatingBallSettings.opacity,
                     initialFloatingBallTheme = floatingBallSettings.theme,
+                    initialFloatingBallAppearanceMode = floatingBallSettings.appearanceMode,
+                    initialFloatingBallCustomImageUri = floatingBallSettings.customImageUri,
                     initialPinHistoryEnabled = pinHistorySettings.enabled,
                     initialMaxPinHistoryCount = pinHistorySettings.maxCount,
                     initialPinHistoryRetainDays = pinHistorySettings.retainDays,
@@ -91,15 +114,33 @@ class MainActivity : ComponentActivity() {
                     },
                     onFloatingBallSizeChanged = { size ->
                         settingsRepository.setFloatingBallSizeDp(size)
+                        floatingBallSettings = floatingBallSettings.copy(sizeDp = size)
                         refreshFloatingBallAppearance()
                     },
                     onFloatingBallOpacityChanged = { opacity ->
                         settingsRepository.setFloatingBallOpacity(opacity)
+                        floatingBallSettings = floatingBallSettings.copy(opacity = opacity)
                         refreshFloatingBallAppearance()
                     },
                     onFloatingBallThemeChanged = { theme ->
                         settingsRepository.setFloatingBallTheme(theme)
+                        floatingBallSettings = floatingBallSettings.copy(theme = theme)
                         refreshFloatingBallAppearance()
+                    },
+                    onFloatingBallAppearanceCommitted = { mode, customImageUri ->
+                        settingsRepository.setFloatingBallAppearanceMode(mode)
+                        settingsRepository.setFloatingBallCustomImageUri(customImageUri)
+                        if (mode == FloatingBallAppearanceMode.THEME && customImageUri == null) {
+                            floatingBallImageProcessor.clearCurrentImage()
+                        }
+                        floatingBallSettings = floatingBallSettings.copy(
+                            appearanceMode = mode,
+                            customImageUri = customImageUri
+                        )
+                        refreshFloatingBallAppearance()
+                    },
+                    onChooseFloatingBallCustomImage = {
+                        openFloatingBallImagePicker()
                     },
                     onPinHistoryEnabledChanged = { enabled ->
                         settingsRepository.setPinHistoryEnabled(enabled)
@@ -218,6 +259,12 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent(this, ClipboardTextPinActivity::class.java))
     }
 
+    private fun openFloatingBallImagePicker() {
+        floatingBallImagePickerLauncher.launch(
+            Intent(this, FloatingBallImagePickerActivity::class.java)
+        )
+    }
+
     private fun refreshFloatingBallAppearance() {
         if (!permissionHandler.hasOverlayPermission()) {
             return
@@ -237,6 +284,18 @@ class MainActivity : ComponentActivity() {
                 startFloatingBallService()
                 moveTaskToBack(true)
             }
+        }
+    }
+
+    private companion object {
+        fun defaultFloatingBallSettings(): FloatingBallSettings {
+            return FloatingBallSettings(
+                sizeDp = 46,
+                opacity = 0.92f,
+                theme = FloatingBallTheme.BLUE_PURPLE,
+                appearanceMode = FloatingBallAppearanceMode.THEME,
+                customImageUri = null
+            )
         }
     }
 }

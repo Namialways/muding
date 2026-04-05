@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import kotlin.math.roundToInt
 
 @Composable
@@ -35,6 +36,7 @@ fun HomeDashboardScreen(
     defaultPinShadowEnabled: Boolean,
     defaultPinCornerRadiusDp: Float,
     floatingBallTheme: com.muding.android.domain.usecase.FloatingBallTheme,
+    floatingBallAppearanceMode: FloatingBallAppearanceMode,
     floatingBallSizeDp: Int,
     onOpenGalleryPin: () -> Unit,
     onOpenGalleryOcr: () -> Unit,
@@ -181,7 +183,7 @@ fun HomeDashboardScreen(
                 InlineValueRow("默认圆角", "${defaultPinCornerRadiusDp.roundToInt()}dp")
                 InlineValueRow(
                     "悬浮球",
-                    "${floatingBallSizeDp}dp · ${floatingBallThemeLabel(floatingBallTheme)}"
+                    "${floatingBallSizeDp}dp · ${floatingBallAppearanceSummaryLabel(floatingBallAppearanceMode, floatingBallTheme)}"
                 )
                 InlineValueRow("贴图阴影", if (defaultPinShadowEnabled) "开启" else "关闭")
             }
