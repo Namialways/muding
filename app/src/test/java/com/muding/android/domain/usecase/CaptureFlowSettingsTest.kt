@@ -2,6 +2,7 @@ package com.muding.android.domain.usecase
 
 import android.content.SharedPreferences
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CaptureFlowSettingsTest {
@@ -32,6 +33,44 @@ class CaptureFlowSettingsTest {
 
         assertEquals(CaptureResultAction.OPEN_EDITOR, settings.getResultAction())
         assertEquals(58, settings.getFloatingBallSizeDp())
+    }
+
+    @Test
+    fun floatingBallSizeDp_usesNewThirtyToSixtyRange() {
+        val preferences = InMemorySharedPreferences()
+        val settings = CaptureFlowSettings.forPreferences(preferences)
+
+        settings.setFloatingBallSizeDp(12)
+        assertEquals(30, settings.getFloatingBallSizeDp())
+
+        settings.setFloatingBallSizeDp(72)
+        assertEquals(60, settings.getFloatingBallSizeDp())
+    }
+
+    @Test
+    fun floatingBallOpacity_usesOnePercentToFullyOpaqueRange() {
+        val preferences = InMemorySharedPreferences()
+        val settings = CaptureFlowSettings.forPreferences(preferences)
+
+        settings.setFloatingBallOpacity(0f)
+        assertEquals(0.01f, settings.getFloatingBallOpacity(), 0.0001f)
+
+        settings.setFloatingBallOpacity(3f)
+        assertEquals(1f, settings.getFloatingBallOpacity(), 0.0001f)
+    }
+
+    @Test
+    fun legacyStoredFloatingBallValues_areClampedIntoNewRange() {
+        val preferences = InMemorySharedPreferences().apply {
+            edit()
+                .putInt("floating_ball_size_dp", 96)
+                .putFloat("floating_ball_opacity", 0f)
+                .apply()
+        }
+        val settings = CaptureFlowSettings.forPreferences(preferences)
+
+        assertEquals(60, settings.getFloatingBallSizeDp())
+        assertTrue(settings.getFloatingBallOpacity() >= 0.01f)
     }
 
     private class InMemorySharedPreferences : SharedPreferences {

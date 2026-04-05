@@ -294,9 +294,7 @@ fun MainScreen(
                 onResetApplication = {
                     recordsLoading = true
                     onResetApplication()
-                },
-                onRequestPermission = onRequestPermission,
-                onStartService = onStartService
+                }
             )
         }
     }

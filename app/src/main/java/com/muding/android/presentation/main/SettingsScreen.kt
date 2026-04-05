@@ -77,9 +77,7 @@ fun SettingsScreen(
     onPinHistoryRetentionChanged: (Int, Int) -> Unit,
     onProjectRecordRetentionChanged: (Int, Int) -> Unit,
     onClearWorkRecords: () -> Unit,
-    onResetApplication: () -> Unit,
-    onRequestPermission: () -> Unit,
-    onStartService: () -> Unit
+    onResetApplication: () -> Unit
 ) {
     when (selectedSection) {
         null -> SettingsOverviewScreen(
@@ -93,7 +91,6 @@ fun SettingsScreen(
 
         SettingsSection.CAPTURE_AND_FLOATING -> CaptureAndFloatingSettingsSection(
             modifier = modifier,
-            permissionGranted = permissionGranted,
             selectedAction = selectedAction,
             floatingBallSizeDp = floatingBallSizeDp,
             floatingBallOpacity = floatingBallOpacity,
@@ -101,9 +98,7 @@ fun SettingsScreen(
             onActionChanged = onActionChanged,
             onFloatingBallSizeChanged = onFloatingBallSizeChanged,
             onFloatingBallOpacityChanged = onFloatingBallOpacityChanged,
-            onFloatingBallThemeChanged = onFloatingBallThemeChanged,
-            onRequestPermission = onRequestPermission,
-            onStartService = onStartService
+            onFloatingBallThemeChanged = onFloatingBallThemeChanged
         )
 
         SettingsSection.PIN_AND_INTERACTION -> PinAndInteractionSettingsSection(
@@ -206,7 +201,6 @@ private fun SettingsOverviewScreen(
 @Composable
 private fun CaptureAndFloatingSettingsSection(
     modifier: Modifier = Modifier,
-    permissionGranted: Boolean,
     selectedAction: CaptureResultAction,
     floatingBallSizeDp: Int,
     floatingBallOpacity: Float,
@@ -214,9 +208,7 @@ private fun CaptureAndFloatingSettingsSection(
     onActionChanged: (CaptureResultAction) -> Unit,
     onFloatingBallSizeChanged: (Int) -> Unit,
     onFloatingBallOpacityChanged: (Float) -> Unit,
-    onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
-    onRequestPermission: () -> Unit,
-    onStartService: () -> Unit
+    onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit
 ) {
     val tokens = rememberMainUiTokens()
     LazyColumn(
@@ -249,52 +241,55 @@ private fun CaptureAndFloatingSettingsSection(
         }
 
         item {
-            SettingGroup(title = "运行状态") {
-                InlineValueRow(
-                    label = "悬浮窗权限",
-                    value = if (permissionGranted) "已开启" else "未授权"
+            var appearanceDraft by remember(floatingBallSizeDp, floatingBallOpacity) {
+                mutableStateOf(
+                    FloatingBallAppearanceDraft.fromCommitted(
+                        sizeDp = floatingBallSizeDp,
+                        opacity = floatingBallOpacity
+                    )
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (!permissionGranted) {
-                        Button(
-                            onClick = onRequestPermission,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("去授权")
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = onStartService,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (permissionGranted) "刷新悬浮球" else "稍后重试")
-                    }
-                }
             }
-        }
 
-        item {
             SettingGroup(title = "悬浮球外观") {
                 FloatingBallAppearancePreview(
-                    sizeDp = floatingBallSizeDp,
-                    opacity = floatingBallOpacity,
+                    sizeDp = appearanceDraft.previewSizeDp,
+                    opacity = appearanceDraft.previewOpacity,
                     theme = floatingBallTheme
-                )
-                NumberSettingRow(
-                    title = "大小",
-                    value = floatingBallSizeDp,
-                    onDecrease = { onFloatingBallSizeChanged((floatingBallSizeDp - 2).coerceAtLeast(44)) },
-                    onIncrease = { onFloatingBallSizeChanged((floatingBallSizeDp + 2).coerceAtMost(96)) }
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "透明度（${(floatingBallOpacity * 100).toInt()}%）",
+                        text = "大小（${appearanceDraft.sizeProgress}/100）",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Slider(
-                        value = floatingBallOpacity,
-                        onValueChange = onFloatingBallOpacityChanged,
-                        valueRange = 0.4f..1f
+                        value = appearanceDraft.sizeProgress.toFloat(),
+                        onValueChange = { progress ->
+                            appearanceDraft = appearanceDraft.updateSizeProgress(progress.roundToInt())
+                        },
+                        onValueChangeFinished = {
+                            appearanceDraft.sizeCommitOrNull(floatingBallSizeDp)
+                                ?.let(onFloatingBallSizeChanged)
+                        },
+                        valueRange = 0f..100f,
+                        steps = 99
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "透明度（${appearanceDraft.opacityPercent}%）",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = appearanceDraft.opacityPercent.toFloat(),
+                        onValueChange = { percent ->
+                            appearanceDraft = appearanceDraft.updateOpacityPercent(percent.roundToInt())
+                        },
+                        onValueChangeFinished = {
+                            appearanceDraft.opacityCommitOrNull(floatingBallOpacity)
+                                ?.let(onFloatingBallOpacityChanged)
+                        },
+                        valueRange = 1f..100f,
+                        steps = 98
                     )
                 }
                 CaptureOptionRow(

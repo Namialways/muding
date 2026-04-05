@@ -130,19 +130,31 @@ class CaptureFlowSettings private constructor(
     }
 
     fun getFloatingBallSizeDp(): Int {
-        return prefs.getInt(KEY_FLOATING_BALL_SIZE_DP, 46).coerceIn(44, 96)
+        return prefs.getInt(KEY_FLOATING_BALL_SIZE_DP, 46).coerceIn(
+            FLOATING_BALL_MIN_SIZE_DP,
+            FLOATING_BALL_MAX_SIZE_DP
+        )
     }
 
     fun setFloatingBallSizeDp(sizeDp: Int) {
-        prefs.edit().putInt(KEY_FLOATING_BALL_SIZE_DP, sizeDp.coerceIn(44, 96)).apply()
+        prefs.edit().putInt(
+            KEY_FLOATING_BALL_SIZE_DP,
+            sizeDp.coerceIn(FLOATING_BALL_MIN_SIZE_DP, FLOATING_BALL_MAX_SIZE_DP)
+        ).apply()
     }
 
     fun getFloatingBallOpacity(): Float {
-        return prefs.getFloat(KEY_FLOATING_BALL_OPACITY, 0.92f).coerceIn(0.4f, 1f)
+        return prefs.getFloat(KEY_FLOATING_BALL_OPACITY, 0.92f).coerceIn(
+            FLOATING_BALL_MIN_OPACITY,
+            FLOATING_BALL_MAX_OPACITY
+        )
     }
 
     fun setFloatingBallOpacity(opacity: Float) {
-        prefs.edit().putFloat(KEY_FLOATING_BALL_OPACITY, opacity.coerceIn(0.4f, 1f)).apply()
+        prefs.edit().putFloat(
+            KEY_FLOATING_BALL_OPACITY,
+            opacity.coerceIn(FLOATING_BALL_MIN_OPACITY, FLOATING_BALL_MAX_OPACITY)
+        ).apply()
     }
 
     fun getFloatingBallTheme(): FloatingBallTheme {
