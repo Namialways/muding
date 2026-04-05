@@ -58,4 +58,22 @@ class EditorColorCollectionsTest {
 
     assertEquals(listOf(red, green, yellow), collections.quickAccessColors(limit = 3))
   }
+
+  @Test
+  fun `constructor caps and deduplicates favorites`() {
+    val collections = EditorColorCollections(
+      favorites = listOf(red, red, green, blue, yellow)
+    )
+
+    assertEquals(listOf(green, blue, yellow), collections.favorites)
+  }
+
+  @Test
+  fun `constructor caps and deduplicates recents`() {
+    val collections = EditorColorCollections(
+      recents = listOf(yellow, red, yellow, green, blue)
+    )
+
+    assertEquals(listOf(yellow, red, green), collections.recents)
+  }
 }

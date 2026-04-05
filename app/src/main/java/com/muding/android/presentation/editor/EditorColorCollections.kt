@@ -4,8 +4,8 @@ class EditorColorCollections(
   favorites: List<Int> = emptyList(),
   recents: List<Int> = emptyList()
 ) {
-  val favorites: List<Int> = dedupOrdered(favorites)
-  val recents: List<Int> = dedupOrdered(recents)
+  val favorites: List<Int> = normalizeFavorites(favorites)
+  val recents: List<Int> = normalizeRecents(recents)
 
   fun toggleFavorite(color: Int): EditorColorCollections {
     val updatedFavorites = if (favorites.contains(color)) {
@@ -52,13 +52,28 @@ class EditorColorCollections(
     private const val MAX_RECENTS = 3
     private const val MAX_QUICK_ACCESS = 3
 
-    private fun dedupOrdered(input: List<Int>): List<Int> {
+    private fun normalizeFavorites(input: List<Int>): List<Int> {
+      val seen = LinkedHashSet<Int>()
+      val ordered = mutableListOf<Int>()
+
+      for (color in input.asReversed()) {
+        if (seen.add(color)) {
+          ordered += color
+          if (ordered.size == MAX_FAVORITES) break
+        }
+      }
+
+      return ordered.asReversed()
+    }
+
+    private fun normalizeRecents(input: List<Int>): List<Int> {
       val seen = LinkedHashSet<Int>()
       val ordered = mutableListOf<Int>()
 
       for (color in input) {
         if (seen.add(color)) {
           ordered += color
+          if (ordered.size == MAX_RECENTS) break
         }
       }
 
