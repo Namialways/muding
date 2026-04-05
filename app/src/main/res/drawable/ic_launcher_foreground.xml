@@ -3,23 +3,37 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-  <path
-      android:fillColor="@color/white"
-      android:pathData="M38,30H70C77.73,30 84,36.27 84,44V64C84,71.73 77.73,78 70,78H38C30.27,78 24,71.73 24,64V44C24,36.27 30.27,30 38,30Z"/>
-  <path
-      android:fillColor="@color/ic_launcher_background"
-      android:pathData="M40,38H68C72.42,38 76,41.58 76,46V54C76,58.42 72.42,62 68,62H40C35.58,62 32,58.42 32,54V46C32,41.58 35.58,38 40,38Z"/>
-  <path
-      android:fillColor="@color/ic_launcher_accent"
-      android:pathData="M67,23a8,8 0,1 1,0 16a8,8 0,1 1,0 -16Z"/>
-  <path
-      android:fillColor="@color/ic_launcher_accent"
-      android:pathData="M61.7,38.3l6,6l-8.7,12.5l-6,-6Z"/>
-  <path
-      android:fillColor="@color/ic_launcher_accent"
-      android:pathData="M56.2,54.1l4.3,4.3l-13.3,11.1Z"/>
-  <path
-      android:fillColor="@color/white"
-      android:fillAlpha="0.96"
-      android:pathData="M69.5,26.8a2.2,2.2 0,1 1,0 4.4a2.2,2.2 0,1 1,0 -4.4Z"/>
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.94"
+        android:scaleY="0.94">
+        <group
+            android:pivotX="54"
+            android:pivotY="54"
+            android:rotation="-5"
+            android:translateX="5"
+            android:translateY="4">
+            <path
+                android:fillColor="@color/ic_launcher_shadow"
+                android:pathData="M33,25H71C79.28,25 86,31.72 86,40V70C86,78.28 79.28,85 71,85H37C28.72,85 22,78.28 22,70V40C22,31.72 28.72,25 37,25Z"/>
+        </group>
+        <group
+            android:pivotX="54"
+            android:pivotY="54"
+            android:rotation="-5">
+            <path
+                android:fillColor="@color/ic_launcher_tile"
+                android:pathData="M31,23H69C77.28,23 84,29.72 84,38V68C84,76.28 77.28,83 69,83H35C26.72,83 20,76.28 20,68V38C20,29.72 26.72,23 35,23Z"/>
+            <path
+                android:fillColor="@color/ic_launcher_line_primary"
+                android:pathData="M37,39H68C70.76,39 73,41.24 73,44V45C73,47.76 70.76,50 68,50H37C34.24,50 32,47.76 32,45V44C32,41.24 34.24,39 37,39Z"/>
+            <path
+                android:fillColor="@color/ic_launcher_line_secondary"
+                android:pathData="M37,55H57C59.76,55 62,57.24 62,60V61C62,63.76 59.76,66 57,66H37C34.24,66 32,63.76 32,61V60C32,57.24 34.24,55 37,55Z"/>
+        </group>
+        <path
+            android:fillColor="@color/ic_launcher_dot"
+            android:pathData="M72,67a11,11 0,1 1,0 22a11,11 0,1 1,0 -22Z"/>
+    </group>
 </vector>

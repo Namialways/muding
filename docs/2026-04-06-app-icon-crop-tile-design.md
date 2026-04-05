@@ -1,7 +1,7 @@
-# App Icon Design: Crop Tile
+# App Icon Design: Reference Note Tile
 
 Date: 2026-04-06
-Status: Approved for implementation planning
+Status: Implemented
 
 ## Goal
 
@@ -26,24 +26,32 @@ The icon should avoid these impressions:
 
 ## Chosen Direction
 
-The selected direction is `Crop Tile`.
+The selected direction is `Reference Note Tile`.
 
-This concept uses a rounded card or tile as the primary shape, then removes one corner to create a crop-cut gesture. Two restrained guide lines reinforce the idea of cropping without making the icon feel busy or technical.
+This direction follows the final user-provided visual reference directly instead of the earlier crop-bracket explorations.
 
-This direction was chosen because it balances product meaning and visual restraint better than the more abstract concepts explored earlier.
+The icon uses:
+
+- a light silver-gray launcher field
+- a warm tilted note card
+- two rounded text-like bars
+- a dark circular action marker
+- a soft offset shadow
+
+This direction was chosen because it reads more like a polished application icon and less like a raw editing glyph.
 
 ## Visual Structure
 
 The icon is composed of three layers:
 
 1. Background field
-   A dark, clean adaptive-icon background that gives the icon a stable, premium base.
+   A soft silver-gray field with a subtle tonal shift so the icon feels bright and premium on the launcher.
 
-2. Main tile
-   A soft warm-light rounded card that reads as a screenshot, canvas, or pinned visual panel.
+2. Main note card
+   A warm rounded card, slightly rotated, that reads as a pinned or editable visual panel.
 
-3. Crop cue
-   A cut-out corner plus two guide lines that indicate editing, trimming, or framing.
+3. Content and marker
+   Two rounded bars suggest content or annotation, and a dark circular marker anchors the lower-right corner.
 
 The silhouette should remain simple enough to survive launcher scaling and masked adaptive icon shapes.
 
@@ -53,6 +61,8 @@ The silhouette should remain simple enough to survive launcher scaling and maske
 - Low shape count
 - No tiny decorative details
 - No literal camera body
+- No heavy dark slab around a small center symbol
+- No bracket-only composition
 - No hard pure-black versus pure-white slab contrast
 - No gradients inside the symbol unless they are extremely subtle
 
@@ -60,29 +70,32 @@ The overall look should feel calm, sharp, and intentional rather than flashy.
 
 ## Color Direction
 
-The palette should move away from the current orange accent.
+The palette should move away from the current orange accent and from the dark bracket-heavy look of the previous attempts.
 
 Use:
 
-- Deep graphite or charcoal for the background
-- Warm off-white for the main tile
-- A low-saturation blue-gray as the accent for crop guides
+- Mist silver and pale blue-gray for the adaptive icon background
+- Warm cream for the main card
+- Deep graphite for the primary line and circular marker
+- Medium warm gray for the secondary line
+- A soft blue-gray shadow under the card
 
-The accent color should support recognition without turning the icon into a bright consumer-app badge.
+The palette should look calm and mature at launcher size rather than dramatic in isolation.
 
 ## Adaptive Icon Breakdown
 
 ### Foreground
 
-The foreground should contain the `Crop Tile` symbol:
+The foreground should contain the `Reference Note Tile` symbol:
 
-- rounded tile
-- corner cut
-- crop guide lines
+- tilted rounded note card
+- two rounded content lines
+- lower-right circular marker
+- subtle card shadow
 
 ### Background
 
-The background should be a simple deep graphite fill, optionally with a very soft tonal shift if needed for depth.
+The background should be a light silver-gray field with a subtle gradient. The icon should feel brighter and more app-like on the launcher than the earlier dark-background attempt.
 
 The icon must remain strong in both circular and rounded-square masks.
 
@@ -96,7 +109,7 @@ The monochrome variant should preserve:
 - the cut corner
 - the crop-guide reading
 
-It should simplify tonal relationships but keep the icon legible when flattened into a single-color system-driven theme.
+It should simplify tonal relationships but keep the note-card silhouette, two-line reading, and circular marker legible when flattened into a single-color system-driven theme.
 
 ## Implementation Notes
 
@@ -114,8 +127,9 @@ The implementation should prefer vector assets so the launcher icon remains cris
 
 The redesign is successful if:
 
-- the icon feels noticeably more refined than the current orange camera-like mark
-- the icon still suggests screenshot, cropping, or editable visual content
+- the icon feels noticeably more refined than the old orange camera-like mark
+- the icon suggests editable content, annotation, or pinned visual material
+- the icon no longer feels visually hollow or overly dark on the launcher
 - the symbol remains understandable at launcher size
 - the monochrome version remains recognizable
 - the icon does not feel generic, playful, or over-engineered

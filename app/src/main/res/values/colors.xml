@@ -2,8 +2,15 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="ic_launcher_background">#FF6B3D</color>
-    <color name="ic_launcher_accent">#143A52</color>
+    <color name="ic_launcher_background_highlight">#E3E7EB</color>
+    <color name="ic_launcher_background">#D7DEE5</color>
+    <color name="ic_launcher_background_edge">#C7D0D9</color>
+    <color name="ic_launcher_tile">#ECE4D8</color>
+    <color name="ic_launcher_line_primary">#323B45</color>
+    <color name="ic_launcher_line_secondary">#6E737A</color>
+    <color name="ic_launcher_dot">#323B45</color>
+    <color name="ic_launcher_shadow">#8F99A5</color>
+    <color name="ic_launcher_accent">#323B45</color>
     
     <!-- Primary colors -->
     <color name="primary_light">#6750A4</color>
