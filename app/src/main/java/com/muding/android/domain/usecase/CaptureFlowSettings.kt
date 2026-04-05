@@ -1,6 +1,7 @@
 package com.muding.android.domain.usecase
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.muding.android.data.settings.CloudTranslationProvider
 import java.util.Locale
 
@@ -26,12 +27,16 @@ enum class FloatingBallTheme(val value: String) {
     EMERALD("emerald")
 }
 
-class CaptureFlowSettings(context: Context) {
+class CaptureFlowSettings private constructor(
+    private val prefs: SharedPreferences
+) {
 
-    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    constructor(context: Context) : this(
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    )
 
     fun getResultAction(): CaptureResultAction {
-        return when (prefs.getString(KEY_RESULT_ACTION, CaptureResultAction.OPEN_EDITOR.value)) {
+        return when (prefs.getString(KEY_RESULT_ACTION, CaptureResultAction.PIN_DIRECTLY.value)) {
             CaptureResultAction.PIN_DIRECTLY.value -> CaptureResultAction.PIN_DIRECTLY
             else -> CaptureResultAction.OPEN_EDITOR
         }
@@ -125,7 +130,7 @@ class CaptureFlowSettings(context: Context) {
     }
 
     fun getFloatingBallSizeDp(): Int {
-        return prefs.getInt(KEY_FLOATING_BALL_SIZE_DP, 60).coerceIn(44, 96)
+        return prefs.getInt(KEY_FLOATING_BALL_SIZE_DP, 46).coerceIn(44, 96)
     }
 
     fun setFloatingBallSizeDp(sizeDp: Int) {
@@ -246,6 +251,10 @@ class CaptureFlowSettings(context: Context) {
     }
 
     companion object {
+        internal fun forPreferences(prefs: SharedPreferences): CaptureFlowSettings {
+            return CaptureFlowSettings(prefs)
+        }
+
         private const val PREFS_NAME = "muding_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"
         private const val KEY_FAVORITE_EDITOR_COLORS = "favorite_editor_colors"
