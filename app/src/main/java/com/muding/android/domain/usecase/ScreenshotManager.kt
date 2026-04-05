@@ -11,9 +11,11 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.WindowManager
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -26,15 +28,34 @@ class ScreenshotManager(private val context: Context) {
 
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
+    private var captureThread: HandlerThread? = null
+    private var captureHandler: Handler? = null
 
     private var captureWidth: Int = 0
     private var captureHeight: Int = 0
     private var captureDensity: Int = 0
 
+    private val stateLock = Any()
+    private var pendingContinuation: CancellableContinuation<Bitmap>? = null
+
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val mediaProjectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val captureRequestController = ScreenshotCaptureRequestController(
+        scheduler = ScreenshotCaptureRequestController.Scheduler { delayMs, action ->
+            val handler = synchronized(stateLock) { captureHandler }
+                ?: throw IllegalStateException("Capture handler not initialized")
+            val runnable = Runnable(action)
+            handler.postDelayed(runnable, delayMs)
+            ScreenshotCaptureRequestController.Cancellable {
+                handler.removeCallbacks(runnable)
+            }
+        }
+    )
+    private val imageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
+        handleImageAvailable(reader)
+    }
 
     fun createScreenCaptureIntent(): Intent = mediaProjectionManager.createScreenCaptureIntent()
 
@@ -67,62 +88,47 @@ class ScreenshotManager(private val context: Context) {
         dropFirstFrame: Boolean = false,
         timeoutMs: Long = 2500
     ): Bitmap = suspendCancellableCoroutine { continuation ->
-        val reader = imageReader
-        if (!hasActiveProjection() || reader == null || captureWidth <= 0 || captureHeight <= 0) {
+        val handlerReady = synchronized(stateLock) { captureHandler != null }
+        if (!hasActiveProjection() || imageReader == null || !handlerReady || captureWidth <= 0 || captureHeight <= 0) {
             continuation.resumeWithException(IllegalStateException("Capture pipeline is not ready"))
             return@suspendCancellableCoroutine
         }
 
-        fun failOnce(message: String, cause: Throwable? = null) {
-            if (!continuation.isActive) return
-            if (cause != null) continuation.resumeWithException(Exception(message, cause))
-            else continuation.resumeWithException(Exception(message))
-        }
-
-        val timeoutAt = System.currentTimeMillis() + timeoutMs.coerceAtLeast(500)
-        var dropped = false
-
-        val pollRunnable = object : Runnable {
-            override fun run() {
-                if (!continuation.isActive) return
-
-                var image: Image? = null
-                try {
-                    image = reader.acquireLatestImage()
-                    if (image != null) {
-                        if (dropFirstFrame && !dropped) {
-                            dropped = true
-                            image.close()
-                            image = null
-                        } else {
-                            val bitmap = imageToBitmap(image)
-                            continuation.resume(bitmap)
-                            return
-                        }
-                    }
-                } catch (e: Exception) {
-                    failOnce("Failed to capture image", e)
-                    return
-                } finally {
-                    try {
-                        image?.close()
-                    } catch (_: Exception) {
-                    }
-                }
-
-                if (System.currentTimeMillis() >= timeoutAt) {
-                    failOnce("Failed to capture image (timeout)")
-                    return
-                }
-
-                mainHandler.postDelayed(this, 33)
+        val registered = synchronized(stateLock) {
+            if (pendingContinuation != null) {
+                false
+            } else {
+                pendingContinuation = continuation
+                true
             }
         }
+        if (!registered) {
+            continuation.resumeWithException(IllegalStateException("Capture already in progress"))
+            return@suspendCancellableCoroutine
+        }
 
-        mainHandler.postDelayed(pollRunnable, startDelayMs.coerceAtLeast(0))
+        val started = try {
+            captureRequestController.startCapture(
+                startDelayMs = startDelayMs.coerceAtLeast(0L),
+                timeoutMs = timeoutMs.coerceAtLeast(500L),
+                dropFirstFrame = dropFirstFrame,
+                onReady = { armImageListener() },
+                onTimeout = { failPendingCapture("Failed to capture image (timeout)") }
+            )
+        } catch (e: Exception) {
+            clearPendingContinuation()
+            continuation.resumeWithException(Exception("Failed to prepare capture", e))
+            return@suspendCancellableCoroutine
+        }
+
+        if (!started) {
+            clearPendingContinuation()
+            continuation.resumeWithException(IllegalStateException("Capture already in progress"))
+            return@suspendCancellableCoroutine
+        }
 
         continuation.invokeOnCancellation {
-            mainHandler.removeCallbacks(pollRunnable)
+            cancelPendingCapture()
         }
     }
 
@@ -138,6 +144,7 @@ class ScreenshotManager(private val context: Context) {
         captureHeight = metrics.heightPixels
         captureDensity = metrics.densityDpi
 
+        ensureCaptureThread()
         imageReader = ImageReader.newInstance(captureWidth, captureHeight, PixelFormat.RGBA_8888, 3)
         val reader = imageReader ?: throw IllegalStateException("ImageReader init failed")
 
@@ -158,23 +165,141 @@ class ScreenshotManager(private val context: Context) {
         }
     }
 
+    private fun ensureCaptureThread() {
+        if (synchronized(stateLock) { captureHandler != null }) {
+            return
+        }
+        val thread = HandlerThread("MudingScreenCapture").apply { start() }
+        val handler = Handler(thread.looper)
+        synchronized(stateLock) {
+            captureThread = thread
+            captureHandler = handler
+        }
+    }
+
+    private fun armImageListener() {
+        val handler = synchronized(stateLock) { captureHandler }
+        val reader = imageReader
+        if (!hasActiveProjection() || handler == null || reader == null) {
+            failPendingCapture("Capture pipeline is not ready")
+            return
+        }
+        handler.post {
+            if (!hasActiveProjection()) {
+                failPendingCapture("Capture pipeline is not ready")
+                return@post
+            }
+            val latestReader = imageReader
+            if (latestReader == null) {
+                failPendingCapture("Capture pipeline is not ready")
+                return@post
+            }
+            clearPendingImages(latestReader)
+            try {
+                latestReader.setOnImageAvailableListener(imageAvailableListener, handler)
+            } catch (e: Exception) {
+                failPendingCapture("Failed to capture image", e)
+            }
+        }
+    }
+
+    private fun handleImageAvailable(reader: ImageReader) {
+        var image: Image? = null
+        try {
+            image = reader.acquireLatestImage() ?: return
+            when (captureRequestController.onFrameAvailable()) {
+                ScreenshotCaptureRequestController.FrameDecision.IGNORE -> return
+                ScreenshotCaptureRequestController.FrameDecision.DROP -> return
+                ScreenshotCaptureRequestController.FrameDecision.CONSUME -> {
+                    val bitmap = imageToBitmap(image)
+                    captureRequestController.completeCapture()
+                    clearImageListener()
+                    completePendingCapture(bitmap)
+                }
+            }
+        } catch (e: Exception) {
+            captureRequestController.failCapture()
+            clearImageListener()
+            failPendingCapture("Failed to capture image", e)
+        } finally {
+            try {
+                image?.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun clearPendingImages(reader: ImageReader) {
+        while (true) {
+            val staleImage = try {
+                reader.acquireLatestImage()
+            } catch (_: Exception) {
+                null
+            } ?: break
+            try {
+                staleImage.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun imageToBitmap(image: Image): Bitmap {
+        val width = captureWidth
+        val height = captureHeight
+        require(width > 0 && height > 0) { "Capture size is invalid" }
+
         val planes = image.planes
         val buffer = planes[0].buffer
         val pixelStride = planes[0].pixelStride
         val rowStride = planes[0].rowStride
-        val rowPadding = rowStride - pixelStride * captureWidth
+        val rowPadding = rowStride - pixelStride * width
 
         val tmpBitmap = Bitmap.createBitmap(
-            captureWidth + rowPadding / pixelStride,
-            captureHeight,
+            width + rowPadding / pixelStride,
+            height,
             Bitmap.Config.ARGB_8888
         )
         tmpBitmap.copyPixelsFromBuffer(buffer)
 
-        val cropped = Bitmap.createBitmap(tmpBitmap, 0, 0, captureWidth, captureHeight)
+        val cropped = Bitmap.createBitmap(tmpBitmap, 0, 0, width, height)
         tmpBitmap.recycle()
         return cropped
+    }
+
+    private fun completePendingCapture(bitmap: Bitmap) {
+        val continuation = clearPendingContinuation()
+        if (continuation != null && continuation.isActive) {
+            continuation.resume(bitmap)
+        } else {
+            bitmap.recycle()
+        }
+    }
+
+    private fun failPendingCapture(message: String, cause: Throwable? = null) {
+        captureRequestController.clear()
+        clearImageListener()
+        val continuation = clearPendingContinuation()
+        if (continuation != null && continuation.isActive) {
+            if (cause != null) {
+                continuation.resumeWithException(Exception(message, cause))
+            } else {
+                continuation.resumeWithException(Exception(message))
+            }
+        }
+    }
+
+    private fun cancelPendingCapture() {
+        captureRequestController.clear()
+        clearImageListener()
+        clearPendingContinuation()
+    }
+
+    private fun clearPendingContinuation(): CancellableContinuation<Bitmap>? {
+        synchronized(stateLock) {
+            val continuation = pendingContinuation
+            pendingContinuation = null
+            return continuation
+        }
     }
 
     private fun clearImageListener() {
@@ -185,7 +310,7 @@ class ScreenshotManager(private val context: Context) {
     }
 
     private fun releaseCapturePipeline() {
-        clearImageListener()
+        failPendingCapture("Capture pipeline released")
 
         try {
             virtualDisplay?.release()
@@ -199,9 +324,30 @@ class ScreenshotManager(private val context: Context) {
         }
         imageReader = null
 
+        releaseCaptureThread()
+
         captureWidth = 0
         captureHeight = 0
         captureDensity = 0
+    }
+
+    private fun releaseCaptureThread() {
+        val thread: HandlerThread?
+        val handler: Handler?
+        synchronized(stateLock) {
+            thread = captureThread
+            handler = captureHandler
+            captureThread = null
+            captureHandler = null
+        }
+        try {
+            handler?.removeCallbacksAndMessages(null)
+        } catch (_: Exception) {
+        }
+        try {
+            thread?.quitSafely()
+        } catch (_: Exception) {
+        }
     }
 
     fun release() {
