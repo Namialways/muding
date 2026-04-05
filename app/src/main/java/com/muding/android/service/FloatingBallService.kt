@@ -159,6 +159,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val floatingMenuExpanded = mutableStateOf(false)
     private val floatingBallX = mutableIntStateOf(100)
     private val floatingBallY = mutableIntStateOf(100)
+    private val captureLaunchController = FloatingBallCaptureLaunchController()
     private var pendingCaptureMode: CaptureEntryMode = CaptureEntryMode.PIN
     private var projectionForegroundActive: Boolean = false
 
@@ -201,6 +202,20 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 val captureAfterPermission =
                     intent.getBooleanExtra(EXTRA_CAPTURE_AFTER_PERMISSION, false)
                 if (resultCode == Activity.RESULT_OK && resultData != null) {
+                    val captureDecision = if (captureAfterPermission) {
+                        when (val decision = captureLaunchController.onPermissionGranted()) {
+                            is FloatingBallCaptureLaunchController.Decision.StartCapture -> decision
+                            else -> FloatingBallCaptureLaunchController.Decision.StartCapture(
+                                startDelayMs = 0L,
+                                dropFirstFrame = true
+                            )
+                        }
+                    } else {
+                        FloatingBallCaptureLaunchController.Decision.StartCapture(
+                            startDelayMs = 0L,
+                            dropFirstFrame = false
+                        )
+                    }
                     floatingView?.visibility = View.GONE
                     createNotificationChannel()
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -216,13 +231,20 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     try {
                         screenshotManager.initMediaProjection(resultCode, resultData)
                         projectionSessionTimeoutController.startSession()
-                        captureAndShowCropOverlay(captureAfterPermission = captureAfterPermission)
+                        captureAndShowCropOverlay(
+                            startDelayMs = captureDecision.startDelayMs,
+                            dropFirstFrame = captureDecision.dropFirstFrame
+                        )
                     } catch (e: Exception) {
                         e.printStackTrace()
+                        pendingCaptureMode = CaptureEntryMode.PIN
+                        captureLaunchController.onCaptureFailed()
                         releaseProjectionSession()
                         restoreFloatingBall()
                     }
                 } else {
+                    pendingCaptureMode = CaptureEntryMode.PIN
+                    captureLaunchController.onPermissionDenied()
                     floatingView?.visibility = View.VISIBLE
                 }
             }
@@ -336,21 +358,28 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private fun handleScreenshot() {
         setFloatingMenuExpanded(false)
-        if (screenshotManager.hasActiveProjection()) {
-            projectionSessionTimeoutController.recordActivity()
-            floatingView?.visibility = View.GONE
-            captureAndShowCropOverlay()
-            return
-        }
+        when (val decision = captureLaunchController.requestCapture(screenshotManager.hasActiveProjection())) {
+            FloatingBallCaptureLaunchController.Decision.Ignore -> return
+            FloatingBallCaptureLaunchController.Decision.RequestPermission -> {
+                val intent = Intent(this, ScreenshotPermissionActivity::class.java).apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    )
+                }
+                startActivity(intent)
+            }
 
-        val intent = Intent(this, ScreenshotPermissionActivity::class.java).apply {
-            addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                    Intent.FLAG_ACTIVITY_NO_ANIMATION
-            )
+            is FloatingBallCaptureLaunchController.Decision.StartCapture -> {
+                projectionSessionTimeoutController.recordActivity()
+                floatingView?.visibility = View.GONE
+                captureAndShowCropOverlay(
+                    startDelayMs = decision.startDelayMs,
+                    dropFirstFrame = decision.dropFirstFrame
+                )
+            }
         }
-        startActivity(intent)
     }
 
     private fun startStandardScreenshot() {
@@ -411,17 +440,23 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         )
     }
 
-    private fun captureAndShowCropOverlay(captureAfterPermission: Boolean = false) {
+    private fun captureAndShowCropOverlay(
+        startDelayMs: Long,
+        dropFirstFrame: Boolean
+    ) {
         lifecycleScope.launch {
             try {
                 val bitmap = screenshotManager.captureScreen(
-                    startDelayMs = if (captureAfterPermission) FIRST_CAPTURE_AFTER_PERMISSION_DELAY_MS else 150L,
-                    dropFirstFrame = captureAfterPermission
+                    startDelayMs = startDelayMs,
+                    dropFirstFrame = dropFirstFrame
                 )
                 showCropOverlay(bitmap)
+                captureLaunchController.onCaptureUiShown()
                 projectionSessionTimeoutController.recordActivity()
             } catch (e: Exception) {
                 e.printStackTrace()
+                pendingCaptureMode = CaptureEntryMode.PIN
+                captureLaunchController.onCaptureFailed()
                 releaseProjectionSession()
                 restoreFloatingBall()
             }
@@ -945,7 +980,6 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
         const val EXTRA_CAPTURE_AFTER_PERMISSION = "extra_capture_after_permission"
-        private const val FIRST_CAPTURE_AFTER_PERMISSION_DELAY_MS = 360L
         private const val PROJECTION_IDLE_TIMEOUT_MS = 2 * 60 * 1000L
 
         fun createRestoreVisibilityIntent(context: Context): Intent {
