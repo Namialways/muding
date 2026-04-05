@@ -353,6 +353,10 @@ private fun PinAndInteractionSettingsSection(
         }
 
         item {
+            var cornerRadiusDraft by remember(defaultPinCornerRadiusDp) {
+                mutableStateOf(DeferredFloatSettingDraft.fromCommitted(defaultPinCornerRadiusDp))
+            }
+
             SettingGroup(title = "默认外观") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -367,12 +371,18 @@ private fun PinAndInteractionSettingsSection(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "圆角（${defaultPinCornerRadiusDp.roundToInt()}dp）",
+                        text = "圆角（${cornerRadiusDraft.previewValue.roundToInt()}dp）",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Slider(
-                        value = defaultPinCornerRadiusDp,
-                        onValueChange = onDefaultPinCornerRadiusChanged,
+                        value = cornerRadiusDraft.previewValue,
+                        onValueChange = {
+                            cornerRadiusDraft = cornerRadiusDraft.update(it)
+                        },
+                        onValueChangeFinished = {
+                            cornerRadiusDraft.commitOrNull(defaultPinCornerRadiusDp)
+                                ?.let(onDefaultPinCornerRadiusChanged)
+                        },
                         valueRange = 0f..48f
                     )
                 }
