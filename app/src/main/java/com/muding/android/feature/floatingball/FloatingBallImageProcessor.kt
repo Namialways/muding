@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 import kotlin.math.min
 
 class FloatingBallImageProcessor(
@@ -28,7 +29,8 @@ class FloatingBallImageProcessor(
             sourceWidth = sampledBitmap.width,
             sourceHeight = sampledBitmap.height,
             cacheDir = context.cacheDir,
-            existingFiles = outputDir.listFiles()?.toList().orEmpty()
+            existingFiles = outputDir.listFiles()?.toList().orEmpty(),
+            outputFileName = buildOutputFileName(UUID.randomUUID().toString())
         )
         if (plan is ProcessingPlan.RecoverableFailure) {
             sampledBitmap.recycle()
@@ -179,21 +181,22 @@ class FloatingBallImageProcessor(
 
     companion object {
         internal const val CACHE_SUBDIRECTORY = "floating_ball"
-        internal const val OUTPUT_FILE_NAME = "custom_image.png"
+        internal const val OUTPUT_FILE_PREFIX = "custom_image"
         internal const val TARGET_IMAGE_SIZE_PX = 256
 
         internal fun createProcessingPlan(
             sourceWidth: Int,
             sourceHeight: Int,
             cacheDir: File,
-            existingFiles: List<File> = emptyList()
+            existingFiles: List<File> = emptyList(),
+            outputFileName: String = buildOutputFileName("current")
         ): ProcessingPlan {
             if (sourceWidth <= 0 || sourceHeight <= 0) {
                 return ProcessingPlan.RecoverableFailure(FailureReason.INVALID_SOURCE_DIMENSIONS)
             }
             val cropSize = min(sourceWidth, sourceHeight)
             val outputDir = File(cacheDir, CACHE_SUBDIRECTORY)
-            val outputFile = File(outputDir, OUTPUT_FILE_NAME)
+            val outputFile = File(outputDir, outputFileName)
             return ProcessingPlan.Ready(
                 crop = SquareCropPlan(
                     cropLeft = (sourceWidth - cropSize) / 2,
@@ -206,6 +209,10 @@ class FloatingBallImageProcessor(
                     candidate.absoluteFile == outputFile.absoluteFile
                 }
             )
+        }
+
+        internal fun buildOutputFileName(token: String): String {
+            return "${OUTPUT_FILE_PREFIX}_${token}.png"
         }
     }
 }

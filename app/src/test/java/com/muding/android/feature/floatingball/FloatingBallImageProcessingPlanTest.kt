@@ -38,7 +38,8 @@ class FloatingBallImageProcessingPlanTest {
                 FloatingBallImageProcessor.createProcessingPlan(
                     sourceWidth = 720,
                     sourceHeight = 1280,
-                    cacheDir = cacheDir
+                    cacheDir = cacheDir,
+                    outputFileName = "custom_image_1.png"
                 )
             )
 
@@ -46,7 +47,7 @@ class FloatingBallImageProcessingPlanTest {
             assertEquals(
                 File(
                     File(cacheDir, FloatingBallImageProcessor.CACHE_SUBDIRECTORY),
-                    FloatingBallImageProcessor.OUTPUT_FILE_NAME
+                    "custom_image_1.png"
                 ).absolutePath,
                 ready.outputFile.absolutePath
             )
@@ -60,7 +61,7 @@ class FloatingBallImageProcessingPlanTest {
         val cacheDir = Files.createTempDirectory("floating-ball-plan").toFile()
         val outputDir = File(cacheDir, FloatingBallImageProcessor.CACHE_SUBDIRECTORY).apply { mkdirs() }
         val staleFile = File(outputDir, "previous_custom.png").apply { writeText("old") }
-        val currentFile = File(outputDir, FloatingBallImageProcessor.OUTPUT_FILE_NAME).apply { writeText("current") }
+        val currentFile = File(outputDir, "custom_image_100.png").apply { writeText("current") }
 
         try {
             val ready = requireReady(
@@ -68,12 +69,19 @@ class FloatingBallImageProcessingPlanTest {
                     sourceWidth = 640,
                     sourceHeight = 640,
                     cacheDir = cacheDir,
-                    existingFiles = listOf(staleFile, currentFile)
+                    existingFiles = listOf(staleFile, currentFile),
+                    outputFileName = "custom_image_200.png"
                 )
             )
 
-            assertEquals(currentFile.absolutePath, ready.outputFile.absolutePath)
-            assertEquals(listOf(staleFile.absolutePath), ready.staleFiles.map { it.absolutePath })
+            assertEquals(
+                File(outputDir, "custom_image_200.png").absolutePath,
+                ready.outputFile.absolutePath
+            )
+            assertEquals(
+                listOf(staleFile.absolutePath, currentFile.absolutePath).sorted(),
+                ready.staleFiles.map { it.absolutePath }.sorted()
+            )
         } finally {
             cacheDir.deleteRecursively()
         }
