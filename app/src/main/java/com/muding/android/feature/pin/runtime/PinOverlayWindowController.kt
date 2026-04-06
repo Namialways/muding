@@ -31,6 +31,7 @@ class PinOverlayWindowController(
     initialContentHeightPx: Int?,
     initialX: Int,
     initialY: Int,
+    private val onInteracted: () -> Unit,
     private val onFocusRequested: () -> Unit,
     private val onEditRequested: () -> Unit,
     private val onCloseRequested: () -> Unit
@@ -79,21 +80,27 @@ class PinOverlayWindowController(
         this.shadowEnabled = runtimeState.shadowEnabled
         this.cornerRadiusPx = runtimeState.cornerRadiusDp * density
         onFocusRequested = {
+            onInteracted()
             onFocusRequested()
         }
         onMoveWindow = { dx, dy ->
+            onInteracted()
             moveBy(dx, dy)
         }
         onScaleGesture = { scaleFactorX, scaleFactorY, focusX, focusY ->
+            onInteracted()
             applyScaleGesture(scaleFactorX, scaleFactorY, focusX, focusY)
         }
         onDragResize = { mode, dx, dy ->
+            onInteracted()
             applyDragResize(mode, dx, dy)
         }
         onLongPress = {
+            onInteracted()
             onEditRequested()
         }
         onDoubleTap = {
+            onInteracted()
             onCloseRequested()
         }
     }

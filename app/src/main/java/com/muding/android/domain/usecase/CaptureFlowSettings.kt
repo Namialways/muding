@@ -188,6 +188,38 @@ class CaptureFlowSettings private constructor(
         prefs.edit().putString(KEY_FLOATING_BALL_CUSTOM_IMAGE_URI, uri?.takeIf { it.isNotBlank() }).apply()
     }
 
+    fun hasSeenHomeOnboardingGuide(): Boolean {
+        return prefs.getBoolean(KEY_ONBOARDING_HOME_GUIDE_SEEN, false)
+    }
+
+    fun setHomeOnboardingGuideSeen(seen: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_HOME_GUIDE_SEEN, seen).apply()
+    }
+
+    fun hasSeenFloatingBallHint(): Boolean {
+        return prefs.getBoolean(KEY_ONBOARDING_FLOATING_BALL_HINT_SEEN, false)
+    }
+
+    fun setFloatingBallHintSeen(seen: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_FLOATING_BALL_HINT_SEEN, seen).apply()
+    }
+
+    fun hasSeenPinOverlayHint(): Boolean {
+        return prefs.getBoolean(KEY_ONBOARDING_PIN_OVERLAY_HINT_SEEN, false)
+    }
+
+    fun setPinOverlayHintSeen(seen: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_PIN_OVERLAY_HINT_SEEN, seen).apply()
+    }
+
+    fun hasSeenEditorHint(): Boolean {
+        return prefs.getBoolean(KEY_ONBOARDING_EDITOR_HINT_SEEN, false)
+    }
+
+    fun setEditorHintSeen(seen: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_EDITOR_HINT_SEEN, seen).apply()
+    }
+
     fun getLocalTranslationTargetLanguageTag(): String {
         return prefs.getString(KEY_LOCAL_TRANSLATION_TARGET_LANGUAGE, "en") ?: "en"
     }
@@ -303,6 +335,10 @@ class CaptureFlowSettings private constructor(
         private const val KEY_FLOATING_BALL_THEME = "floating_ball_theme"
         private const val KEY_FLOATING_BALL_APPEARANCE_MODE = "floating_ball_appearance_mode"
         private const val KEY_FLOATING_BALL_CUSTOM_IMAGE_URI = "floating_ball_custom_image_uri"
+        private const val KEY_ONBOARDING_HOME_GUIDE_SEEN = "onboarding_home_guide_seen"
+        private const val KEY_ONBOARDING_FLOATING_BALL_HINT_SEEN = "onboarding_floating_ball_hint_seen"
+        private const val KEY_ONBOARDING_PIN_OVERLAY_HINT_SEEN = "onboarding_pin_overlay_hint_seen"
+        private const val KEY_ONBOARDING_EDITOR_HINT_SEEN = "onboarding_editor_hint_seen"
         private const val KEY_LOCAL_TRANSLATION_TARGET_LANGUAGE = "local_translation_target_language"
         private const val KEY_LOCAL_TRANSLATION_WIFI_ONLY = "local_translation_wifi_only"
         private const val KEY_CLOUD_TRANSLATION_PROVIDER = "cloud_translation_provider"

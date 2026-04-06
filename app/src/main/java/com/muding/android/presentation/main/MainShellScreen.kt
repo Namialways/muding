@@ -28,11 +28,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.unit.dp
+import com.muding.android.data.settings.OnboardingGuideProgress
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinHistoryRecord
 import com.muding.android.domain.usecase.PinScaleMode
+import com.muding.android.feature.onboarding.OnboardingGuideState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,6 +54,7 @@ fun MainScreen(
     initialFloatingBallTheme: FloatingBallTheme,
     initialFloatingBallAppearanceMode: FloatingBallAppearanceMode,
     initialFloatingBallCustomImageUri: String?,
+    initialOnboardingGuideProgress: OnboardingGuideProgress,
     initialPinHistoryEnabled: Boolean,
     initialMaxPinHistoryCount: Int,
     initialPinHistoryRetainDays: Int,
@@ -66,6 +69,7 @@ fun MainScreen(
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
     onFloatingBallAppearanceCommitted: (FloatingBallAppearanceMode, String?) -> Unit,
     onChooseFloatingBallCustomImage: () -> Unit,
+    onHomeOnboardingGuideSeen: () -> Unit,
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
     onPinHistoryRetentionChanged: (Int, Int) -> Unit,
     onClearWorkRecords: () -> Unit,
@@ -98,6 +102,9 @@ fun MainScreen(
     }
     var floatingBallCustomImageUri by remember(initialFloatingBallCustomImageUri) {
         mutableStateOf(initialFloatingBallCustomImageUri)
+    }
+    var onboardingGuideState by remember(initialOnboardingGuideProgress) {
+        mutableStateOf(OnboardingGuideState.fromProgress(initialOnboardingGuideProgress))
     }
     var pinHistoryEnabled by remember { mutableStateOf(initialPinHistoryEnabled) }
     var maxPinHistoryCount by remember { mutableIntStateOf(initialMaxPinHistoryCount) }
@@ -231,6 +238,9 @@ fun MainScreen(
                 floatingBallTheme = floatingBallTheme,
                 floatingBallAppearanceMode = floatingBallAppearanceMode,
                 floatingBallSizeDp = floatingBallSizeDp,
+                showFirstRunGuide = onboardingGuideState.shouldShowHomeGuide(
+                    isOnHomeDestination = currentDestination == MainDestination.HOME
+                ),
                 onOpenGalleryPin = onOpenGalleryPin,
                 onOpenGalleryOcr = onOpenGalleryOcr,
                 onOpenClipboardTextPin = onOpenClipboardTextPin,
@@ -240,7 +250,11 @@ fun MainScreen(
                 },
                 onRequestPermission = onRequestPermission,
                 onStartService = onStartService,
-                onOpenSettings = { currentDestination = MainDestination.SETTINGS }
+                onOpenSettings = { currentDestination = MainDestination.SETTINGS },
+                onDismissFirstRunGuide = {
+                    onboardingGuideState = onboardingGuideState.markHomeGuideSeen()
+                    onHomeOnboardingGuideSeen()
+                }
             )
 
             MainDestination.RECORDS -> RecordsScreen(

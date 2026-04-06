@@ -105,11 +105,13 @@ fun AnnotationEditorScreenContent(
     toolPanelState: EditorToolPanelState,
     screenActions: EditorScreenActions,
     viewportState: EditorViewportState,
+    showEditorHint: Boolean,
     onClose: () -> Unit,
     onSave: () -> Unit,
     onPin: () -> Unit,
     onShare: () -> Unit,
     onRecrop: () -> Unit,
+    onDismissEditorHint: () -> Unit,
     onCanvasSizeChanged: (Size) -> Unit
 ) {
     Scaffold(
@@ -137,118 +139,172 @@ fun AnnotationEditorScreenContent(
             )
         }
     ) { paddingValues ->
-        val topInset by animateDpAsState(
-            targetValue = (paddingValues.calculateTopPadding() - 18.dp).coerceAtLeast(0.dp),
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "editorTopInset"
-        )
-        val bottomInset by animateDpAsState(
-            targetValue = (paddingValues.calculateBottomPadding() - 12.dp).coerceAtLeast(0.dp),
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "editorBottomInset"
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            val topInset by animateDpAsState(
+                targetValue = (paddingValues.calculateTopPadding() - 18.dp).coerceAtLeast(0.dp),
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "editorTopInset"
+            )
+            val bottomInset by animateDpAsState(
+                targetValue = (paddingValues.calculateBottomPadding() - 12.dp).coerceAtLeast(0.dp),
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "editorBottomInset"
+            )
 
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+                            )
                         )
                     )
-                )
-                .padding(top = topInset, bottom = bottomInset)
-        ) {
-            val imageAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height.toFloat()
-            val containerAspect = maxWidth.value / maxHeight.value
-            val density = LocalDensity.current
-            val imageModifier = if (containerAspect > imageAspect) {
-                Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(imageAspect)
-            } else {
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(imageAspect)
-            }
-            val contentWidthPx = with(density) {
-                if (containerAspect > imageAspect) maxHeight.toPx() * imageAspect else maxWidth.toPx()
-            }
-            val contentHeightPx = with(density) {
-                if (containerAspect > imageAspect) maxHeight.toPx() else maxWidth.toPx() / imageAspect
-            }
-            val canTransformCanvas = currentToolAllowsViewportTransform(tool = documentState.currentTool)
-
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .then(imageModifier),
-                shape = RoundedCornerShape(28.dp),
-                tonalElevation = 2.dp,
-                shadowElevation = 10.dp
+                    .padding(top = topInset, bottom = bottomInset)
             ) {
-                Box(
+                val imageAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height.toFloat()
+                val containerAspect = maxWidth.value / maxHeight.value
+                val density = LocalDensity.current
+                val imageModifier = if (containerAspect > imageAspect) {
+                    Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(imageAspect)
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(imageAspect)
+                }
+                val contentWidthPx = with(density) {
+                    if (containerAspect > imageAspect) maxHeight.toPx() * imageAspect else maxWidth.toPx()
+                }
+                val contentHeightPx = with(density) {
+                    if (containerAspect > imageAspect) maxHeight.toPx() else maxWidth.toPx() / imageAspect
+                }
+                val canTransformCanvas = currentToolAllowsViewportTransform(tool = documentState.currentTool)
+
+                Surface(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = viewportState.scale
-                            scaleY = viewportState.scale
-                            translationX = viewportState.offset.x
-                            translationY = viewportState.offset.y
-                        }
-                        .pointerInput(canTransformCanvas, contentWidthPx, contentHeightPx) {
-                            if (canTransformCanvas) {
-                                detectTransformGestures { centroid, pan, zoom, _ ->
-                                    val previousScale = viewportState.scale
-                                    val newScale = (previousScale * zoom).coerceIn(1f, 6f)
-                                    val pivot = Offset(contentWidthPx / 2f, contentHeightPx / 2f)
-                                    val focusCompensation = (centroid - pivot) * (previousScale - newScale)
-                                    val maxOffsetX = ((contentWidthPx * newScale) - contentWidthPx) / 2f
-                                    val maxOffsetY = ((contentHeightPx * newScale) - contentHeightPx) / 2f
-                                    viewportState.scale = newScale
-                                    viewportState.offset = Offset(
-                                        x = (viewportState.offset.x + pan.x + focusCompensation.x)
-                                            .coerceIn(-maxOffsetX, maxOffsetX),
-                                        y = (viewportState.offset.y + pan.y + focusCompensation.y)
-                                            .coerceIn(-maxOffsetY, maxOffsetY)
-                                    )
+                        .align(Alignment.Center)
+                        .then(imageModifier),
+                    shape = RoundedCornerShape(28.dp),
+                    tonalElevation = 2.dp,
+                    shadowElevation = 10.dp
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = viewportState.scale
+                                scaleY = viewportState.scale
+                                translationX = viewportState.offset.x
+                                translationY = viewportState.offset.y
+                            }
+                            .pointerInput(canTransformCanvas, contentWidthPx, contentHeightPx) {
+                                if (canTransformCanvas) {
+                                    detectTransformGestures { centroid, pan, zoom, _ ->
+                                        val previousScale = viewportState.scale
+                                        val newScale = (previousScale * zoom).coerceIn(1f, 6f)
+                                        val pivot = Offset(contentWidthPx / 2f, contentHeightPx / 2f)
+                                        val focusCompensation = (centroid - pivot) * (previousScale - newScale)
+                                        val maxOffsetX = ((contentWidthPx * newScale) - contentWidthPx) / 2f
+                                        val maxOffsetY = ((contentHeightPx * newScale) - contentHeightPx) / 2f
+                                        viewportState.scale = newScale
+                                        viewportState.offset = Offset(
+                                            x = (viewportState.offset.x + pan.x + focusCompensation.x)
+                                                .coerceIn(-maxOffsetX, maxOffsetX),
+                                            y = (viewportState.offset.y + pan.y + focusCompensation.y)
+                                                .coerceIn(-maxOffsetY, maxOffsetY)
+                                        )
+                                    }
                                 }
                             }
-                        }
-                ) {
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = stringResource(R.string.editor_canvas_description),
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    ) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = stringResource(R.string.editor_canvas_description),
+                            modifier = Modifier.fillMaxSize()
+                        )
 
-                    DrawingCanvas(
-                        paths = documentState.paths,
-                        currentTool = documentState.currentTool,
-                        currentColor = documentState.currentColor,
-                        strokeWidth = documentState.strokeWidth,
-                        eraserSize = documentState.eraserSize,
-                        eraserMode = documentState.eraserMode,
-                        textSize = documentState.textSize,
-                        textOutlineEnabled = documentState.textOutlineEnabled,
-                        shapeFilled = documentState.shapeFilled,
-                        selectedPathIndex = documentState.selectedPathIndex,
-                        onPathAdded = screenActions.onAddPath,
-                        onPathUpdated = screenActions.onUpdatePath,
-                        onPathReplaced = screenActions.onReplacePath,
-                        onPathRemoved = screenActions.onRemovePath,
-                        onPathSelectionChanged = screenActions.onSelectPath,
-                        onCanvasSizeChanged = onCanvasSizeChanged,
-                        onViewportResetRequested = { viewportState.reset() }
-                    )
+                        DrawingCanvas(
+                            paths = documentState.paths,
+                            currentTool = documentState.currentTool,
+                            currentColor = documentState.currentColor,
+                            strokeWidth = documentState.strokeWidth,
+                            eraserSize = documentState.eraserSize,
+                            eraserMode = documentState.eraserMode,
+                            textSize = documentState.textSize,
+                            textOutlineEnabled = documentState.textOutlineEnabled,
+                            shapeFilled = documentState.shapeFilled,
+                            selectedPathIndex = documentState.selectedPathIndex,
+                            onPathAdded = screenActions.onAddPath,
+                            onPathUpdated = screenActions.onUpdatePath,
+                            onPathReplaced = screenActions.onReplacePath,
+                            onPathRemoved = screenActions.onRemovePath,
+                            onPathSelectionChanged = screenActions.onSelectPath,
+                            onCanvasSizeChanged = onCanvasSizeChanged,
+                            onViewportResetRequested = { viewportState.reset() }
+                        )
+                    }
+                }
+            }
+
+            if (showEditorHint) {
+                EditorUsageHintCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                    onDismiss = onDismissEditorHint
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditorUsageHintCard(
+    modifier: Modifier = Modifier,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        tonalElevation = 8.dp,
+        shadowElevation = 16.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "编辑页提示",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "选中移动按钮后，才能拖动图形",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "什么都不选时，可以双指缩放贴图，双击恢复",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text("知道了")
                 }
             }
         }

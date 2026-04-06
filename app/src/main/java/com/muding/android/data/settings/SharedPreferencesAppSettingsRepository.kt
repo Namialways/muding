@@ -123,6 +123,31 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
         settings.setFloatingBallCustomImageUri(uri)
     }
 
+    override fun getOnboardingGuideProgress(): OnboardingGuideProgress {
+        return OnboardingGuideProgress(
+            hasSeenHomeGuide = settings.hasSeenHomeOnboardingGuide(),
+            hasSeenFloatingBallHint = settings.hasSeenFloatingBallHint(),
+            hasSeenPinOverlayHint = settings.hasSeenPinOverlayHint(),
+            hasSeenEditorHint = settings.hasSeenEditorHint()
+        )
+    }
+
+    override fun setHomeOnboardingGuideSeen(seen: Boolean) {
+        settings.setHomeOnboardingGuideSeen(seen)
+    }
+
+    override fun setFloatingBallHintSeen(seen: Boolean) {
+        settings.setFloatingBallHintSeen(seen)
+    }
+
+    override fun setPinOverlayHintSeen(seen: Boolean) {
+        settings.setPinOverlayHintSeen(seen)
+    }
+
+    override fun setEditorHintSeen(seen: Boolean) {
+        settings.setEditorHintSeen(seen)
+    }
+
     override fun getPinHistorySettings(): PinHistorySettings {
         return PinHistorySettings(
             enabled = settings.isPinHistoryEnabled(),

@@ -74,6 +74,11 @@ interface AppSettingsRepository {
     fun setFloatingBallTheme(theme: FloatingBallTheme)
     fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode)
     fun setFloatingBallCustomImageUri(uri: String?)
+    fun getOnboardingGuideProgress(): OnboardingGuideProgress
+    fun setHomeOnboardingGuideSeen(seen: Boolean)
+    fun setFloatingBallHintSeen(seen: Boolean)
+    fun setPinOverlayHintSeen(seen: Boolean)
+    fun setEditorHintSeen(seen: Boolean)
 
     fun getPinHistorySettings(): PinHistorySettings
     fun setPinHistoryEnabled(enabled: Boolean)

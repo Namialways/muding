@@ -11,7 +11,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Size
 import androidx.lifecycle.lifecycleScope
 import com.muding.android.R
@@ -25,6 +28,7 @@ import com.muding.android.data.settings.AppSettingsRepository
 import com.muding.android.domain.usecase.AnnotationRenderer
 import com.muding.android.domain.usecase.AnnotationSession
 import com.muding.android.domain.usecase.CaptureResultAction
+import com.muding.android.feature.onboarding.OnboardingGuideState
 import com.muding.android.feature.pin.creation.PinCreationCoordinator
 import com.muding.android.presentation.crop.ImageCropActivity
 import com.muding.android.presentation.theme.MudingTheme
@@ -46,6 +50,16 @@ class AnnotationEditorActivity : ComponentActivity() {
     private var capturedBitmap: Bitmap? = null
     private var editorCanvasSize: Size = Size.Zero
     private val annotationRenderer = AnnotationRenderer()
+    private var onboardingGuideState by mutableStateOf(
+        OnboardingGuideState.fromProgress(
+            com.muding.android.data.settings.OnboardingGuideProgress(
+                hasSeenHomeGuide = false,
+                hasSeenFloatingBallHint = false,
+                hasSeenPinOverlayHint = false,
+                hasSeenEditorHint = false
+            )
+        )
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +67,7 @@ class AnnotationEditorActivity : ComponentActivity() {
         imageExportRepository = AppGraph.imageExportRepository(this)
         cachedImageRepository = AppGraph.cachedImageRepository(this)
         settingsRepository = AppGraph.appSettingsRepository(this)
+        onboardingGuideState = OnboardingGuideState.fromProgress(settingsRepository.getOnboardingGuideProgress())
         annotationSessionRepository = AppGraph.annotationSessionRepository(this)
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
 
@@ -107,13 +122,22 @@ class AnnotationEditorActivity : ComponentActivity() {
             toolPanelState = toolPanelState,
             screenActions = screenActions,
             viewportState = viewportState,
+            showEditorHint = onboardingGuideState.shouldShowEditorHint(),
             onClose = { closeScreenshotFlow() },
             onSave = { saveImage(bitmap) },
             onPin = { pinImage(bitmap) },
             onShare = { shareImage(bitmap) },
             onRecrop = { recropImage(bitmap) },
+            onDismissEditorHint = { markEditorHintSeen() },
             onCanvasSizeChanged = { editorCanvasSize = it }
         )
+    }
+
+    private fun markEditorHintSeen() {
+        if (onboardingGuideState.shouldShowEditorHint()) {
+            onboardingGuideState = onboardingGuideState.markEditorHintSeen()
+            settingsRepository.setEditorHintSeen(true)
+        }
     }
 
     private fun saveImage(originalBitmap: Bitmap) {
@@ -237,6 +261,7 @@ class AnnotationEditorActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        markEditorHintSeen()
         super.onDestroy()
         capturedBitmap?.recycle()
     }

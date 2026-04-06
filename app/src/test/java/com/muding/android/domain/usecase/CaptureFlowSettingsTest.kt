@@ -2,6 +2,7 @@ package com.muding.android.domain.usecase
 
 import android.content.SharedPreferences
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -105,6 +106,48 @@ class CaptureFlowSettingsTest {
         assertEquals(FloatingBallTheme.EMERALD, settings.getFloatingBallTheme())
         assertEquals(FloatingBallAppearanceMode.CUSTOM_IMAGE, settings.getFloatingBallAppearanceMode())
         assertEquals(null, settings.getFloatingBallCustomImageUri())
+    }
+
+    @Test
+    fun onboardingGuideProgress_defaultsToAllUnseen() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        assertFalse(settings.hasSeenHomeOnboardingGuide())
+        assertFalse(settings.hasSeenFloatingBallHint())
+        assertFalse(settings.hasSeenPinOverlayHint())
+        assertFalse(settings.hasSeenEditorHint())
+    }
+
+    @Test
+    fun onboardingGuideProgress_persistsEachSeenFlag() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        settings.setHomeOnboardingGuideSeen(true)
+        settings.setFloatingBallHintSeen(true)
+        settings.setPinOverlayHintSeen(true)
+        settings.setEditorHintSeen(true)
+
+        assertTrue(settings.hasSeenHomeOnboardingGuide())
+        assertTrue(settings.hasSeenFloatingBallHint())
+        assertTrue(settings.hasSeenPinOverlayHint())
+        assertTrue(settings.hasSeenEditorHint())
+    }
+
+    @Test
+    fun clearAll_resetsOnboardingGuideProgress() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        settings.setHomeOnboardingGuideSeen(true)
+        settings.setFloatingBallHintSeen(true)
+        settings.setPinOverlayHintSeen(true)
+        settings.setEditorHintSeen(true)
+
+        settings.clearAll()
+
+        assertFalse(settings.hasSeenHomeOnboardingGuide())
+        assertFalse(settings.hasSeenFloatingBallHint())
+        assertFalse(settings.hasSeenPinOverlayHint())
+        assertFalse(settings.hasSeenEditorHint())
     }
 
     private class InMemorySharedPreferences : SharedPreferences {

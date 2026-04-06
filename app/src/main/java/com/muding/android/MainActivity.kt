@@ -17,6 +17,7 @@ import com.muding.android.data.repository.RecentPinRepository
 import com.muding.android.data.repository.RuntimeStorageRepository
 import com.muding.android.data.settings.AppSettingsRepository
 import com.muding.android.data.settings.FloatingBallSettings
+import com.muding.android.data.settings.OnboardingGuideProgress
 import com.muding.android.domain.usecase.AppMaintenanceCoordinator
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
@@ -48,6 +49,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var floatingBallImageProcessor: FloatingBallImageProcessor
 
     private var floatingBallSettings by mutableStateOf(defaultFloatingBallSettings())
+    private var onboardingGuideProgress by mutableStateOf(defaultOnboardingGuideProgress())
 
     private val floatingBallImagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -78,6 +80,7 @@ class MainActivity : ComponentActivity() {
         )
         val projectRecordSettings = settingsRepository.getProjectRecordSettings()
         floatingBallSettings = settingsRepository.getFloatingBallSettings()
+        onboardingGuideProgress = settingsRepository.getOnboardingGuideProgress()
         val pinHistorySettings = settingsRepository.getPinHistorySettings()
 
         setContent {
@@ -95,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     initialFloatingBallTheme = floatingBallSettings.theme,
                     initialFloatingBallAppearanceMode = floatingBallSettings.appearanceMode,
                     initialFloatingBallCustomImageUri = floatingBallSettings.customImageUri,
+                    initialOnboardingGuideProgress = onboardingGuideProgress,
                     initialPinHistoryEnabled = pinHistorySettings.enabled,
                     initialMaxPinHistoryCount = pinHistorySettings.maxCount,
                     initialPinHistoryRetainDays = pinHistorySettings.retainDays,
@@ -141,6 +145,10 @@ class MainActivity : ComponentActivity() {
                     },
                     onChooseFloatingBallCustomImage = {
                         openFloatingBallImagePicker()
+                    },
+                    onHomeOnboardingGuideSeen = {
+                        settingsRepository.setHomeOnboardingGuideSeen(true)
+                        onboardingGuideProgress = onboardingGuideProgress.copy(hasSeenHomeGuide = true)
                     },
                     onPinHistoryEnabledChanged = { enabled ->
                         settingsRepository.setPinHistoryEnabled(enabled)
@@ -295,6 +303,15 @@ class MainActivity : ComponentActivity() {
                 theme = FloatingBallTheme.BLUE_PURPLE,
                 appearanceMode = FloatingBallAppearanceMode.THEME,
                 customImageUri = null
+            )
+        }
+
+        fun defaultOnboardingGuideProgress(): OnboardingGuideProgress {
+            return OnboardingGuideProgress(
+                hasSeenHomeGuide = false,
+                hasSeenFloatingBallHint = false,
+                hasSeenPinOverlayHint = false,
+                hasSeenEditorHint = false
             )
         }
     }

@@ -84,12 +84,14 @@ import com.muding.android.app.AppGraph
 import com.muding.android.core.model.PinSourceType
 import com.muding.android.data.repository.RecentPinRepository
 import com.muding.android.data.settings.AppSettingsRepository
+import com.muding.android.data.settings.OnboardingGuideProgress
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.ScreenshotManager
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.feature.capture.CaptureDispatchRequest
 import com.muding.android.feature.capture.CaptureFlowCoordinator
+import com.muding.android.feature.onboarding.OnboardingGuideState
 import com.muding.android.feature.ocr.OcrFlowCoordinator
 import com.muding.android.presentation.bridge.ForegroundLaunchBridgeActivity
 import com.muding.android.presentation.crop.CaptureCropOverlay
@@ -124,6 +126,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private lateinit var windowManager: WindowManager
     private var floatingView: ComposeView? = null
     private var floatingBallParams: WindowManager.LayoutParams? = null
+    private var floatingHintView: ComposeView? = null
+    private var floatingHintParams: WindowManager.LayoutParams? = null
     private var floatingMenuView: ComposeView? = null
     private var floatingMenuParams: WindowManager.LayoutParams? = null
     private var floatingMenuDismissView: View? = null
@@ -162,6 +166,14 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val captureLaunchController = FloatingBallCaptureLaunchController()
     private var pendingCaptureMode: CaptureEntryMode = CaptureEntryMode.PIN
     private var projectionForegroundActive: Boolean = false
+    private var onboardingGuideState = OnboardingGuideState.fromProgress(
+        OnboardingGuideProgress(
+            hasSeenHomeGuide = false,
+            hasSeenFloatingBallHint = false,
+            hasSeenPinOverlayHint = false,
+            hasSeenEditorHint = false
+        )
+    )
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -179,6 +191,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         recentPinRepository = AppGraph.recentPinRepository(this)
         captureFlowCoordinator = AppGraph.captureFlowCoordinator(this)
         ocrFlowCoordinator = AppGraph.ocrFlowCoordinator(this)
+        onboardingGuideState = OnboardingGuideState.fromProgress(settingsRepository.getOnboardingGuideProgress())
 
         showFloatingBall()
 
@@ -285,6 +298,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         isExpanded = floatingMenuExpanded.value,
                         onExpandedChange = { setFloatingMenuExpanded(it) },
                         onScreenshot = { startStandardScreenshot() },
+                        onInteraction = { markFloatingBallHintSeen() },
                         onPositionChange = { dx, dy ->
                             cancelSnap()
                             val display = windowManager.defaultDisplay
@@ -297,6 +311,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                                 .coerceIn(0, (size.y - appearance.dragBoundPx).coerceAtLeast(0))
                             floatingBallX.intValue = nextX
                             floatingBallY.intValue = nextY
+                            updateFloatingHintPosition()
 
                             if (floatingMenuExpanded.value) {
                                 return@FloatingBallContent
@@ -319,6 +334,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         try {
             windowManager.addView(view, params)
+            view.post { showFloatingHintIfNeeded() }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -338,6 +354,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
         floatingView = null
+        dismissFloatingHint()
         showFloatingBall()
     }
 
@@ -674,6 +691,95 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         startActivity(intent)
     }
 
+    private fun showFloatingHintIfNeeded() {
+        if (!onboardingGuideState.shouldShowFloatingBallHint() || floatingHintView != null) {
+            return
+        }
+        val view = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@FloatingBallService)
+            setViewTreeSavedStateRegistryOwner(this@FloatingBallService)
+            setContent {
+                MudingTheme {
+                    UsageHintBubble(
+                        headline = "悬浮球提示",
+                        messages = listOf("长按这里，打开截图 / OCR / 管理等操作"),
+                        onDismiss = { markFloatingBallHintSeen() }
+                    )
+                }
+            }
+        }
+        val params = createOverlayLayoutParams(
+            width = WindowManager.LayoutParams.WRAP_CONTENT,
+            height = WindowManager.LayoutParams.WRAP_CONTENT,
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        )
+        floatingHintView = view
+        floatingHintParams = params
+        try {
+            windowManager.addView(view, params)
+            view.post { updateFloatingHintPosition() }
+        } catch (_: Exception) {
+            dismissFloatingHint()
+        }
+    }
+
+    private fun updateFloatingHintPosition() {
+        val view = floatingHintView ?: return
+        val params = floatingHintParams ?: return
+        val ballParams = floatingBallParams ?: return
+        val display = windowManager.defaultDisplay
+        val screenSize = Point()
+        display.getRealSize(screenSize)
+        val hintWidth = view.width.takeIf { it > 0 } ?: view.measuredWidth
+        val hintHeight = view.height.takeIf { it > 0 } ?: view.measuredHeight
+        if (hintWidth <= 0 || hintHeight <= 0) {
+            return
+        }
+        val anchorSize = floatingView?.width?.takeIf { it > 0 } ?: loadFloatingBallAppearance().dragBoundPx
+        val position = UsageHintPositioning.place(
+            screenWidth = screenSize.x,
+            screenHeight = screenSize.y,
+            anchor = UsageHintPositioning.AnchorBounds(
+                left = ballParams.x,
+                top = ballParams.y,
+                right = ballParams.x + anchorSize,
+                bottom = ballParams.y + anchorSize
+            ),
+            hintWidth = hintWidth,
+            hintHeight = hintHeight,
+            margin = (12 * resources.displayMetrics.density).roundToInt()
+        )
+        params.x = position.x
+        params.y = position.y
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun markFloatingBallHintSeen() {
+        if (onboardingGuideState.shouldShowFloatingBallHint()) {
+            onboardingGuideState = onboardingGuideState.markFloatingBallHintSeen()
+            settingsRepository.setFloatingBallHintSeen(true)
+        }
+        dismissFloatingHint()
+    }
+
+    private fun dismissFloatingHint() {
+        floatingHintView?.let {
+            try {
+                windowManager.removeViewImmediate(it)
+            } catch (_: Exception) {
+                try {
+                    windowManager.removeView(it)
+                } catch (_: Exception) {
+                }
+            }
+        }
+        floatingHintView = null
+        floatingHintParams = null
+    }
+
     private fun setFloatingMenuExpanded(expanded: Boolean) {
         if (floatingMenuExpanded.value == expanded) {
             return
@@ -935,6 +1041,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             addUpdateListener { animation ->
                 params.x = animation.animatedValue as Int
                 floatingBallX.intValue = params.x
+                updateFloatingHintPosition()
                 try {
                     windowManager.updateViewLayout(floatingView, params)
                 } catch (_: Exception) {
@@ -954,6 +1061,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         setFloatingMenuExpanded(false)
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         dismissCropOverlay(recycleBitmap = true, restoreFloatingBall = false)
+        dismissFloatingHint()
         floatingView?.let {
             try {
                 windowManager.removeViewImmediate(it)
@@ -996,13 +1104,17 @@ private fun FloatingBallContent(
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onScreenshot: () -> Unit,
+    onInteraction: () -> Unit,
     onPositionChange: (Float, Float) -> Unit,
     onDragEnd: () -> Unit
 ) {
     Box(
         modifier = Modifier.pointerInput(Unit) {
             detectDragGestures(
-                onDragStart = { onExpandedChange(false) },
+                onDragStart = {
+                    onInteraction()
+                    onExpandedChange(false)
+                },
                 onDragEnd = { onDragEnd() },
                 onDragCancel = { onDragEnd() },
                 onDrag = { change, dragAmount ->
@@ -1014,8 +1126,12 @@ private fun FloatingBallContent(
     ) {
         FloatingBall(
             appearance = appearance,
-            onLongClick = { onExpandedChange(!isExpanded) },
+            onLongClick = {
+                onInteraction()
+                onExpandedChange(!isExpanded)
+            },
             onClick = {
+                onInteraction()
                 if (isExpanded) {
                     onExpandedChange(false)
                 } else {

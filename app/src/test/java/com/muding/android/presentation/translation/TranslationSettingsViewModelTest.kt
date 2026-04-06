@@ -3,6 +3,7 @@ package com.muding.android.presentation.translation
 import com.muding.android.data.settings.AppSettingsRepository
 import com.muding.android.data.settings.CloudTranslationProvider
 import com.muding.android.data.settings.FloatingBallSettings
+import com.muding.android.data.settings.OnboardingGuideProgress
 import com.muding.android.data.settings.PinAppearanceSettings
 import com.muding.android.data.settings.PinHistorySettings
 import com.muding.android.data.settings.ProjectRecordSettings
@@ -217,6 +218,23 @@ class TranslationSettingsViewModelTest {
         override fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode) = Unit
 
         override fun setFloatingBallCustomImageUri(uri: String?) = Unit
+
+        override fun getOnboardingGuideProgress(): OnboardingGuideProgress {
+            return OnboardingGuideProgress(
+                hasSeenHomeGuide = false,
+                hasSeenFloatingBallHint = false,
+                hasSeenPinOverlayHint = false,
+                hasSeenEditorHint = false
+            )
+        }
+
+        override fun setHomeOnboardingGuideSeen(seen: Boolean) = Unit
+
+        override fun setFloatingBallHintSeen(seen: Boolean) = Unit
+
+        override fun setPinOverlayHintSeen(seen: Boolean) = Unit
+
+        override fun setEditorHintSeen(seen: Boolean) = Unit
 
         override fun getPinHistorySettings(): PinHistorySettings {
             return PinHistorySettings(enabled = true, maxCount = 50, retainDays = 14)

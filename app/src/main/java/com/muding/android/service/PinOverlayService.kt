@@ -25,12 +25,14 @@ import com.muding.android.app.AppGraph
 import com.muding.android.data.repository.PinHistoryRepository
 import com.muding.android.data.repository.RecentPinRepository
 import com.muding.android.data.settings.AppSettingsRepository
+import com.muding.android.data.settings.OnboardingGuideProgress
 import com.muding.android.feature.pin.creation.EditorLaunchRequest
 import com.muding.android.feature.pin.creation.PinCreationCoordinator
 import com.muding.android.feature.pin.source.PinDecodeTargetSizing
 import com.muding.android.domain.usecase.ClosedPinRecord
 import com.muding.android.domain.usecase.PinHistoryMetadata
 import com.muding.android.domain.usecase.PinHistorySourceType
+import com.muding.android.feature.onboarding.OnboardingGuideState
 import com.muding.android.feature.pin.runtime.PinManagerContent
 import com.muding.android.feature.pin.runtime.PinOverlayWindowController
 import com.muding.android.presentation.theme.MudingTheme
@@ -53,6 +55,17 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private lateinit var recentPinRepository: RecentPinRepository
     private lateinit var pinCreationCoordinator: PinCreationCoordinator
     private var managerRefreshToken by mutableIntStateOf(0)
+    private var pinHintView: ComposeView? = null
+    private var pinHintParams: WindowManager.LayoutParams? = null
+    private var pinHintAnchorOverlayId: String? = null
+    private var onboardingGuideState = OnboardingGuideState.fromProgress(
+        OnboardingGuideProgress(
+            hasSeenHomeGuide = false,
+            hasSeenFloatingBallHint = false,
+            hasSeenPinOverlayHint = false,
+            hasSeenEditorHint = false
+        )
+    )
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -68,6 +81,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         pinHistoryRepository = AppGraph.pinHistoryRepository(this)
         recentPinRepository = AppGraph.recentPinRepository(this)
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
+        onboardingGuideState = OnboardingGuideState.fromProgress(settingsRepository.getOnboardingGuideProgress())
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
     }
@@ -240,6 +254,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             initialContentHeightPx = initialContentHeightPx,
             initialX = 120 + overlays.size * 36,
             initialY = 220 + overlays.size * 36,
+            onInteracted = { markPinOverlayHintSeen() },
             onFocusRequested = {
                 bringOverlayToFront(overlayId)
             },
@@ -276,17 +291,124 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     heightPx = historyMetadata.heightPx ?: initialContentHeightPx ?: bitmap.height
                 )
             )
+            controller.overlayView.post { showPinOverlayHintIfNeeded(controller) }
         }
         notifyManagerChanged()
     }
 
     private fun removeOverlay(overlayId: String) {
+        if (pinHintAnchorOverlayId == overlayId) {
+            dismissPinOverlayHint()
+        }
         val controller = overlays.remove(overlayId) ?: return
         controller.remove()
         notifyManagerChanged()
         if (overlays.isEmpty() && managerView == null) {
             stopSelf()
         }
+    }
+
+    private fun showPinOverlayHintIfNeeded(controller: PinOverlayWindowController) {
+        if (!onboardingGuideState.shouldShowPinOverlayHint() || pinHintView != null) {
+            return
+        }
+        val view = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@PinOverlayService)
+            setViewTreeSavedStateRegistryOwner(this@PinOverlayService)
+            setContent {
+                MudingTheme {
+                    UsageHintBubble(
+                        headline = "贴图提示",
+                        messages = listOf(
+                            "长按贴图，进入编辑页",
+                            "双击贴图，快速关闭"
+                        ),
+                        onDismiss = { markPinOverlayHintSeen() }
+                    )
+                }
+            }
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = 0
+        }
+        pinHintView = view
+        pinHintParams = params
+        pinHintAnchorOverlayId = controller.id
+        try {
+            windowManager.addView(view, params)
+            view.post { updatePinOverlayHintPosition(controller.id) }
+        } catch (_: Exception) {
+            dismissPinOverlayHint()
+        }
+    }
+
+    private fun updatePinOverlayHintPosition(overlayId: String) {
+        val view = pinHintView ?: return
+        val params = pinHintParams ?: return
+        val controller = overlays[overlayId] ?: return
+        val hintWidth = view.width.takeIf { it > 0 } ?: view.measuredWidth
+        val hintHeight = view.height.takeIf { it > 0 } ?: view.measuredHeight
+        if (hintWidth <= 0 || hintHeight <= 0) {
+            return
+        }
+        val screenWidth = resources.displayMetrics.widthPixels
+        val screenHeight = resources.displayMetrics.heightPixels
+        val position = UsageHintPositioning.place(
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            anchor = UsageHintPositioning.AnchorBounds(
+                left = controller.overlayParams.x,
+                top = controller.overlayParams.y,
+                right = controller.overlayParams.x + controller.overlayParams.width.coerceAtLeast(1),
+                bottom = controller.overlayParams.y + controller.overlayParams.height.coerceAtLeast(1)
+            ),
+            hintWidth = hintWidth,
+            hintHeight = hintHeight,
+            margin = (12 * resources.displayMetrics.density).toInt().coerceAtLeast(12)
+        )
+        params.x = position.x
+        params.y = position.y
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun markPinOverlayHintSeen() {
+        if (onboardingGuideState.shouldShowPinOverlayHint()) {
+            onboardingGuideState = onboardingGuideState.markPinOverlayHintSeen()
+            settingsRepository.setPinOverlayHintSeen(true)
+        }
+        dismissPinOverlayHint()
+    }
+
+    private fun dismissPinOverlayHint() {
+        pinHintView?.let {
+            try {
+                windowManager.removeViewImmediate(it)
+            } catch (_: Exception) {
+                try {
+                    windowManager.removeView(it)
+                } catch (_: Exception) {
+                }
+            }
+        }
+        pinHintView = null
+        pinHintParams = null
+        pinHintAnchorOverlayId = null
     }
 
     private fun rememberClosedOverlay(controller: PinOverlayWindowController) {
@@ -423,6 +545,7 @@ class PinOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     override fun onDestroy() {
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
+        dismissPinOverlayHint()
         managerView?.let {
             try {
                 windowManager.removeViewImmediate(it)
