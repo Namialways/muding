@@ -1,0 +1,86 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="124" y1="58" x2="1086" y2="578" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EEF3F7"/>
+      <stop offset="1" stop-color="#DCE5EE"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="170" y1="122" x2="490" y2="506" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F4F7FA"/>
+    </linearGradient>
+    <linearGradient id="sticky" x1="710" y1="194" x2="930" y2="430" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6EFE5"/>
+      <stop offset="1" stop-color="#E9E0D4"/>
+    </linearGradient>
+    <filter id="shadowLarge" x="84" y="72" width="1028" height="522" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="24"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.164706 0 0 0 0 0.211765 0 0 0 0 0.266667 0 0 0 0.12 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+    <filter id="shadowSoft" x="630" y="154" width="338" height="318" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="18"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.196078 0 0 0 0 0.223529 0 0 0 0 0.266667 0 0 0 0.16 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+    <filter id="shadowBall" x="800" y="360" width="148" height="148" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="14"/>
+      <feGaussianBlur stdDeviation="14"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.188235 0 0 0 0 0.227451 0 0 0 0 0.282353 0 0 0 0.18 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" rx="40" fill="#F8FBFD"/>
+  <g filter="url(#shadowLarge)">
+    <rect x="132" y="102" width="936" height="426" rx="32" fill="url(#bg)"/>
+  </g>
+
+  <rect x="186" y="138" width="324" height="354" rx="34" fill="#1D252F"/>
+  <rect x="202" y="154" width="292" height="322" rx="24" fill="url(#screen)"/>
+  <rect x="228" y="184" width="92" height="16" rx="8" fill="#D7DEE5"/>
+  <rect x="330" y="184" width="70" height="16" rx="8" fill="#E8EEF3"/>
+  <rect x="228" y="224" width="240" height="92" rx="24" fill="#FFFFFF"/>
+  <rect x="246" y="244" width="118" height="16" rx="8" fill="#2F3844"/>
+  <rect x="246" y="272" width="154" height="14" rx="7" fill="#93A3B3"/>
+  <rect x="414" y="240" width="34" height="34" rx="17" fill="#2F3844"/>
+  <rect x="228" y="338" width="240" height="52" rx="18" fill="#EEF3F7"/>
+  <rect x="246" y="357" width="94" height="14" rx="7" fill="#2F3844"/>
+  <rect x="228" y="406" width="114" height="46" rx="18" fill="#2F3844"/>
+  <rect x="354" y="406" width="114" height="46" rx="18" fill="#FFFFFF" stroke="#D7DEE5" stroke-width="2"/>
+
+  <g filter="url(#shadowSoft)">
+    <g transform="translate(744 189) rotate(-6 110 124)">
+      <rect x="0" y="0" width="220" height="248" rx="48" fill="#A4B0BD" fill-opacity="0.52"/>
+      <rect x="-18" y="-16" width="220" height="248" rx="48" fill="url(#sticky)"/>
+      <rect x="38" y="72" width="150" height="22" rx="11" fill="#2F3844"/>
+      <rect x="38" y="126" width="92" height="18" rx="9" fill="#717780"/>
+    </g>
+  </g>
+
+  <g filter="url(#shadowBall)">
+    <circle cx="874" cy="418" r="46" fill="#2F3844"/>
+  </g>
+
+  <rect x="612" y="164" width="124" height="36" rx="18" fill="#FFFFFF" fill-opacity="0.74"/>
+  <rect x="626" y="176" width="54" height="12" rx="6" fill="#2F3844"/>
+  <rect x="688" y="176" width="34" height="12" rx="6" fill="#93A3B3"/>
+
+  <rect x="634" y="472" width="144" height="36" rx="18" fill="#FFFFFF" fill-opacity="0.74"/>
+  <rect x="650" y="484" width="64" height="12" rx="6" fill="#2F3844"/>
+  <rect x="722" y="484" width="40" height="12" rx="6" fill="#93A3B3"/>
+
+  <circle cx="910" cy="220" r="20" fill="#FFFFFF" fill-opacity="0.82"/>
+  <path d="M902 220H918" stroke="#2F3844" stroke-width="4" stroke-linecap="round"/>
+  <path d="M910 212V228" stroke="#2F3844" stroke-width="4" stroke-linecap="round"/>
+</svg>
