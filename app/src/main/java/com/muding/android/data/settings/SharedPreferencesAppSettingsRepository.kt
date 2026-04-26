@@ -98,6 +98,7 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
             sizeDp = settings.getFloatingBallSizeDp(),
             opacity = settings.getFloatingBallOpacity(),
             theme = settings.getFloatingBallTheme(),
+            lastPosition = settings.getFloatingBallLastPosition(),
             appearanceMode = settings.getFloatingBallAppearanceMode(),
             customImageUri = settings.getFloatingBallCustomImageUri()
         )
@@ -113,6 +114,10 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
 
     override fun setFloatingBallTheme(theme: FloatingBallTheme) {
         settings.setFloatingBallTheme(theme)
+    }
+
+    override fun setFloatingBallLastPosition(x: Int, y: Int) {
+        settings.setFloatingBallLastPosition(x, y)
     }
 
     override fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode) {

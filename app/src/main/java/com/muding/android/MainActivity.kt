@@ -301,6 +301,7 @@ class MainActivity : ComponentActivity() {
                 sizeDp = 46,
                 opacity = 0.92f,
                 theme = FloatingBallTheme.BLUE_PURPLE,
+                lastPosition = null,
                 appearanceMode = FloatingBallAppearanceMode.THEME,
                 customImageUri = null
             )

@@ -27,6 +27,11 @@ enum class FloatingBallTheme(val value: String) {
     EMERALD("emerald")
 }
 
+data class FloatingBallLastPosition(
+    val x: Int,
+    val y: Int
+)
+
 class CaptureFlowSettings private constructor(
     private val prefs: SharedPreferences
 ) {
@@ -167,6 +172,23 @@ class CaptureFlowSettings private constructor(
 
     fun setFloatingBallTheme(theme: FloatingBallTheme) {
         prefs.edit().putString(KEY_FLOATING_BALL_THEME, theme.value).apply()
+    }
+
+    fun getFloatingBallLastPosition(): FloatingBallLastPosition? {
+        if (!prefs.contains(KEY_FLOATING_BALL_LAST_X) || !prefs.contains(KEY_FLOATING_BALL_LAST_Y)) {
+            return null
+        }
+        return FloatingBallLastPosition(
+            x = prefs.getInt(KEY_FLOATING_BALL_LAST_X, 0),
+            y = prefs.getInt(KEY_FLOATING_BALL_LAST_Y, 0)
+        )
+    }
+
+    fun setFloatingBallLastPosition(x: Int, y: Int) {
+        prefs.edit()
+            .putInt(KEY_FLOATING_BALL_LAST_X, x.coerceAtLeast(0))
+            .putInt(KEY_FLOATING_BALL_LAST_Y, y.coerceAtLeast(0))
+            .apply()
     }
 
     fun getFloatingBallAppearanceMode(): FloatingBallAppearanceMode {
@@ -333,6 +355,8 @@ class CaptureFlowSettings private constructor(
         private const val KEY_FLOATING_BALL_SIZE_DP = "floating_ball_size_dp"
         private const val KEY_FLOATING_BALL_OPACITY = "floating_ball_opacity"
         private const val KEY_FLOATING_BALL_THEME = "floating_ball_theme"
+        private const val KEY_FLOATING_BALL_LAST_X = "floating_ball_last_x"
+        private const val KEY_FLOATING_BALL_LAST_Y = "floating_ball_last_y"
         private const val KEY_FLOATING_BALL_APPEARANCE_MODE = "floating_ball_appearance_mode"
         private const val KEY_FLOATING_BALL_CUSTOM_IMAGE_URI = "floating_ball_custom_image_uri"
         private const val KEY_ONBOARDING_HOME_GUIDE_SEEN = "onboarding_home_guide_seen"

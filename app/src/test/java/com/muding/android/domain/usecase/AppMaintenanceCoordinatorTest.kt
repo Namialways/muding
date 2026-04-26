@@ -210,6 +210,7 @@ class AppMaintenanceCoordinatorTest {
                 sizeDp = 60,
                 opacity = 0.92f,
                 theme = FloatingBallTheme.BLUE_PURPLE,
+                lastPosition = null,
                 appearanceMode = FloatingBallAppearanceMode.THEME,
                 customImageUri = null
             )
@@ -220,6 +221,8 @@ class AppMaintenanceCoordinatorTest {
         override fun setFloatingBallOpacity(opacity: Float) = Unit
 
         override fun setFloatingBallTheme(theme: FloatingBallTheme) = Unit
+
+        override fun setFloatingBallLastPosition(x: Int, y: Int) = Unit
 
         override fun setFloatingBallAppearanceMode(mode: FloatingBallAppearanceMode) = Unit
 

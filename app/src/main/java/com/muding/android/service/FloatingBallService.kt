@@ -161,8 +161,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     )
     private val floatingMenuExpanded = mutableStateOf(false)
-    private val floatingBallX = mutableIntStateOf(100)
-    private val floatingBallY = mutableIntStateOf(100)
+    private val floatingBallX = mutableIntStateOf(0)
+    private val floatingBallY = mutableIntStateOf(0)
     private val captureLaunchController = FloatingBallCaptureLaunchController()
     private var pendingCaptureMode: CaptureEntryMode = CaptureEntryMode.PIN
     private var projectionForegroundActive: Boolean = false
@@ -270,6 +270,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun showFloatingBall() {
         val appearance = loadFloatingBallAppearance()
         floatingMenuExpanded.value = false
+        val shouldResolveInitialPosition = floatingBallParams == null
         val params = floatingBallParams ?: WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -283,8 +284,24 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = floatingBallX.intValue
-            y = floatingBallY.intValue
+        }
+        if (shouldResolveInitialPosition) {
+            val display = windowManager.defaultDisplay
+            val screenSize = Point()
+            display.getRealSize(screenSize)
+            val startPoint = FloatingBallInitialPositioning.resolve(
+                screenWidth = screenSize.x,
+                screenHeight = screenSize.y,
+                ballSizePx = appearance.dragBoundPx,
+                savedPosition = settingsRepository.getFloatingBallSettings().lastPosition
+            )
+            floatingBallX.intValue = startPoint.x
+            floatingBallY.intValue = startPoint.y
+            params.x = startPoint.x
+            params.y = startPoint.y
+        } else {
+            params.x = floatingBallX.intValue
+            params.y = floatingBallY.intValue
         }
         floatingBallParams = params
 
@@ -325,7 +342,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             } catch (_: Exception) {
                             }
                         },
-                        onDragEnd = { scheduleSnapToEdge(params) }
+                        onDragEnd = {
+                            persistFloatingBallPosition()
+                            scheduleSnapToEdge(params)
+                        }
                     )
                 }
             }
@@ -1049,12 +1069,21 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
             doOnEnd {
                 snapAnimator = null
+                persistFloatingBallPosition()
             }
         }
         snapAnimator?.start()
     }
 
+    private fun persistFloatingBallPosition() {
+        settingsRepository.setFloatingBallLastPosition(
+            x = floatingBallX.intValue,
+            y = floatingBallY.intValue
+        )
+    }
+
     override fun onDestroy() {
+        persistFloatingBallPosition()
         releaseProjectionSession()
         super.onDestroy()
         cancelSnap()

@@ -23,6 +23,13 @@ class CaptureFlowSettingsTest {
     }
 
     @Test
+    fun floatingBallLastPosition_defaultsToNullWhenUnset() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        assertEquals(null, settings.getFloatingBallLastPosition())
+    }
+
+    @Test
     fun storedSettingsOverrideDefaults() {
         val preferences = InMemorySharedPreferences().apply {
             edit()
@@ -91,6 +98,15 @@ class CaptureFlowSettingsTest {
 
         assertEquals(FloatingBallAppearanceMode.CUSTOM_IMAGE, settings.getFloatingBallAppearanceMode())
         assertEquals("content://floating-ball/custom.png", settings.getFloatingBallCustomImageUri())
+    }
+
+    @Test
+    fun floatingBallLastPosition_persistsLastKnownCoordinates() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        settings.setFloatingBallLastPosition(x = 240, y = 680)
+
+        assertEquals(FloatingBallLastPosition(240, 680), settings.getFloatingBallLastPosition())
     }
 
     @Test
