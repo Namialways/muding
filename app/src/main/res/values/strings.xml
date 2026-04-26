@@ -67,7 +67,7 @@
     <string name="editor_edit_text">编辑文字</string>
     <string name="editor_text_input_label">输入内容</string>
     <string name="crop_overlay_image_description">待裁剪图片</string>
-    <string name="crop_overlay_hint">拖动选择区域，拖拽边角可调整大小，点击空白可取消选区</string>
+    <string name="crop_overlay_hint">拖动选择区域</string>
     <string name="crop_overlay_confirm">确认选区</string>
     <string name="crop_image_load_failed">无法加载图片</string>
     <string name="crop_image_load_failed_with_reason">加载图片失败：%1$s</string>

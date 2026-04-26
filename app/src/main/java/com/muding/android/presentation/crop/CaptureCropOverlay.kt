@@ -4,11 +4,17 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -51,11 +57,13 @@ fun CaptureCropOverlay(
     var dragStartSelection by remember { mutableStateOf<Rect?>(null) }
     val minSelectionSize = 32f
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        val hintMaxWidth = CropOverlayChromeLayout.hintMaxWidthDp(maxWidth.value.toInt()).dp
+
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = stringResource(R.string.crop_overlay_image_description),
@@ -190,41 +198,75 @@ fun CaptureCropOverlay(
             text = stringResource(R.string.crop_overlay_hint),
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 16.dp),
+                .padding(top = 14.dp)
+                .widthIn(max = hintMaxWidth)
+                .background(
+                    color = Color.Black.copy(alpha = 0.58f),
+                    shape = RoundedCornerShape(percent = 50)
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(percent = 50)
+                )
+                .padding(horizontal = 12.dp, vertical = 7.dp),
             color = Color.White,
             style = MaterialTheme.typography.bodyMedium
         )
 
-        IconButton(
+        CropOverlayIconButton(
             onClick = onCancel,
+            icon = Icons.Default.Close,
+            contentDescription = stringResource(R.string.action_cancel),
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = stringResource(R.string.action_cancel),
-                tint = Color.White
-            )
-        }
+                .padding(CropOverlayChromeLayout.actionButtonEdgePaddingDp.dp)
+        )
 
         if (selectionRect != null) {
-            IconButton(
+            CropOverlayIconButton(
                 onClick = {
-                    val rect = selectionRect ?: return@IconButton
-                    onConfirm(toBitmapRect(rect, imageRectOnScreen, bitmap.width, bitmap.height))
+                    selectionRect?.let { rect ->
+                        onConfirm(toBitmapRect(rect, imageRectOnScreen, bitmap.width, bitmap.height))
+                    }
                 },
+                icon = Icons.Default.Check,
+                contentDescription = stringResource(R.string.crop_overlay_confirm),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = stringResource(R.string.crop_overlay_confirm),
-                    tint = Color.White
-                )
-            }
+                    .padding(CropOverlayChromeLayout.actionButtonEdgePaddingDp.dp)
+            )
         }
+    }
+}
+
+@Composable
+private fun CropOverlayIconButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(CropOverlayChromeLayout.actionButtonTouchTargetDp.dp)
+            .background(
+                color = Color.Black.copy(alpha = 0.58f),
+                shape = CircleShape
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.22f),
+                shape = CircleShape
+            )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 
