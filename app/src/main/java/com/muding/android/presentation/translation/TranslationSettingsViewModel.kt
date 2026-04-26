@@ -55,6 +55,15 @@ data class TranslationSettingsUiState(
     val targetLanguageDisplayName: String
         get() = TranslationLanguageCatalog.findByAppTag(targetLanguageTag).displayName
 
+    val localTargetLanguageFieldLabel: String
+        get() = "翻译成"
+
+    val localTargetLanguageHelpText: String
+        get() = "选择希望翻译结果输出成哪种语言；本地翻译会下载这个语言对应的模型。"
+
+    val localModelBusyLabel: String
+        get() = "处理中..."
+
     val isBuiltInLocalModel: Boolean
         get() = targetLanguageTag == "en"
 

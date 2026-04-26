@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,9 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +48,8 @@ import com.muding.android.feature.pin.creation.PinCreationCoordinator
 import com.muding.android.feature.translation.TranslationEngine
 import com.muding.android.feature.translation.TranslationErrorMessages
 import com.muding.android.feature.translation.TranslationLanguageCatalog
+import com.muding.android.feature.translation.TranslationLanguageOption
+import com.muding.android.feature.translation.TranslationResult
 import com.muding.android.presentation.theme.MudingTheme
 import com.muding.android.service.FloatingBallService
 import kotlinx.coroutines.launch
@@ -64,9 +72,7 @@ class OcrResultActivity : ComponentActivity() {
         localTranslationEngine = AppGraph.localTranslationEngine()
         cloudTranslationEngine = AppGraph.cloudTranslationEngine(this)
         val initialText = intent.getStringExtra(EXTRA_RECOGNIZED_TEXT).orEmpty()
-        val targetLanguageDisplayName = TranslationLanguageCatalog.findByAppTag(
-            settingsRepository.getTranslationSettings().localTargetLanguageTag
-        ).displayName
+        val initialTargetLanguageTag = settingsRepository.getTranslationSettings().localTargetLanguageTag
 
         if (initialText.isBlank()) {
             Toast.makeText(this, "OCR 结果为空", Toast.LENGTH_SHORT).show()
@@ -82,17 +88,17 @@ class OcrResultActivity : ComponentActivity() {
                 ) {
                     OcrResultScreen(
                         initialText = initialText,
-                        targetLanguageDisplayName = targetLanguageDisplayName,
+                        initialTargetLanguageTag = initialTargetLanguageTag,
                         onCreateTextPin = { text -> createTextPin(text) },
                         onCopyText = { text -> copyText(text) },
-                        onTranslate = { text, onComplete ->
+                        onTranslate = { text, targetLanguageTag, onComplete ->
                             val settings = settingsRepository.getTranslationSettings()
                             val translationEngine = resolveOcrTranslationEngine(
                                 settings = settings,
                                 localEngine = localTranslationEngine,
                                 cloudEngine = cloudTranslationEngine
                             )
-                            translateWithEngine(text, translationEngine, onComplete)
+                            translateWithEngine(text, targetLanguageTag, translationEngine, onComplete)
                         },
                         onClose = { finishFlow() }
                     )
@@ -131,6 +137,7 @@ class OcrResultActivity : ComponentActivity() {
 
     private fun translateWithEngine(
         text: String,
+        targetLanguageTag: String,
         engine: TranslationEngine,
         onComplete: (String) -> Unit
     ) {
@@ -139,10 +146,9 @@ class OcrResultActivity : ComponentActivity() {
             Toast.makeText(this, "没有可翻译的文本", Toast.LENGTH_SHORT).show()
             return
         }
-        val targetLanguage = settingsRepository.getTranslationSettings().localTargetLanguageTag
         lifecycleScope.launch {
             try {
-                val result = engine.translate(normalizedText, targetLanguage)
+                val result = translateOcrTextWithTarget(normalizedText, targetLanguageTag, engine)
                 onComplete(result.translatedText)
                 Toast.makeText(
                     this@OcrResultActivity,
@@ -194,17 +200,29 @@ internal fun resolveOcrTranslationEngine(
     }
 }
 
+internal suspend fun translateOcrTextWithTarget(
+    text: String,
+    targetLanguageTag: String,
+    engine: TranslationEngine
+): TranslationResult {
+    return engine.translate(text.trim(), targetLanguageTag)
+}
+
 @Composable
 private fun OcrResultScreen(
     initialText: String,
-    targetLanguageDisplayName: String,
+    initialTargetLanguageTag: String,
     onCreateTextPin: (String) -> Unit,
     onCopyText: (String) -> Unit,
-    onTranslate: (String, (String) -> Unit) -> Unit,
+    onTranslate: (String, String, (String) -> Unit) -> Unit,
     onClose: () -> Unit
 ) {
     var text by remember(initialText) { mutableStateOf(initialText) }
     var translatedText by remember { mutableStateOf("") }
+    var targetLanguageTag by remember(initialTargetLanguageTag) {
+        mutableStateOf(TranslationLanguageCatalog.findByAppTag(initialTargetLanguageTag).appTag)
+    }
+    val targetLanguage = TranslationLanguageCatalog.findByAppTag(targetLanguageTag)
 
     Column(
         modifier = Modifier
@@ -250,16 +268,18 @@ private fun OcrResultScreen(
             }
         }
         Button(
-            onClick = { onTranslate(text.trim()) { translatedText = it } },
+            onClick = { onTranslate(text.trim(), targetLanguageTag) { translatedText = it } },
             modifier = Modifier.fillMaxWidth(),
             enabled = text.isNotBlank()
         ) {
             Text("翻译")
         }
-        if (translatedText.isNotBlank()) {
-            Text(
-                text = "翻译结果",
-                style = MaterialTheme.typography.titleMedium
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TranslationResultHeader(
+                selectedLanguage = targetLanguage,
+                onLanguageSelected = { option ->
+                    targetLanguageTag = option.appTag
+                }
             )
             OutlinedTextField(
                 value = translatedText,
@@ -267,7 +287,7 @@ private fun OcrResultScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(220.dp),
-                label = { Text("目标语言：$targetLanguageDisplayName") }
+                label = { Text("翻译结果") }
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
@@ -276,6 +296,59 @@ private fun OcrResultScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("关闭")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TranslationResultHeader(
+    selectedLanguage: TranslationLanguageOption,
+    onLanguageSelected: (TranslationLanguageOption) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "翻译结果",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 16.dp)
+        )
+        Box(modifier = Modifier.widthIn(min = 132.dp, max = 180.dp)) {
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    value = selectedLanguage.displayName,
+                    onValueChange = {},
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    readOnly = true,
+                    singleLine = true,
+                    label = { Text("目标语言") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                    }
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    TranslationLanguageCatalog.options.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.displayName) },
+                            onClick = {
+                                expanded = false
+                                onLanguageSelected(option)
+                            }
+                        )
+                    }
+                }
+            }
         }
     }
 }

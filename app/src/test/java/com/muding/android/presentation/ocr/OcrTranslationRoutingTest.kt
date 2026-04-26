@@ -5,6 +5,7 @@ import com.muding.android.data.settings.TranslationSettings
 import com.muding.android.feature.translation.TranslationEngine
 import com.muding.android.feature.translation.TranslationResult
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -52,6 +53,19 @@ class OcrTranslationRoutingTest {
         )
 
         assertSame(cloudEngine, resolved)
+    }
+
+    @Test
+    fun `translates with selected result target language`() = runBlocking {
+        val engine = RecordingEngine("ocr")
+
+        val result = translateOcrTextWithTarget(
+            text = "Camera",
+            targetLanguageTag = "zh",
+            engine = engine
+        )
+
+        assertEquals("ocr:Camera->zh", result.translatedText)
     }
 
     private class RecordingEngine(

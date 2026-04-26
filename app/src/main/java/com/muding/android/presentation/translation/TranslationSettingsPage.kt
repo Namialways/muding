@@ -1,6 +1,7 @@
 package com.muding.android.presentation.translation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -24,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -153,11 +156,12 @@ private fun LocalTranslationGroup(
 ) {
     SettingGroup(title = "本地翻译") {
         DropdownSettingField(
-            label = "目标语言",
+            label = uiState.localTargetLanguageFieldLabel,
             value = uiState.targetLanguageDisplayName,
             options = TranslationLanguageCatalog.options.map { it.displayName to it.appTag },
             onSelect = onSelectLanguage
         )
+        StatusMessage(message = uiState.localTargetLanguageHelpText)
         SwitchSettingRow(
             title = "仅在 Wi-Fi 下下载",
             checked = uiState.localDownloadOnWifiOnly,
@@ -168,23 +172,12 @@ private fun LocalTranslationGroup(
             value = uiState.localModelStatusLabel
         )
         uiState.localModelActionLabel?.let { actionLabel ->
-            if (actionLabel == "删除当前模型") {
-                OutlinedButton(
-                    onClick = onRunCurrentModelAction,
-                    enabled = !uiState.localBusy,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (uiState.localBusy) "处理中..." else actionLabel)
-                }
-            } else {
-                Button(
-                    onClick = onRunCurrentModelAction,
-                    enabled = !uiState.localBusy,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (uiState.localBusy) "处理中..." else actionLabel)
-                }
-            }
+            LocalModelActionButton(
+                actionLabel = actionLabel,
+                busyLabel = uiState.localModelBusyLabel,
+                busy = uiState.localBusy,
+                onClick = onRunCurrentModelAction
+            )
         }
         uiState.localMessage?.let { message ->
             StatusMessage(message = message)
@@ -260,6 +253,46 @@ private fun CloudTranslationGroup(
 
         uiState.cloudMessage?.let { message ->
             StatusMessage(message = message)
+        }
+    }
+}
+
+@Composable
+private fun LocalModelActionButton(
+    actionLabel: String,
+    busyLabel: String,
+    busy: Boolean,
+    onClick: () -> Unit
+) {
+    val content: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(if (busy) busyLabel else actionLabel)
+            if (busy) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+    if (actionLabel == "删除当前模型") {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            content()
+        }
+    } else {
+        Button(
+            onClick = onClick,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            content()
         }
     }
 }

@@ -105,6 +105,27 @@ class TranslationSettingsViewModelTest {
     }
 
     @Test
+    fun `ui state explains local target language and busy action`() {
+        val uiState = FakeAppSettingsRepository().getTranslationSettings().let { settings ->
+            TranslationSettingsUiState(
+                targetLanguageTag = settings.localTargetLanguageTag,
+                localDownloadOnWifiOnly = settings.localDownloadOnWifiOnly,
+                downloadedLanguageTags = emptySet(),
+                cloudProvider = settings.cloudProvider,
+                baiduAppIdDraft = settings.baiduAppId,
+                baiduSecretKeyDraft = settings.baiduSecretKey,
+                youdaoAppKeyDraft = settings.youdaoAppKey,
+                youdaoAppSecretDraft = settings.youdaoAppSecret,
+                localBusy = true
+            )
+        }
+
+        assertEquals("翻译成", uiState.localTargetLanguageFieldLabel)
+        assertEquals("选择希望翻译结果输出成哪种语言；本地翻译会下载这个语言对应的模型。", uiState.localTargetLanguageHelpText)
+        assertEquals("处理中...", uiState.localModelBusyLabel)
+    }
+
+    @Test
     fun `clear transient messages resets local and cloud feedback when section is reopened`() = runBlocking {
         val viewModel = TranslationSettingsViewModel(
             settingsRepository = FakeAppSettingsRepository(),
