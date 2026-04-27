@@ -65,8 +65,12 @@ class MlKitLocalTranslationEngine(
 
     private suspend fun detectSourceLanguage(text: String): String {
         val identifier = LanguageIdentification.getClient()
-        val languageCode = withContext(Dispatchers.IO) {
-            identifier.identifyLanguage(text).awaitTask()
+        val languageCode = try {
+            withContext(Dispatchers.IO) {
+                identifier.identifyLanguage(text).awaitTask()
+            }
+        } finally {
+            identifier.close()
         }
         return when (languageCode) {
             "zh", "zh-CN", "zh-TW" -> TranslateLanguage.CHINESE

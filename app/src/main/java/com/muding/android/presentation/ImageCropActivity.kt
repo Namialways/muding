@@ -2,9 +2,9 @@ package com.muding.android.presentation.crop
 
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.util.DisplayMetrics
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,6 +12,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.lifecycleScope
 import com.muding.android.R
 import com.muding.android.app.AppGraph
+import com.muding.android.data.image.BitmapDecodeSizing
+import com.muding.android.data.image.UriBitmapDecoder
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.feature.capture.CaptureDispatchRequest
 import com.muding.android.feature.capture.CaptureFlowCoordinator
@@ -19,7 +21,9 @@ import com.muding.android.feature.ocr.OcrFlowCoordinator
 import com.muding.android.presentation.ocr.OcrResultActivity
 import com.muding.android.presentation.theme.MudingTheme
 import com.muding.android.service.FloatingBallService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ImageCropActivity : ComponentActivity() {
 
@@ -49,28 +53,46 @@ class ImageCropActivity : ComponentActivity() {
             return
         }
 
-        try {
-            val uri = Uri.parse(uriString)
-            contentResolver.openInputStream(uri)?.use { input ->
-                sourceBitmap = BitmapFactory.decodeStream(input)
+        lifecycleScope.launch {
+            try {
+                sourceBitmap = loadCropBitmap(Uri.parse(uriString))
+                if (sourceBitmap == null) {
+                    throw IllegalStateException("Bitmap decode failed")
+                }
+                showCropContent(sourceBitmap!!)
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@ImageCropActivity,
+                    getString(R.string.crop_image_load_failed_with_reason, e.message ?: ""),
+                    Toast.LENGTH_SHORT
+                ).show()
+                finish()
             }
-            if (sourceBitmap == null) {
-                throw IllegalStateException("Bitmap decode failed")
-            }
-        } catch (e: Exception) {
-            Toast.makeText(
-                this,
-                getString(R.string.crop_image_load_failed_with_reason, e.message ?: ""),
-                Toast.LENGTH_SHORT
-            ).show()
-            finish()
-            return
         }
+    }
 
+    private suspend fun loadCropBitmap(uri: Uri): Bitmap? = withContext(Dispatchers.IO) {
+        UriBitmapDecoder(contentResolver).decodeSampled(
+            uri = uri,
+            target = cropPreviewTarget()
+        )
+    }
+
+    private fun cropPreviewTarget(): BitmapDecodeSizing.DecodeTarget {
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getRealMetrics(metrics)
+        return BitmapDecodeSizing.cropPreviewTarget(
+            screenWidthPx = metrics.widthPixels,
+            screenHeightPx = metrics.heightPixels
+        )
+    }
+
+    private fun showCropContent(bitmap: Bitmap) {
         setContent {
             MudingTheme {
                 CaptureCropOverlay(
-                    bitmap = sourceBitmap!!,
+                    bitmap = bitmap,
                     onCancel = { finishFlow(restoreBall = true) },
                     onConfirm = { cropRect ->
                         when (flowMode) {

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.muding.android.data.image.BitmapDecodeSizing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -107,7 +108,7 @@ class FloatingBallImageProcessor(
         height: Int
     ): Bitmap? {
         val decodeOptions = BitmapFactory.Options().apply {
-            inSampleSize = calculateInSampleSize(
+            inSampleSize = BitmapDecodeSizing.calculateInSampleSize(
                 width = width,
                 height = height,
                 targetWidth = TARGET_IMAGE_SIZE_PX,
@@ -121,26 +122,6 @@ class FloatingBallImageProcessor(
         } catch (_: Exception) {
             null
         }
-    }
-
-    private fun calculateInSampleSize(
-        width: Int,
-        height: Int,
-        targetWidth: Int,
-        targetHeight: Int
-    ): Int {
-        if (width <= 0 || height <= 0 || targetWidth <= 0 || targetHeight <= 0) {
-            return 1
-        }
-        var sampleSize = 1
-        var currentWidth = width
-        var currentHeight = height
-        while (currentWidth > targetWidth * 2 || currentHeight > targetHeight * 2) {
-            sampleSize *= 2
-            currentWidth /= 2
-            currentHeight /= 2
-        }
-        return sampleSize.coerceAtLeast(1)
     }
 
     private data class ImageBounds(

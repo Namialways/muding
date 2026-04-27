@@ -252,14 +252,21 @@ class ScreenshotManager(private val context: Context) {
         val buffer = planes[0].buffer
         val pixelStride = planes[0].pixelStride
         val rowStride = planes[0].rowStride
-        val rowPadding = rowStride - pixelStride * width
+        val copyPlan = ScreenshotBitmapCopyPlan.from(
+            width = width,
+            pixelStride = pixelStride,
+            rowStride = rowStride
+        )
 
         val tmpBitmap = Bitmap.createBitmap(
-            width + rowPadding / pixelStride,
+            copyPlan.intermediateWidth,
             height,
             Bitmap.Config.ARGB_8888
         )
         tmpBitmap.copyPixelsFromBuffer(buffer)
+        if (!copyPlan.requiresCroppedCopy) {
+            return tmpBitmap
+        }
 
         val cropped = Bitmap.createBitmap(tmpBitmap, 0, 0, width, height)
         tmpBitmap.recycle()
