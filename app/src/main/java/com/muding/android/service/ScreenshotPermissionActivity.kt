@@ -20,13 +20,11 @@ class ScreenshotPermissionActivity : ComponentActivity() {
     private val screenCaptureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        val serviceIntent = ScreenshotPermissionResultIntentFactory.create(
+            resultCode = result.resultCode,
+            resultData = result.data
+        ).setClass(this, FloatingBallService::class.java)
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            val serviceIntent = Intent(this, FloatingBallService::class.java).apply {
-                action = FloatingBallService.ACTION_START_SCREENSHOT
-                putExtra(FloatingBallService.EXTRA_RESULT_CODE, result.resultCode)
-                putExtra(FloatingBallService.EXTRA_RESULT_DATA, result.data)
-                putExtra(FloatingBallService.EXTRA_CAPTURE_AFTER_PERMISSION, true)
-            }
             moveTaskToBack(true)
             finish()
             overridePendingTransition(0, 0)
@@ -39,6 +37,7 @@ class ScreenshotPermissionActivity : ComponentActivity() {
         moveTaskToBack(true)
         finish()
         overridePendingTransition(0, 0)
+        applicationContext.startService(serviceIntent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
