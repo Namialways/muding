@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
@@ -31,6 +32,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -68,6 +70,9 @@ fun SettingsScreen(
     maxSessionCount: Int,
     retainDays: Int,
     snapshot: MainScreenSnapshot,
+    appVersionName: String,
+    permissionSupportUiState: PermissionSupportUiState,
+    updateCheckUiState: UpdateCheckUiState,
     onOpenSection: (SettingsSection) -> Unit,
     onActionChanged: (CaptureResultAction) -> Unit,
     onScaleModeChanged: (PinScaleMode) -> Unit,
@@ -82,6 +87,10 @@ fun SettingsScreen(
     onPinHistoryEnabledChanged: (Boolean) -> Unit,
     onPinHistoryRetentionChanged: (Int, Int) -> Unit,
     onProjectRecordRetentionChanged: (Int, Int) -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onOpenReleasePage: () -> Unit,
+    onExportDiagnostics: () -> Unit,
+    onRequestPermission: () -> Unit,
     onClearWorkRecords: () -> Unit,
     onResetApplication: () -> Unit
 ) {
@@ -139,6 +148,17 @@ fun SettingsScreen(
             onProjectRecordRetentionChanged = onProjectRecordRetentionChanged,
             onClearWorkRecords = onClearWorkRecords,
             onResetApplication = onResetApplication
+        )
+
+        SettingsSection.ABOUT -> AboutSettingsSection(
+            modifier = modifier,
+            appVersionName = appVersionName,
+            permissionSupportUiState = permissionSupportUiState,
+            updateCheckUiState = updateCheckUiState,
+            onCheckForUpdates = onCheckForUpdates,
+            onOpenReleasePage = onOpenReleasePage,
+            onExportDiagnostics = onExportDiagnostics,
+            onRequestPermission = onRequestPermission
         )
     }
 }
@@ -203,6 +223,15 @@ private fun SettingsOverviewScreen(
                 title = SettingsSection.STORAGE_AND_RECORDS.title,
                 value = storageSettingsSummary(pinHistoryEnabled),
                 onClick = { onOpenSection(SettingsSection.STORAGE_AND_RECORDS) }
+            )
+        }
+
+        item {
+            SettingEntryRow(
+                icon = Icons.Default.Info,
+                title = SettingsSection.ABOUT.title,
+                value = "版本、更新与隐私",
+                onClick = { onOpenSection(SettingsSection.ABOUT) }
             )
         }
     }
@@ -556,6 +585,7 @@ private fun StorageAndRecordsSettingsSection(
                 )
             }
         }
+
     }
 
     retentionSheet?.let { sheetModel ->
@@ -597,6 +627,167 @@ private fun StorageAndRecordsSettingsSection(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun AboutSettingsSection(
+    modifier: Modifier = Modifier,
+    appVersionName: String,
+    permissionSupportUiState: PermissionSupportUiState,
+    updateCheckUiState: UpdateCheckUiState,
+    onCheckForUpdates: () -> Unit,
+    onOpenReleasePage: () -> Unit,
+    onExportDiagnostics: () -> Unit,
+    onRequestPermission: () -> Unit
+) {
+    val tokens = rememberMainUiTokens()
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = tokens.spacing.pageGutter),
+        verticalArrangement = Arrangement.spacedBy(tokens.spacing.sectionGap),
+        contentPadding = PaddingValues(vertical = 20.dp)
+    ) {
+        item {
+            SectionHeader(
+                title = SettingsSection.ABOUT.title,
+                description = "查看版本、更新、权限状态和隐私说明。"
+            )
+        }
+
+        item {
+            AboutHeroPanel(appVersionName = appVersionName)
+        }
+
+        item {
+            SettingGroup(
+                title = "版本与更新",
+                description = "通过 GitHub Release 获取最新安装包。"
+            ) {
+                Text(
+                    text = updateCheckUiState.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onCheckForUpdates,
+                        enabled = !updateCheckUiState.checking,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (updateCheckUiState.checking) "检查中..." else "检查更新")
+                    }
+                    if (updateCheckUiState.canOpenReleasePage) {
+                        Button(
+                            onClick = onOpenReleasePage,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("查看新版")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            SettingGroup(
+                title = "权限状态",
+                description = "悬浮窗用于常驻入口，截图授权会在发起截图时按系统要求弹出。"
+            ) {
+                InlineValueRow("悬浮窗权限", permissionSupportUiState.overlayStatusLabel)
+                InlineValueRow("截图授权", permissionSupportUiState.screenshotStatusLabel)
+                Text(
+                    text = permissionSupportUiState.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+                if (permissionSupportUiState.showOverlayPermissionAction) {
+                    OutlinedButton(
+                        onClick = onRequestPermission,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("重新授权悬浮窗")
+                    }
+                }
+            }
+        }
+
+        item {
+            SettingGroup(
+                title = "隐私与诊断",
+                description = "截图、OCR 与贴图数据默认在本机处理。只有主动使用云翻译时，待翻译文本才会发送到已配置的翻译服务。"
+            ) {
+                Text(
+                    text = "诊断日志仅包含版本、权限状态和存储统计，便于定位问题，不会导出截图图片或 OCR 原文。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+                OutlinedButton(
+                    onClick = onExportDiagnostics,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("导出诊断日志")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutHeroPanel(
+    appVersionName: String
+) {
+    val tokens = rememberMainUiTokens()
+    val displayVersion = if (appVersionName.startsWith("v", ignoreCase = true)) {
+        appVersionName
+    } else {
+        "v$appVersionName"
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(tokens.corners.group),
+        color = tokens.palette.surfaceStrong,
+        border = BorderStroke(1.dp, tokens.palette.outline),
+        tonalElevation = tokens.elevations.flat
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(tokens.spacing.contentPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "幕钉 Muding",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = tokens.palette.title
+                )
+                Text(
+                    text = "轻量截图、贴图、OCR 与翻译工具。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.palette.body
+                )
+            }
+            Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp),
+                color = tokens.palette.surfaceAccent
+            ) {
+                Text(
+                    text = displayVersion,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = tokens.palette.accent
+                )
+            }
+        }
     }
 }
 

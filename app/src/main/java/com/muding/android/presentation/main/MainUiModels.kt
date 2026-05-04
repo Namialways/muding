@@ -37,6 +37,10 @@ enum class SettingsSection(
     STORAGE_AND_RECORDS(
         title = "存储与记录",
         description = ""
+    ),
+    ABOUT(
+        title = "关于",
+        description = ""
     )
 }
 

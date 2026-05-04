@@ -76,4 +76,10 @@ class MainUiModelsTest {
         assertEquals("排序", recordsSortButtonLabel(RecordsSortOrder.NEWEST))
         assertEquals("排序", recordsSortButtonLabel(RecordsSortOrder.SOURCE))
     }
+
+    @Test
+    fun settingsSections_includeStandaloneAboutEntryAtTheEnd() {
+        assertEquals("关于", SettingsSection.ABOUT.title)
+        assertEquals(SettingsSection.ABOUT, SettingsSection.entries.last())
+    }
 }

@@ -1,7 +1,9 @@
 package com.muding.android
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
@@ -19,6 +21,7 @@ import com.muding.android.data.settings.AppSettingsRepository
 import com.muding.android.data.settings.FloatingBallSettings
 import com.muding.android.data.settings.OnboardingGuideProgress
 import com.muding.android.domain.usecase.AppMaintenanceCoordinator
+import com.muding.android.domain.usecase.DiagnosticLogExporter
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PermissionHandler
@@ -26,8 +29,12 @@ import com.muding.android.domain.usecase.PinHistoryMetadata
 import com.muding.android.feature.floatingball.FloatingBallImageProcessor
 import com.muding.android.feature.pin.creation.EditorLaunchRequest
 import com.muding.android.feature.pin.creation.PinCreationCoordinator
+import com.muding.android.feature.update.GitHubReleaseUpdateChecker
 import com.muding.android.presentation.main.MainScreen
 import com.muding.android.presentation.main.MainScreenSnapshot
+import com.muding.android.presentation.main.PermissionSupportUiState
+import com.muding.android.presentation.main.UpdateCheckUiState
+import com.muding.android.presentation.main.buildDiagnosticLogContent
 import com.muding.android.presentation.source.ClipboardTextPinActivity
 import com.muding.android.presentation.source.FloatingBallImagePickerActivity
 import com.muding.android.presentation.source.GalleryOcrActivity
@@ -47,6 +54,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var pinCreationCoordinator: PinCreationCoordinator
     private lateinit var appMaintenanceCoordinator: AppMaintenanceCoordinator
     private lateinit var floatingBallImageProcessor: FloatingBallImageProcessor
+    private lateinit var updateChecker: GitHubReleaseUpdateChecker
+    private lateinit var diagnosticLogExporter: DiagnosticLogExporter
 
     private var floatingBallSettings by mutableStateOf(defaultFloatingBallSettings())
     private var onboardingGuideProgress by mutableStateOf(defaultOnboardingGuideProgress())
@@ -70,6 +79,8 @@ class MainActivity : ComponentActivity() {
         runtimeStorageRepository = AppGraph.runtimeStorageRepository(this)
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
         floatingBallImageProcessor = AppGraph.floatingBallImageProcessor(this)
+        updateChecker = GitHubReleaseUpdateChecker()
+        diagnosticLogExporter = DiagnosticLogExporter(this)
         appMaintenanceCoordinator = AppMaintenanceCoordinator(
             annotationSessionRepository = annotationSessionRepository,
             pinHistoryRepository = pinHistoryRepository,
@@ -103,6 +114,7 @@ class MainActivity : ComponentActivity() {
                     initialMaxPinHistoryCount = pinHistorySettings.maxCount,
                     initialPinHistoryRetainDays = pinHistorySettings.retainDays,
                     initialSnapshot = MainScreenSnapshot.empty(),
+                    appVersionName = appVersionName(),
                     onActionChanged = { action -> settingsRepository.setCaptureResultAction(action) },
                     onScaleModeChanged = { mode -> settingsRepository.setPinScaleMode(mode) },
                     onProjectRecordRetentionChanged = { count, days ->
@@ -201,6 +213,19 @@ class MainActivity : ComponentActivity() {
                         pruneRecords()
                         buildSnapshot()
                     },
+                    onCheckForUpdates = {
+                        updateChecker.check(appVersionName())
+                    },
+                    onOpenReleasePage = {
+                        openReleasePage()
+                    },
+                    onExportDiagnostics = { snapshot, permissionState, updateState ->
+                        exportDiagnostics(
+                            snapshot = snapshot,
+                            permissionState = permissionState,
+                            updateState = updateState
+                        )
+                    },
                     onRequestPermission = {
                         permissionHandler.requestOverlayPermission(this)
                     },
@@ -271,6 +296,39 @@ class MainActivity : ComponentActivity() {
         floatingBallImagePickerLauncher.launch(
             Intent(this, FloatingBallImagePickerActivity::class.java)
         )
+    }
+
+    private fun openReleasePage() {
+        startActivity(
+            Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(GitHubReleaseUpdateChecker.LATEST_RELEASE_PAGE_URL)
+            )
+        )
+    }
+
+    private fun exportDiagnostics(
+        snapshot: MainScreenSnapshot,
+        permissionState: PermissionSupportUiState,
+        updateState: UpdateCheckUiState
+    ) {
+        try {
+            val content = buildDiagnosticLogContent(
+                appVersionName = appVersionName(),
+                permissionState = permissionState,
+                updateState = updateState,
+                snapshot = snapshot
+            )
+            diagnosticLogExporter.share(content)
+        } catch (e: Exception) {
+            Toast.makeText(this, "导出诊断日志失败：${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun appVersionName(): String {
+        return runCatching {
+            packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+        }.getOrDefault("1.0.0").ifBlank { "1.0.0" }
     }
 
     private fun refreshFloatingBallAppearance() {

@@ -34,6 +34,7 @@ import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinHistoryRecord
 import com.muding.android.domain.usecase.PinScaleMode
+import com.muding.android.feature.update.AppUpdateResult
 import com.muding.android.feature.onboarding.OnboardingGuideState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,6 +60,7 @@ fun MainScreen(
     initialMaxPinHistoryCount: Int,
     initialPinHistoryRetainDays: Int,
     initialSnapshot: MainScreenSnapshot,
+    appVersionName: String,
     onActionChanged: (CaptureResultAction) -> Unit,
     onScaleModeChanged: (PinScaleMode) -> Unit,
     onProjectRecordRetentionChanged: (Int, Int) -> Unit,
@@ -78,6 +80,9 @@ fun MainScreen(
     onRestoreHistory: (PinHistoryRecord) -> Unit,
     onEditHistory: (PinHistoryRecord) -> Unit,
     onRefreshRecords: () -> MainScreenSnapshot,
+    onCheckForUpdates: suspend () -> AppUpdateResult,
+    onOpenReleasePage: () -> Unit,
+    onExportDiagnostics: (MainScreenSnapshot, PermissionSupportUiState, UpdateCheckUiState) -> Unit,
     onRequestPermission: () -> Unit,
     onOpenGalleryPin: () -> Unit,
     onOpenGalleryOcr: () -> Unit,
@@ -111,6 +116,9 @@ fun MainScreen(
     var pinHistoryRetainDays by remember { mutableIntStateOf(initialPinHistoryRetainDays) }
     var snapshot by remember { mutableStateOf(initialSnapshot) }
     var recordsLoading by remember { mutableStateOf(false) }
+    var updateCheckUiState by remember(appVersionName) {
+        mutableStateOf(UpdateCheckUiState.idle(currentVersionName = appVersionName))
+    }
     val isPreview = LocalInspectionMode.current
     val tokens = rememberMainUiTokens()
 
@@ -130,6 +138,14 @@ fun MainScreen(
                 onRefreshRecords()
             }
             recordsLoading = false
+        }
+    }
+
+    fun checkForUpdates() {
+        scope.launch {
+            updateCheckUiState = UpdateCheckUiState.checking()
+            val result = onCheckForUpdates()
+            updateCheckUiState = UpdateCheckUiState.fromResult(result)
         }
     }
 
@@ -290,6 +306,9 @@ fun MainScreen(
                 maxSessionCount = maxSessionCount,
                 retainDays = retainDays,
                 snapshot = snapshot,
+                appVersionName = appVersionName,
+                permissionSupportUiState = PermissionSupportUiState.from(permissionGranted),
+                updateCheckUiState = updateCheckUiState,
                 onOpenSection = { currentSettingsSection = it },
                 onActionChanged = {
                     selectedAction = it
@@ -350,6 +369,16 @@ fun MainScreen(
                     retainDays = days
                     runRecordsMutation { onProjectRecordRetentionChanged(count, days) }
                 },
+                onCheckForUpdates = { checkForUpdates() },
+                onOpenReleasePage = onOpenReleasePage,
+                onExportDiagnostics = {
+                    onExportDiagnostics(
+                        snapshot,
+                        PermissionSupportUiState.from(permissionGranted),
+                        updateCheckUiState
+                    )
+                },
+                onRequestPermission = onRequestPermission,
                 onClearWorkRecords = { runRecordsMutation { onClearWorkRecords() } },
                 onResetApplication = {
                     recordsLoading = true
