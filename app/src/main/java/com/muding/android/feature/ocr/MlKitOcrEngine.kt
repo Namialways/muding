@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
@@ -17,24 +18,45 @@ class MlKitOcrEngine : OcrEngine {
     )
 
     override suspend fun recognize(bitmap: Bitmap): OcrResult {
+        val preparedBitmaps = OcrBitmapPreprocessor.prepare(bitmap)
+        return try {
+            val candidates = preparedBitmaps.flatMap { prepared ->
+                listOf(
+                    recognizeCandidate(
+                        recognizer = chineseRecognizer,
+                        bitmap = prepared.bitmap,
+                        script = OcrRecognizerScript.CHINESE,
+                        variant = prepared.variant
+                    ),
+                    recognizeCandidate(
+                        recognizer = latinRecognizer,
+                        bitmap = prepared.bitmap,
+                        script = OcrRecognizerScript.LATIN,
+                        variant = prepared.variant
+                    )
+                )
+            }
+            OcrRecognitionCandidateSelector.select(candidates)
+        } finally {
+            OcrBitmapPreprocessor.recycleOwned(preparedBitmaps)
+        }
+    }
+
+    private suspend fun recognizeCandidate(
+        recognizer: TextRecognizer,
+        bitmap: Bitmap,
+        script: OcrRecognizerScript,
+        variant: OcrImageVariant
+    ): OcrRecognitionCandidate {
         val image = InputImage.fromBitmap(bitmap, 0)
-        val chineseResult = runCatching {
-            chineseRecognizer.process(image).awaitResult().toOcrResult()
+        val result = runCatching {
+            recognizer.process(image).awaitResult().toOcrResult()
         }.getOrDefault(OcrResult.EMPTY)
-
-        if (chineseResult.score() >= MIN_PREFERRED_SCORE) {
-            return chineseResult
-        }
-
-        val latinResult = runCatching {
-            latinRecognizer.process(image).awaitResult().toOcrResult()
-        }.getOrDefault(OcrResult.EMPTY)
-
-        return if (latinResult.score() > chineseResult.score()) {
-            latinResult
-        } else {
-            chineseResult
-        }
+        return OcrRecognitionCandidate(
+            result = result,
+            script = script,
+            variant = variant
+        )
     }
 
     private fun Text.toOcrResult(): OcrResult {
@@ -59,9 +81,5 @@ class MlKitOcrEngine : OcrEngine {
                 )
             }
         )
-    }
-
-    companion object {
-        private const val MIN_PREFERRED_SCORE = 4
     }
 }

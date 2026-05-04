@@ -28,7 +28,14 @@ class OcrFlowCoordinator(
         cropRectInBitmap: Rect
     ): PreparedOcrTextPinResult {
         val cropped = withContext(Dispatchers.Default) {
-            bitmapCropper.crop(bitmap, cropRectInBitmap)
+            bitmapCropper.crop(
+                bitmap = bitmap,
+                cropRectInBitmap = OcrCropPadding.expand(
+                    cropRect = cropRectInBitmap,
+                    bitmapWidth = bitmap.width,
+                    bitmapHeight = bitmap.height
+                )
+            )
         }
         try {
             val ocrResult = ocrEngine.recognize(cropped)
