@@ -65,6 +65,14 @@ class OcrResultActivity : ComponentActivity() {
         get() = intent.getBooleanExtra(EXTRA_FINISH_TO_BACKGROUND, false)
     private val restoreFloatingBall: Boolean
         get() = intent.getBooleanExtra(EXTRA_RESTORE_FLOATING_BALL, false)
+    private val floatingBallRestorePolicy by lazy {
+        OcrResultFloatingBallRestorePolicy(
+            shouldRestoreFloatingBall = restoreFloatingBall,
+            restoreFloatingBall = {
+                startService(FloatingBallService.createRestoreVisibilityIntent(this))
+            }
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -168,10 +176,13 @@ class OcrResultActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        floatingBallRestorePolicy.onStop(isChangingConfigurations)
+    }
+
     private fun finishFlow() {
-        if (restoreFloatingBall) {
-            startService(FloatingBallService.createRestoreVisibilityIntent(this))
-        }
+        floatingBallRestorePolicy.restoreNow()
         if (finishToBackground) {
             moveTaskToBack(true)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -218,6 +229,27 @@ internal fun shouldStartInitialAutoTranslate(
     text: String
 ): Boolean {
     return initialAutoTranslate && !autoTranslateStarted && text.isNotBlank()
+}
+
+internal class OcrResultFloatingBallRestorePolicy(
+    private val shouldRestoreFloatingBall: Boolean,
+    private val restoreFloatingBall: () -> Unit
+) {
+    private var hasRestored = false
+
+    fun onStop(isChangingConfigurations: Boolean) {
+        if (!isChangingConfigurations) {
+            restoreNow()
+        }
+    }
+
+    fun restoreNow() {
+        if (!shouldRestoreFloatingBall || hasRestored) {
+            return
+        }
+        hasRestored = true
+        restoreFloatingBall()
+    }
 }
 
 @Composable
