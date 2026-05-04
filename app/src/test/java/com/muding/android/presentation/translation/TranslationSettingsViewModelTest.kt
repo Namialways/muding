@@ -10,6 +10,7 @@ import com.muding.android.data.settings.ProjectRecordSettings
 import com.muding.android.data.settings.TranslationSettings
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.CaptureResultAction
+import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
 import com.muding.android.feature.translation.TranslationResult
@@ -187,6 +188,10 @@ class TranslationSettingsViewModelTest {
         override fun getCaptureResultAction(): CaptureResultAction = CaptureResultAction.OPEN_EDITOR
 
         override fun setCaptureResultAction(action: CaptureResultAction) = Unit
+
+        override fun getFloatingBallClickAction(): FloatingBallClickAction = FloatingBallClickAction.SCREENSHOT
+
+        override fun setFloatingBallClickAction(action: FloatingBallClickAction) = Unit
 
         override fun getFavoriteEditorColors(): List<Int> = emptyList()
 

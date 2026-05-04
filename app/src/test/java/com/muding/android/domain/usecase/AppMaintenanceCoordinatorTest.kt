@@ -173,6 +173,10 @@ class AppMaintenanceCoordinatorTest {
 
         override fun setCaptureResultAction(action: CaptureResultAction) = Unit
 
+        override fun getFloatingBallClickAction(): FloatingBallClickAction = FloatingBallClickAction.SCREENSHOT
+
+        override fun setFloatingBallClickAction(action: FloatingBallClickAction) = Unit
+
         override fun getFavoriteEditorColors(): List<Int> = emptyList()
 
         override fun setFavoriteEditorColors(colors: List<Int>) = Unit

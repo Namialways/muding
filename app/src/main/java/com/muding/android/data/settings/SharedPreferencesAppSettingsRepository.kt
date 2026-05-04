@@ -4,6 +4,7 @@ import android.content.Context
 import com.muding.android.domain.usecase.CaptureFlowSettings
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.CaptureResultAction
+import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
 import com.muding.android.feature.translation.AndroidKeystoreSecretStore
@@ -35,6 +36,14 @@ class SharedPreferencesAppSettingsRepository(context: Context) : AppSettingsRepo
 
     override fun setCaptureResultAction(action: CaptureResultAction) {
         settings.setResultAction(action)
+    }
+
+    override fun getFloatingBallClickAction(): FloatingBallClickAction {
+        return settings.getFloatingBallClickAction()
+    }
+
+    override fun setFloatingBallClickAction(action: FloatingBallClickAction) {
+        settings.setFloatingBallClickAction(action)
     }
 
     override fun getFavoriteEditorColors(): List<Int> = settings.getFavoriteEditorColors()

@@ -16,6 +16,20 @@ enum class CaptureResultAction(val value: String) {
     }
 }
 
+enum class FloatingBallClickAction(val value: String) {
+    SCREENSHOT("screenshot"),
+    OCR("ocr"),
+    TRANSLATE("translate"),
+    GALLERY_PIN("gallery_pin"),
+    CLIPBOARD_TEXT_PIN("clipboard_text_pin");
+
+    companion object {
+        fun fromValue(value: String?): FloatingBallClickAction {
+            return entries.firstOrNull { it.value == value } ?: SCREENSHOT
+        }
+    }
+}
+
 enum class PinScaleMode(val value: String) {
     LOCK_ASPECT("lock_aspect"),
     FREE_SCALE("free_scale")
@@ -49,6 +63,16 @@ class CaptureFlowSettings private constructor(
 
     fun setResultAction(action: CaptureResultAction) {
         prefs.edit().putString(KEY_RESULT_ACTION, action.value).apply()
+    }
+
+    fun getFloatingBallClickAction(): FloatingBallClickAction {
+        return FloatingBallClickAction.fromValue(
+            prefs.getString(KEY_FLOATING_BALL_CLICK_ACTION, FloatingBallClickAction.SCREENSHOT.value)
+        )
+    }
+
+    fun setFloatingBallClickAction(action: FloatingBallClickAction) {
+        prefs.edit().putString(KEY_FLOATING_BALL_CLICK_ACTION, action.value).apply()
     }
 
     fun getFavoriteEditorColors(): List<Int> {
@@ -342,6 +366,7 @@ class CaptureFlowSettings private constructor(
 
         private const val PREFS_NAME = "muding_capture_flow"
         private const val KEY_RESULT_ACTION = "result_action"
+        private const val KEY_FLOATING_BALL_CLICK_ACTION = "floating_ball_click_action"
         private const val KEY_FAVORITE_EDITOR_COLORS = "favorite_editor_colors"
         private const val KEY_RECENT_EDITOR_COLORS = "recent_editor_colors"
         private const val KEY_PIN_SCALE_MODE = "pin_scale_mode"

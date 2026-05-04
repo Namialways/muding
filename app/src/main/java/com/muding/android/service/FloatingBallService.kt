@@ -86,6 +86,7 @@ import com.muding.android.data.repository.RecentPinRepository
 import com.muding.android.data.settings.AppSettingsRepository
 import com.muding.android.data.settings.OnboardingGuideProgress
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
+import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.ScreenshotManager
 import com.muding.android.domain.usecase.CaptureResultAction
@@ -118,7 +119,8 @@ private data class FloatingBallAppearance(
 
 private enum class CaptureEntryMode {
     PIN,
-    OCR
+    OCR,
+    TRANSLATE
 }
 
 class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
@@ -314,7 +316,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                         appearance = appearance,
                         isExpanded = floatingMenuExpanded.value,
                         onExpandedChange = { setFloatingMenuExpanded(it) },
-                        onScreenshot = { startStandardScreenshot() },
+                        onClickAction = { startConfiguredClickAction() },
                         onInteraction = { markFloatingBallHintSeen() },
                         onPositionChange = { dx, dy ->
                             cancelSnap()
@@ -427,6 +429,21 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun startScreenshotOcr() {
         pendingCaptureMode = CaptureEntryMode.OCR
         handleScreenshot()
+    }
+
+    private fun startScreenshotTranslation() {
+        pendingCaptureMode = CaptureEntryMode.TRANSLATE
+        handleScreenshot()
+    }
+
+    private fun startConfiguredClickAction() {
+        when (settingsRepository.getFloatingBallClickAction()) {
+            FloatingBallClickAction.SCREENSHOT -> startStandardScreenshot()
+            FloatingBallClickAction.OCR -> startScreenshotOcr()
+            FloatingBallClickAction.TRANSLATE -> startScreenshotTranslation()
+            FloatingBallClickAction.GALLERY_PIN -> openGalleryPicker()
+            FloatingBallClickAction.CLIPBOARD_TEXT_PIN -> openClipboardTextPin()
+        }
     }
 
     private fun openGalleryPicker() {
@@ -551,7 +568,8 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private fun completeCaptureSelection(cropRectInBitmap: Rect) {
         when (pendingCaptureMode) {
             CaptureEntryMode.PIN -> cropAndContinue(cropRectInBitmap)
-            CaptureEntryMode.OCR -> ocrAndContinue(cropRectInBitmap)
+            CaptureEntryMode.OCR -> ocrAndContinue(cropRectInBitmap, autoTranslate = false)
+            CaptureEntryMode.TRANSLATE -> ocrAndContinue(cropRectInBitmap, autoTranslate = true)
         }
     }
 
@@ -587,7 +605,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
-    private fun ocrAndContinue(cropRectInBitmap: Rect) {
+    private fun ocrAndContinue(cropRectInBitmap: Rect, autoTranslate: Boolean) {
         val bitmap = cropOverlayBitmap ?: return
         lifecycleScope.launch {
             try {
@@ -602,6 +620,7 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                             putExtra(OcrResultActivity.EXTRA_RECOGNIZED_TEXT, preparedResult.recognizedText)
                             putExtra(OcrResultActivity.EXTRA_FINISH_TO_BACKGROUND, true)
                             putExtra(OcrResultActivity.EXTRA_RESTORE_FLOATING_BALL, true)
+                            putExtra(OcrResultActivity.EXTRA_AUTO_TRANSLATE, autoTranslate)
                         }
                     )
                 )
@@ -1132,7 +1151,7 @@ private fun FloatingBallContent(
     appearance: FloatingBallAppearance,
     isExpanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    onScreenshot: () -> Unit,
+    onClickAction: () -> Unit,
     onInteraction: () -> Unit,
     onPositionChange: (Float, Float) -> Unit,
     onDragEnd: () -> Unit
@@ -1164,7 +1183,7 @@ private fun FloatingBallContent(
                 if (isExpanded) {
                     onExpandedChange(false)
                 } else {
-                    onScreenshot()
+                    onClickAction()
                 }
             }
         )

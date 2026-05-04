@@ -16,6 +16,22 @@ class CaptureFlowSettingsTest {
     }
 
     @Test
+    fun floatingBallClickAction_defaultsToScreenshotWhenUnset() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        assertEquals(FloatingBallClickAction.SCREENSHOT, settings.getFloatingBallClickAction())
+    }
+
+    @Test
+    fun floatingBallClickAction_persistsSelectedQuickAction() {
+        val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
+
+        settings.setFloatingBallClickAction(FloatingBallClickAction.TRANSLATE)
+
+        assertEquals(FloatingBallClickAction.TRANSLATE, settings.getFloatingBallClickAction())
+    }
+
+    @Test
     fun getFloatingBallSizeDp_defaultsToFortySixWhenUnset() {
         val settings = CaptureFlowSettings.forPreferences(InMemorySharedPreferences())
 

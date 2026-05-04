@@ -1,6 +1,7 @@
 package com.muding.android.presentation.main
 
 import com.muding.android.domain.usecase.CaptureResultAction
+import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.PinScaleMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -81,5 +82,11 @@ class MainUiModelsTest {
     fun settingsSections_includeStandaloneAboutEntryAtTheEnd() {
         assertEquals("关于", SettingsSection.ABOUT.title)
         assertEquals(SettingsSection.ABOUT, SettingsSection.entries.last())
+    }
+
+    @Test
+    fun floatingBallClickActionLabel_returnsUserFacingActionName() {
+        assertEquals("截图", floatingBallClickActionLabel(FloatingBallClickAction.SCREENSHOT))
+        assertEquals("翻译", floatingBallClickActionLabel(FloatingBallClickAction.TRANSLATE))
     }
 }

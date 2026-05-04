@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     hasOverlayPermission = permissionHandler.hasOverlayPermission(),
                     initialAction = settingsRepository.getCaptureResultAction(),
+                    initialFloatingBallClickAction = settingsRepository.getFloatingBallClickAction(),
                     initialScaleMode = settingsRepository.getPinScaleMode(),
                     initialMaxSessionCount = projectRecordSettings.maxSessionCount,
                     initialRetainDays = projectRecordSettings.retainDays,
@@ -116,6 +117,9 @@ class MainActivity : ComponentActivity() {
                     initialSnapshot = MainScreenSnapshot.empty(),
                     appVersionName = appVersionName(),
                     onActionChanged = { action -> settingsRepository.setCaptureResultAction(action) },
+                    onFloatingBallClickActionChanged = { action ->
+                        settingsRepository.setFloatingBallClickAction(action)
+                    },
                     onScaleModeChanged = { mode -> settingsRepository.setPinScaleMode(mode) },
                     onProjectRecordRetentionChanged = { count, days ->
                         settingsRepository.setMaxSessionCount(count)

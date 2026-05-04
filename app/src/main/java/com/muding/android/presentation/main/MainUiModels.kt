@@ -1,6 +1,7 @@
 package com.muding.android.presentation.main
 
 import com.muding.android.domain.usecase.CaptureResultAction
+import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.PinHistoryRecord
 import com.muding.android.domain.usecase.PinHistorySourceType
 import com.muding.android.domain.usecase.PinScaleMode
@@ -144,6 +145,16 @@ fun captureActionLabel(action: CaptureResultAction): String {
     return when (action) {
         CaptureResultAction.PIN_DIRECTLY -> "截图后直接贴图"
         CaptureResultAction.OPEN_EDITOR -> "截图后进入编辑"
+    }
+}
+
+fun floatingBallClickActionLabel(action: FloatingBallClickAction): String {
+    return when (action) {
+        FloatingBallClickAction.SCREENSHOT -> "截图"
+        FloatingBallClickAction.OCR -> "OCR"
+        FloatingBallClickAction.TRANSLATE -> "翻译"
+        FloatingBallClickAction.GALLERY_PIN -> "贴图"
+        FloatingBallClickAction.CLIPBOARD_TEXT_PIN -> "剪贴板文字贴图"
     }
 }
 

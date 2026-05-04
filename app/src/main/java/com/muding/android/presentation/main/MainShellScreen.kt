@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.muding.android.data.settings.OnboardingGuideProgress
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
+import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinHistoryRecord
 import com.muding.android.domain.usecase.PinScaleMode
@@ -45,6 +46,7 @@ import kotlinx.coroutines.withContext
 fun MainScreen(
     hasOverlayPermission: Boolean,
     initialAction: CaptureResultAction,
+    initialFloatingBallClickAction: FloatingBallClickAction,
     initialScaleMode: PinScaleMode,
     initialMaxSessionCount: Int,
     initialRetainDays: Int,
@@ -62,6 +64,7 @@ fun MainScreen(
     initialSnapshot: MainScreenSnapshot,
     appVersionName: String,
     onActionChanged: (CaptureResultAction) -> Unit,
+    onFloatingBallClickActionChanged: (FloatingBallClickAction) -> Unit,
     onScaleModeChanged: (PinScaleMode) -> Unit,
     onProjectRecordRetentionChanged: (Int, Int) -> Unit,
     onDefaultPinShadowChanged: (Boolean) -> Unit,
@@ -94,6 +97,7 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     var permissionGranted by remember { mutableStateOf(hasOverlayPermission) }
     var selectedAction by remember { mutableStateOf(initialAction) }
+    var selectedFloatingBallClickAction by remember { mutableStateOf(initialFloatingBallClickAction) }
     var selectedScaleMode by remember { mutableStateOf(initialScaleMode) }
     var maxSessionCount by remember { mutableIntStateOf(initialMaxSessionCount) }
     var retainDays by remember { mutableIntStateOf(initialRetainDays) }
@@ -292,6 +296,7 @@ fun MainScreen(
                 selectedSection = currentSettingsSection,
                 permissionGranted = permissionGranted,
                 selectedAction = selectedAction,
+                selectedFloatingBallClickAction = selectedFloatingBallClickAction,
                 selectedScaleMode = selectedScaleMode,
                 defaultPinShadowEnabled = defaultPinShadowEnabled,
                 defaultPinCornerRadiusDp = defaultPinCornerRadiusDp,
@@ -313,6 +318,10 @@ fun MainScreen(
                 onActionChanged = {
                     selectedAction = it
                     onActionChanged(it)
+                },
+                onFloatingBallClickActionChanged = {
+                    selectedFloatingBallClickAction = it
+                    onFloatingBallClickActionChanged(it)
                 },
                 onScaleModeChanged = {
                     selectedScaleMode = it

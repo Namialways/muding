@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
+import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
 import com.muding.android.presentation.translation.TranslationSettingsPage
@@ -56,6 +57,7 @@ fun SettingsScreen(
     selectedSection: SettingsSection?,
     permissionGranted: Boolean,
     selectedAction: CaptureResultAction,
+    selectedFloatingBallClickAction: FloatingBallClickAction,
     selectedScaleMode: PinScaleMode,
     defaultPinShadowEnabled: Boolean,
     defaultPinCornerRadiusDp: Float,
@@ -75,6 +77,7 @@ fun SettingsScreen(
     updateCheckUiState: UpdateCheckUiState,
     onOpenSection: (SettingsSection) -> Unit,
     onActionChanged: (CaptureResultAction) -> Unit,
+    onFloatingBallClickActionChanged: (FloatingBallClickAction) -> Unit,
     onScaleModeChanged: (PinScaleMode) -> Unit,
     onDefaultPinShadowChanged: (Boolean) -> Unit,
     onDefaultPinCornerRadiusChanged: (Float) -> Unit,
@@ -107,12 +110,14 @@ fun SettingsScreen(
         SettingsSection.CAPTURE_AND_FLOATING -> CaptureAndFloatingSettingsSection(
             modifier = modifier,
             selectedAction = selectedAction,
+            selectedFloatingBallClickAction = selectedFloatingBallClickAction,
             floatingBallSizeDp = floatingBallSizeDp,
             floatingBallOpacity = floatingBallOpacity,
             floatingBallTheme = floatingBallTheme,
             floatingBallAppearanceMode = floatingBallAppearanceMode,
             floatingBallCustomImageUri = floatingBallCustomImageUri,
             onActionChanged = onActionChanged,
+            onFloatingBallClickActionChanged = onFloatingBallClickActionChanged,
             onFloatingBallSizeChanged = onFloatingBallSizeChanged,
             onFloatingBallOpacityChanged = onFloatingBallOpacityChanged,
             onFloatingBallThemeChanged = onFloatingBallThemeChanged,
@@ -238,16 +243,19 @@ private fun SettingsOverviewScreen(
 
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun CaptureAndFloatingSettingsSection(
     modifier: Modifier = Modifier,
     selectedAction: CaptureResultAction,
+    selectedFloatingBallClickAction: FloatingBallClickAction,
     floatingBallSizeDp: Int,
     floatingBallOpacity: Float,
     floatingBallTheme: FloatingBallTheme,
     floatingBallAppearanceMode: FloatingBallAppearanceMode,
     floatingBallCustomImageUri: String?,
     onActionChanged: (CaptureResultAction) -> Unit,
+    onFloatingBallClickActionChanged: (FloatingBallClickAction) -> Unit,
     onFloatingBallSizeChanged: (Int) -> Unit,
     onFloatingBallOpacityChanged: (Float) -> Unit,
     onFloatingBallThemeChanged: (FloatingBallTheme) -> Unit,
@@ -256,6 +264,8 @@ private fun CaptureAndFloatingSettingsSection(
     onChooseFloatingBallCustomImage: () -> Unit
 ) {
     val tokens = rememberMainUiTokens()
+    var captureActionSheetVisible by remember { mutableStateOf(false) }
+    var floatingBallClickActionSheetVisible by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -272,15 +282,23 @@ private fun CaptureAndFloatingSettingsSection(
 
         item {
             SettingGroup(title = "截图结果") {
-                CaptureOptionRow(
-                    title = "截图后直接贴图到屏幕",
-                    selected = selectedAction == CaptureResultAction.PIN_DIRECTLY,
-                    onSelect = { onActionChanged(CaptureResultAction.PIN_DIRECTLY) }
+                CompactSettingValueRow(
+                    title = "截图结果",
+                    value = captureActionLabel(selectedAction),
+                    onClick = { captureActionSheetVisible = true }
                 )
-                CaptureOptionRow(
-                    title = "截图后进入编辑器",
-                    selected = selectedAction == CaptureResultAction.OPEN_EDITOR,
-                    onSelect = { onActionChanged(CaptureResultAction.OPEN_EDITOR) }
+            }
+        }
+
+        item {
+            SettingGroup(
+                title = "悬浮球点击动作",
+                description = "设置单击悬浮球时优先执行的动作；长按仍然打开快捷菜单。"
+            ) {
+                CompactSettingValueRow(
+                    title = "点击动作",
+                    value = floatingBallClickActionLabel(selectedFloatingBallClickAction),
+                    onClick = { floatingBallClickActionSheetVisible = true }
                 )
             }
         }
@@ -373,23 +391,105 @@ private fun CaptureAndFloatingSettingsSection(
                         }
                     }
                 } else {
-                    CaptureOptionRow(
-                        title = "蓝紫渐变",
-                        selected = floatingBallTheme == FloatingBallTheme.BLUE_PURPLE,
-                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.BLUE_PURPLE) }
-                    )
-                    CaptureOptionRow(
-                        title = "落日橙红",
-                        selected = floatingBallTheme == FloatingBallTheme.SUNSET,
-                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.SUNSET) }
-                    )
-                    CaptureOptionRow(
-                        title = "青绿渐变",
-                        selected = floatingBallTheme == FloatingBallTheme.EMERALD,
-                        onSelect = { onFloatingBallThemeChanged(FloatingBallTheme.EMERALD) }
-                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FloatingBallTheme.entries.forEach { theme ->
+                            SelectablePill(
+                                text = floatingBallThemeLabel(theme),
+                                selected = floatingBallTheme == theme,
+                                onClick = { onFloatingBallThemeChanged(theme) }
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    if (captureActionSheetVisible) {
+        CaptureActionBottomSheet(
+            selectedAction = selectedAction,
+            onDismiss = { captureActionSheetVisible = false },
+            onSelect = { action ->
+                onActionChanged(action)
+                captureActionSheetVisible = false
+            }
+        )
+    }
+
+    if (floatingBallClickActionSheetVisible) {
+        FloatingBallClickActionBottomSheet(
+            selectedAction = selectedFloatingBallClickAction,
+            onDismiss = { floatingBallClickActionSheetVisible = false },
+            onSelect = { action ->
+                onFloatingBallClickActionChanged(action)
+                floatingBallClickActionSheetVisible = false
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CaptureActionBottomSheet(
+    selectedAction: CaptureResultAction,
+    onDismiss: () -> Unit,
+    onSelect: (CaptureResultAction) -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            SectionHeader(
+                title = "截图结果",
+                description = "选择完成截图选区后的默认去向。"
+            )
+            CaptureOptionRow(
+                title = "截图后直接贴图到屏幕",
+                selected = selectedAction == CaptureResultAction.PIN_DIRECTLY,
+                onSelect = { onSelect(CaptureResultAction.PIN_DIRECTLY) }
+            )
+            CaptureOptionRow(
+                title = "截图后进入编辑器",
+                selected = selectedAction == CaptureResultAction.OPEN_EDITOR,
+                onSelect = { onSelect(CaptureResultAction.OPEN_EDITOR) }
+            )
+            Spacer(modifier = Modifier.padding(bottom = 4.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FloatingBallClickActionBottomSheet(
+    selectedAction: FloatingBallClickAction,
+    onDismiss: () -> Unit,
+    onSelect: (FloatingBallClickAction) -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            SectionHeader(
+                title = "悬浮球点击动作",
+                description = "长按悬浮球仍会打开完整快捷菜单。"
+            )
+            FloatingBallClickAction.entries.forEach { action ->
+                CaptureOptionRow(
+                    title = floatingBallClickActionLabel(action),
+                    selected = selectedAction == action,
+                    onSelect = { onSelect(action) }
+                )
+            }
+            Spacer(modifier = Modifier.padding(bottom = 4.dp))
         }
     }
 }

@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +74,7 @@ class OcrResultActivity : ComponentActivity() {
         cloudTranslationEngine = AppGraph.cloudTranslationEngine(this)
         val initialText = intent.getStringExtra(EXTRA_RECOGNIZED_TEXT).orEmpty()
         val initialTargetLanguageTag = settingsRepository.getTranslationSettings().localTargetLanguageTag
+        val initialAutoTranslate = intent.getBooleanExtra(EXTRA_AUTO_TRANSLATE, false)
 
         if (initialText.isBlank()) {
             Toast.makeText(this, "OCR 结果为空", Toast.LENGTH_SHORT).show()
@@ -89,6 +91,7 @@ class OcrResultActivity : ComponentActivity() {
                     OcrResultScreen(
                         initialText = initialText,
                         initialTargetLanguageTag = initialTargetLanguageTag,
+                        initialAutoTranslate = initialAutoTranslate,
                         onCreateTextPin = { text -> createTextPin(text) },
                         onCopyText = { text -> copyText(text) },
                         onTranslate = { text, targetLanguageTag, onComplete ->
@@ -183,6 +186,7 @@ class OcrResultActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_RECOGNIZED_TEXT = "extra_recognized_text"
+        const val EXTRA_AUTO_TRANSLATE = "extra_auto_translate"
         const val EXTRA_FINISH_TO_BACKGROUND = "extra_finish_to_background"
         const val EXTRA_RESTORE_FLOATING_BALL = "extra_restore_floating_ball"
     }
@@ -208,10 +212,19 @@ internal suspend fun translateOcrTextWithTarget(
     return engine.translate(text.trim(), targetLanguageTag)
 }
 
+internal fun shouldStartInitialAutoTranslate(
+    initialAutoTranslate: Boolean,
+    autoTranslateStarted: Boolean,
+    text: String
+): Boolean {
+    return initialAutoTranslate && !autoTranslateStarted && text.isNotBlank()
+}
+
 @Composable
 private fun OcrResultScreen(
     initialText: String,
     initialTargetLanguageTag: String,
+    initialAutoTranslate: Boolean,
     onCreateTextPin: (String) -> Unit,
     onCopyText: (String) -> Unit,
     onTranslate: (String, String, (String) -> Unit) -> Unit,
@@ -222,7 +235,17 @@ private fun OcrResultScreen(
     var targetLanguageTag by remember(initialTargetLanguageTag) {
         mutableStateOf(TranslationLanguageCatalog.findByAppTag(initialTargetLanguageTag).appTag)
     }
+    var autoTranslateStarted by remember(initialText, initialAutoTranslate) {
+        mutableStateOf(false)
+    }
     val targetLanguage = TranslationLanguageCatalog.findByAppTag(targetLanguageTag)
+
+    LaunchedEffect(initialAutoTranslate, autoTranslateStarted, text, targetLanguageTag) {
+        if (shouldStartInitialAutoTranslate(initialAutoTranslate, autoTranslateStarted, text)) {
+            autoTranslateStarted = true
+            onTranslate(text.trim(), targetLanguageTag) { translatedText = it }
+        }
+    }
 
     Column(
         modifier = Modifier

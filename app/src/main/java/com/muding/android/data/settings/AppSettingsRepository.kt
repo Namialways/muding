@@ -2,6 +2,7 @@ package com.muding.android.data.settings
 
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
+import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.FloatingBallLastPosition
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
@@ -50,6 +51,9 @@ data class TranslationSettings(
 interface AppSettingsRepository {
     fun getCaptureResultAction(): CaptureResultAction
     fun setCaptureResultAction(action: CaptureResultAction)
+
+    fun getFloatingBallClickAction(): FloatingBallClickAction
+    fun setFloatingBallClickAction(action: FloatingBallClickAction)
 
     fun getFavoriteEditorColors(): List<Int>
     fun setFavoriteEditorColors(colors: List<Int>)
