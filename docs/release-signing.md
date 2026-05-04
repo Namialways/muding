@@ -39,8 +39,8 @@ Add these in **GitHub repository > Settings > Secrets and variables > Actions > 
 Push a version tag:
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag -a v1.0.1 -m "v1.0.1"
+git push github v1.0.1
 ```
 
-The `Android Package` workflow will build and upload `muding-release-signed.apk` to the GitHub Release.
+The `Android Package` workflow requires signing secrets, builds only the signed release APK, and uploads it to the GitHub Release as `muding.apk`.
