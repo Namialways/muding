@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   package:
-    name: Build Release APK
+    name: Build Release APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -44,7 +44,7 @@ jobs:
              [ -z "$ANDROID_RELEASE_STORE_PASSWORD" ] || \
              [ -z "$ANDROID_RELEASE_KEY_ALIAS" ] || \
              [ -z "$ANDROID_RELEASE_KEY_PASSWORD" ]; then
-            echo "Release signing secrets are required to build muding.apk." >&2
+            echo "Release signing secrets are required to build release APKs." >&2
             exit 1
           fi
 
@@ -60,25 +60,28 @@ jobs:
       - name: Test
         run: ./gradlew testDebugUnitTest
 
-      - name: Build release APK
+      - name: Build release APKs
         run: ./gradlew assembleRelease
 
-      - name: Collect release APK
+      - name: Collect release APKs
         shell: bash
         run: |
           mkdir -p dist
-          if [ ! -f app/build/outputs/apk/release/app-release.apk ]; then
-            echo "Signed release APK was not produced." >&2
-            exit 1
-          fi
-          cp app/build/outputs/apk/release/app-release.apk dist/muding.apk
+          for abi in arm64-v8a armeabi-v7a; do
+            apk="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name "*-${abi}-release.apk" -print -quit)"
+            if [ -z "$apk" ]; then
+              echo "Signed release APK for ${abi} was not produced." >&2
+              exit 1
+            fi
+            cp "$apk" "dist/muding-${abi}.apk"
+          done
           ls -la dist
 
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: muding-apk
-          path: dist/muding.apk
+          name: muding-apks
+          path: dist/*.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -93,15 +96,15 @@ jobs:
           fi
 
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" dist/muding.apk --clobber
+            gh release upload "${GITHUB_REF_NAME}" dist/*.apk --clobber
           elif [ -n "${tag_notes//[[:space:]]/}" ]; then
-            gh release create "${GITHUB_REF_NAME}" dist/muding.apk \
+            gh release create "${GITHUB_REF_NAME}" dist/*.apk \
               --title "${GITHUB_REF_NAME}" \
               --notes "$tag_notes" \
               --generate-notes \
               --verify-tag
           else
-            gh release create "${GITHUB_REF_NAME}" dist/muding.apk \
+            gh release create "${GITHUB_REF_NAME}" dist/*.apk \
               --title "${GITHUB_REF_NAME}" \
               --generate-notes \
               --verify-tag

@@ -43,4 +43,7 @@ git tag -a v1.0.1 -m "v1.0.1"
 git push github v1.0.1
 ```
 
-The `Android Package` workflow requires signing secrets, builds only the signed release APK, and uploads it to the GitHub Release as `muding.apk`.
+The `Android Package` workflow requires signing secrets, builds only signed release APKs, and uploads the GitHub Release assets as:
+
+- `muding-arm64-v8a.apk`: recommended for most modern Android phones
+- `muding-armeabi-v7a.apk`: compatibility build for older 32-bit Android devices
