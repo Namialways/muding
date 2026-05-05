@@ -102,8 +102,6 @@ fun Modifier.bindMoveModeGestures(
                     // 应用超出 touch slop 的初始偏移量
                     handleMoveDrag(
                         interactionState = interactionState,
-                        paths = latestPaths.value,
-                        callbacks = callbacks,
                         dragAmount = toCanvasDelta(outcome.overSlop),
                         touch = toCanvasOffset(outcome.change.position)
                     )
@@ -123,14 +121,11 @@ fun Modifier.bindMoveModeGestures(
                                 paths = latestPaths.value,
                                 pan = toCanvasDelta(pan),
                                 zoom = zoom,
-                                rotation = rotation,
-                                callbacks = callbacks
+                                rotation = rotation
                             )
                         } else {
                             handleMoveDrag(
                                 interactionState = interactionState,
-                                paths = latestPaths.value,
-                                callbacks = callbacks,
                                 dragAmount = toCanvasDelta(change.positionChange()),
                                 touch = toCanvasOffset(change.position)
                             )
@@ -257,7 +252,6 @@ fun Modifier.bindCanvasInteropInput(
 fun Modifier.bindCanvasDragGestures(
     currentTool: DrawingTool?,
     latestPaths: State<List<DrawingPath>>,
-    latestSelectedPathIndex: State<Int?>,
     currentColor: Color,
     strokeWidth: Float,
     shapeFilled: Boolean,
@@ -339,7 +333,6 @@ fun Modifier.bindCanvasDragGestures(
                     handleTextDrag(
                         interactionState = interactionState,
                         paths = latestPaths.value,
-                        callbacks = callbacks,
                         dragAmount = toCanvasDelta(dragAmount)
                     )
                     change.consume()
@@ -417,11 +410,10 @@ fun Modifier.bindCanvasTapGestures(
                     )
                 },
                 onDoubleTap = { offset ->
-                    handleTextToolTap(
+                    handleTextToolDoubleTap(
                         pathHitTester = pathHitTester,
                         paths = latestPaths.value,
                         selectionHitRadius = selectionHitRadius,
-                        selectedPathIndex = latestSelectedPathIndex.value,
                         callbacks = callbacks,
                         textEditState = textEditState,
                         offset = toCanvasOffset(offset)

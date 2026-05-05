@@ -59,8 +59,6 @@ fun handleMoveDragStart(
 
 fun handleMoveDrag(
     interactionState: EditorCanvasInteractionState,
-    paths: List<DrawingPath>,
-    callbacks: EditorCanvasCallbacks,
     dragAmount: Offset,
     touch: Offset
 ) {
@@ -223,20 +221,25 @@ fun handleTextDragStart(
         tool = DrawingTool.TEXT
     )
     if (hitIndex != null) {
+        val hitPath = paths.getOrNull(hitIndex)
         interactionState.movingPathIndex = hitIndex
-        callbacks.onPathSelectionChanged(hitIndex, paths.getOrNull(hitIndex))
+        interactionState.originalDragPath = hitPath
+        interactionState.activePreviewPath = hitPath
+        callbacks.onPathSelectionChanged(hitIndex, hitPath)
     }
 }
 
 fun handleTextDrag(
     interactionState: EditorCanvasInteractionState,
     paths: List<DrawingPath>,
-    callbacks: EditorCanvasCallbacks,
     dragAmount: Offset
 ) {
     val movingIndex = interactionState.movingPathIndex ?: return
-    val path = paths.getOrNull(movingIndex) ?: return
-    callbacks.onPathUpdated(movingIndex, movePath(path, dragAmount))
+    val path = interactionState.activePreviewPath
+        ?: interactionState.originalDragPath
+        ?: paths.getOrNull(movingIndex)
+        ?: return
+    interactionState.activePreviewPath = movePath(path, dragAmount)
 }
 
 fun handleTextDragEnd(
@@ -245,10 +248,14 @@ fun handleTextDragEnd(
     callbacks: EditorCanvasCallbacks
 ) {
     val movingIndex = interactionState.movingPathIndex
-    if (movingIndex != null) {
+    val finalPreview = interactionState.activePreviewPath
+    if (movingIndex != null && finalPreview != null) {
+        callbacks.onPathUpdated(movingIndex, finalPreview)
+        callbacks.onPathSelectionChanged(movingIndex, finalPreview)
+    } else if (movingIndex != null) {
         callbacks.onPathSelectionChanged(movingIndex, paths.getOrNull(movingIndex))
     }
-    interactionState.resetDragState()
+    interactionState.deferResetDragState()
 }
 
 fun handleMoveTap(
@@ -296,13 +303,36 @@ fun handleTextToolTap(
     val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
     if (path != null) {
         callbacks.onPathSelectionChanged(hitIndex, path)
-        textEditState.open(hitIndex, path.position, path.text)
     } else {
         val hadSelection = selectedPathIndex != null
         callbacks.onPathSelectionChanged(null, null)
         if (!hadSelection) {
             textEditState.open(null, offset, "")
         }
+    }
+}
+
+fun handleTextToolDoubleTap(
+    pathHitTester: EditorPathHitTester,
+    paths: List<DrawingPath>,
+    selectionHitRadius: Float,
+    callbacks: EditorCanvasCallbacks,
+    textEditState: EditorTextEditState,
+    offset: Offset
+) {
+    val hitIndex = pathHitTester.hitIndexAt(
+        paths = paths,
+        offset = offset,
+        radius = selectionHitRadius,
+        tool = DrawingTool.TEXT
+    )
+    val path = hitIndex?.let { paths.getOrNull(it) as? DrawingPath.TextPath }
+    if (path != null) {
+        callbacks.onPathSelectionChanged(hitIndex, path)
+        textEditState.open(hitIndex, path.position, path.text)
+    } else {
+        callbacks.onPathSelectionChanged(null, null)
+        textEditState.open(null, offset, "")
     }
 }
 
@@ -313,8 +343,7 @@ fun handleSelectionTransform(
     paths: List<DrawingPath>,
     pan: Offset,
     zoom: Float,
-    rotation: Float,
-    callbacks: EditorCanvasCallbacks
+    rotation: Float
 ) {
     if (currentTool != DrawingTool.MOVE) return
     val index = selectedPathIndex ?: return

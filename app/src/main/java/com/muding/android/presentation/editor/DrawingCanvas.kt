@@ -1,6 +1,7 @@
 package com.muding.android.presentation.editor
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -68,13 +69,16 @@ fun DrawingCanvas(
 
     fun toCanvasDelta(rawDelta: Offset): Offset = rawDelta
 
-    val canvasModifier = modifier
+    val canvasContainerModifier = modifier
         .fillMaxSize()
         .onSizeChanged {
             val size = Size(it.width.toFloat(), it.height.toFloat())
             localCanvasSize.value = size
             onCanvasSizeChanged(size)
         }
+
+    val canvasModifier = Modifier
+        .fillMaxSize()
         .bindCanvasInteropInput(
             currentTool = currentTool,
             interactionState = interactionState,
@@ -103,7 +107,6 @@ fun DrawingCanvas(
                     .bindCanvasDragGestures(
                         currentTool = currentTool,
                         latestPaths = latestPaths,
-                        latestSelectedPathIndex = latestSelectedPathIndex,
                         currentColor = currentColor,
                         strokeWidth = strokeWidth,
                         shapeFilled = shapeFilled,
@@ -196,90 +199,94 @@ fun DrawingCanvas(
         }
     }
 
-    Canvas(modifier = canvasModifier) {
-        paths.forEachIndexed { index, drawingPath ->
-            val isActive = index == interactionState.movingPathIndex || index == interactionState.resizingState?.index
-            if (!isActive) {
-                renderDrawingPath(
-                    drawingPath = drawingPath,
-                    isSelected = selectedPathIndex == index
-                )
+    Box(modifier = canvasContainerModifier) {
+        Canvas(modifier = canvasModifier) {
+            paths.forEachIndexed { index, drawingPath ->
+                val isActive = index == interactionState.movingPathIndex || index == interactionState.resizingState?.index
+                if (!isActive) {
+                    renderDrawingPath(
+                        drawingPath = drawingPath,
+                        isSelected = selectedPathIndex == index
+                    )
+                }
             }
-        }
 
-        interactionState.activePreviewPath?.let { previewPath ->
-            val activeIndex = interactionState.movingPathIndex ?: interactionState.resizingState?.index
-            val isSelected = activeIndex != null && activeIndex == selectedPathIndex
-            renderDrawingPath(previewPath, isSelected)
-        }
+            interactionState.activePreviewPath?.let { previewPath ->
+                val activeIndex = interactionState.movingPathIndex ?: interactionState.resizingState?.index
+                val isSelected = activeIndex != null && activeIndex == selectedPathIndex
+                renderDrawingPath(previewPath, isSelected)
+            }
 
-        if (interactionState.pathVersion >= 0) {
-            // Trigger redraw while free drawing.
-        }
+            if (interactionState.pathVersion >= 0) {
+                // Trigger redraw while free drawing.
+            }
 
-        interactionState.currentPath?.let { path ->
-            drawPath(
-                path = path,
-                color = currentColor,
-                style = Stroke(
-                    width = strokeWidth,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
-                )
-            )
-        }
-
-        val start = interactionState.startPoint
-        val end = interactionState.endPoint
-        if (start != null && end != null) {
-            when (currentTool) {
-                DrawingTool.ARROW -> drawArrow(start, end, currentColor, strokeWidth)
-                DrawingTool.RECTANGLE -> drawRect(
+            interactionState.currentPath?.let { path ->
+                drawPath(
+                    path = path,
                     color = currentColor,
-                    topLeft = Offset(min(start.x, end.x), min(start.y, end.y)),
-                    size = Size(abs(end.x - start.x), abs(end.y - start.y)),
-                    style = if (shapeFilled) Fill else Stroke(width = strokeWidth)
+                    style = Stroke(
+                        width = strokeWidth,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
                 )
+            }
 
-                DrawingTool.CIRCLE -> drawCircle(
-                    color = currentColor,
-                    radius = (end - start).getDistance(),
-                    center = start,
-                    style = if (shapeFilled) Fill else Stroke(width = strokeWidth)
-                )
+            val start = interactionState.startPoint
+            val end = interactionState.endPoint
+            if (start != null && end != null) {
+                when (currentTool) {
+                    DrawingTool.ARROW -> drawArrow(start, end, currentColor, strokeWidth)
+                    DrawingTool.RECTANGLE -> drawRect(
+                        color = currentColor,
+                        topLeft = Offset(min(start.x, end.x), min(start.y, end.y)),
+                        size = Size(abs(end.x - start.x), abs(end.y - start.y)),
+                        style = if (shapeFilled) Fill else Stroke(width = strokeWidth)
+                    )
 
-                else -> Unit
+                    DrawingTool.CIRCLE -> drawCircle(
+                        color = currentColor,
+                        radius = (end - start).getDistance(),
+                        center = start,
+                        style = if (shapeFilled) Fill else Stroke(width = strokeWidth)
+                    )
+
+                    else -> Unit
+                }
+            }
+
+            if (currentTool == DrawingTool.ERASER) {
+                interactionState.eraserPreviewCenter?.let { center ->
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.16f),
+                        radius = eraserSize / 2f,
+                        center = center,
+                        style = Fill
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = eraserSize / 2f,
+                        center = center,
+                        style = Stroke(width = 2f)
+                    )
+                }
             }
         }
 
-        if (currentTool == DrawingTool.ERASER) {
-            interactionState.eraserPreviewCenter?.let { center ->
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.16f),
-                    radius = eraserSize / 2f,
-                    center = center,
-                    style = Fill
-                )
-                drawCircle(
-                    color = Color.White,
-                    radius = eraserSize / 2f,
-                    center = center,
-                    style = Stroke(width = 2f)
-                )
-            }
-        }
+        EditorInlineTextEditor(
+            modifier = Modifier.fillMaxSize(),
+            state = textEditState,
+            canvasSize = localCanvasSize.value,
+            paths = paths,
+            selectedPathIndex = selectedPathIndex,
+            currentColor = currentColor,
+            textSize = textSize,
+            textOutlineEnabled = textOutlineEnabled,
+            onPathAdded = onPathAdded,
+            onPathUpdated = onPathUpdated,
+            onPathRemoved = onPathRemoved,
+            onPathSelectionChanged = onPathSelectionChanged
+        )
     }
-
-    EditorTextEditDialog(
-        state = textEditState,
-        paths = paths,
-        selectedPathIndex = selectedPathIndex,
-        currentColor = currentColor,
-        textSize = textSize,
-        textOutlineEnabled = textOutlineEnabled,
-        onPathAdded = onPathAdded,
-        onPathUpdated = onPathUpdated,
-        onPathRemoved = onPathRemoved,
-        onPathSelectionChanged = onPathSelectionChanged
-    )
 }
