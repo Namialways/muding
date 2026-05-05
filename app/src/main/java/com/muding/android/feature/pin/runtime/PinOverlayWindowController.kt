@@ -346,21 +346,14 @@ class PinOverlayWindowController(
         val requestedWidth = requestedInitialContentWidthPx?.takeIf { it > 0 }
         val requestedHeight = requestedInitialContentHeightPx?.takeIf { it > 0 }
         val screen = getScreenBounds()
-        val maxWidth = screen.width().coerceAtLeast(1)
-        val maxHeight = screen.height().coerceAtLeast(1)
-        var width = requestedWidth ?: bitmap.width.coerceAtLeast(1)
-        var height = requestedHeight ?: bitmap.height.coerceAtLeast(1)
-        if (height > maxHeight) {
-            val scale = maxHeight / height.toFloat()
-            height = maxHeight
-            width = (width * scale).roundToInt().coerceAtLeast(1)
-        }
-        if (width > maxWidth) {
-            val scale = maxWidth / width.toFloat()
-            width = maxWidth
-            height = (height * scale).roundToInt().coerceAtLeast(1)
-        }
-        return width to height
+        return PinOverlaySizing.calculateBaseContentSize(
+            bitmapWidth = bitmap.width,
+            bitmapHeight = bitmap.height,
+            requestedWidth = requestedWidth,
+            requestedHeight = requestedHeight,
+            screenWidth = screen.width(),
+            screenHeight = screen.height()
+        )
     }
 
     private fun clampOverlayPosition(
@@ -371,13 +364,17 @@ class PinOverlayWindowController(
     ): Pair<Int, Int> {
         val screen = getScreenBounds()
         val minVisiblePx = (density * 48f).roundToInt()
-        val viewWidth = width.coerceAtLeast(1)
-        val viewHeight = height.coerceAtLeast(1)
-        val minX = screen.left - viewWidth + minVisiblePx
-        val maxX = screen.right - minVisiblePx
-        val minY = screen.top - viewHeight + minVisiblePx
-        val maxY = screen.bottom - minVisiblePx
-        return currentX.coerceIn(minX, maxX) to currentY.coerceIn(minY, maxY)
+        return PinOverlaySizing.clampOverlayPosition(
+            currentX = currentX,
+            currentY = currentY,
+            overlayWidth = width,
+            overlayHeight = height,
+            screenLeft = screen.left,
+            screenTop = screen.top,
+            screenRight = screen.right,
+            screenBottom = screen.bottom,
+            minVisiblePx = minVisiblePx
+        )
     }
 
     private fun getScreenBounds(): Rect {
