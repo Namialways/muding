@@ -31,8 +31,13 @@ data class UpdateCheckUiState(
     val checking: Boolean = false,
     val releaseUrl: String? = null
 ) {
+    val openReleasePageUrl: String?
+        get() = releaseUrl
+            ?.trim()
+            ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+
     val canOpenReleasePage: Boolean
-        get() = !releaseUrl.isNullOrBlank()
+        get() = !openReleasePageUrl.isNullOrBlank()
 
     companion object {
         fun idle(currentVersionName: String): UpdateCheckUiState {

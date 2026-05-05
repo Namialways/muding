@@ -28,6 +28,7 @@ class AppSupportModelsTest {
 
         assertEquals("发现新版本 v1.0.2", state.message)
         assertTrue(state.canOpenReleasePage)
+        assertEquals("https://github.com/Namialways/muding/releases/tag/v1.0.2", state.openReleasePageUrl)
     }
 
     @Test

@@ -33,7 +33,8 @@ object RuntimeStorageManager {
             importCacheBytes = directorySize(File(context.cacheDir, "imports")),
             textPinCacheBytes = directorySize(File(context.cacheDir, "text_pins")),
             annotationSessionBytes = directorySize(File(recordsRoot(context), "annotation_sessions")),
-            pinHistoryBytes = directorySize(File(recordsRoot(context), "pin_history"))
+            pinHistoryBytes = directorySize(File(recordsRoot(context), "pin_history")) +
+                directorySize(File(recordsRoot(context), "pin_history_assets"))
         )
     }
 
@@ -48,6 +49,7 @@ object RuntimeStorageManager {
     fun clearRecordCaches(context: Context) {
         deleteDirectoryContents(File(recordsRoot(context), "annotation_sessions"))
         deleteDirectoryContents(File(recordsRoot(context), "pin_history"))
+        deleteDirectoryContents(File(recordsRoot(context), "pin_history_assets"))
         RecentPinStore.clear(context)
     }
 

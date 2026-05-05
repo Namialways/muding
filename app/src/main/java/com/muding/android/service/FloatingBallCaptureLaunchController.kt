@@ -54,6 +54,6 @@ internal class FloatingBallCaptureLaunchController {
 
     companion object {
         private const val ACTIVE_PROJECTION_START_DELAY_MS = 0L
-        private const val FIRST_CAPTURE_AFTER_PERMISSION_START_DELAY_MS = 0L
+        private const val FIRST_CAPTURE_AFTER_PERMISSION_START_DELAY_MS = 650L
     }
 }

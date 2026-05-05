@@ -8,4 +8,8 @@
 
     <!-- 兜底：允许访问整个 cacheDir 下的文件，避免后续新增子目录又忘了配 path -->
     <cache-path name="cache" path="." />
+
+    <!-- 贴图历史使用持久记录目录，避免系统或清理工具清掉 cache 后历史图片失效 -->
+    <external-files-path name="records" path="records/" />
+    <files-path name="files_records" path="records/" />
 </paths>

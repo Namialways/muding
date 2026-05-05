@@ -1,5 +1,6 @@
 package com.muding.android
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -220,8 +221,8 @@ class MainActivity : ComponentActivity() {
                     onCheckForUpdates = {
                         updateChecker.check(appVersionName())
                     },
-                    onOpenReleasePage = {
-                        openReleasePage()
+                    onOpenReleasePage = { releaseUrl ->
+                        openReleasePage(releaseUrl)
                     },
                     onExportDiagnostics = { snapshot, permissionState, updateState ->
                         exportDiagnostics(
@@ -302,13 +303,35 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun openReleasePage() {
-        startActivity(
-            Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse(GitHubReleaseUpdateChecker.LATEST_RELEASE_PAGE_URL)
+    private fun openReleasePage(releaseUrl: String) {
+        val normalizedUrl = releaseUrl.trim()
+        if (normalizedUrl.isBlank()) {
+            Toast.makeText(this, "新版页面地址为空", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pageUri = Uri.parse(normalizedUrl)
+        val browserIntent = Intent(Intent.ACTION_VIEW, pageUri).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            setSelector(
+                Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_APP_BROWSER)
+                }
             )
-        )
+        }
+        val fallbackIntent = Intent(Intent.ACTION_VIEW, pageUri).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+        }
+        try {
+            startActivity(browserIntent)
+        } catch (_: ActivityNotFoundException) {
+            try {
+                startActivity(Intent.createChooser(fallbackIntent, "打开新版页面"))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, "没有可打开新版页面的浏览器", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "打开新版页面失败：${e.message ?: ""}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun exportDiagnostics(

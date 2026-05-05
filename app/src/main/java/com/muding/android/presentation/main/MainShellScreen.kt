@@ -84,7 +84,7 @@ fun MainScreen(
     onEditHistory: (PinHistoryRecord) -> Unit,
     onRefreshRecords: () -> MainScreenSnapshot,
     onCheckForUpdates: suspend () -> AppUpdateResult,
-    onOpenReleasePage: () -> Unit,
+    onOpenReleasePage: (String) -> Unit,
     onExportDiagnostics: (MainScreenSnapshot, PermissionSupportUiState, UpdateCheckUiState) -> Unit,
     onRequestPermission: () -> Unit,
     onOpenGalleryPin: () -> Unit,
@@ -379,7 +379,9 @@ fun MainScreen(
                     runRecordsMutation { onProjectRecordRetentionChanged(count, days) }
                 },
                 onCheckForUpdates = { checkForUpdates() },
-                onOpenReleasePage = onOpenReleasePage,
+                onOpenReleasePage = { releaseUrl ->
+                    onOpenReleasePage(releaseUrl)
+                },
                 onExportDiagnostics = {
                     onExportDiagnostics(
                         snapshot,

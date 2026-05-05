@@ -91,7 +91,7 @@ fun SettingsScreen(
     onPinHistoryRetentionChanged: (Int, Int) -> Unit,
     onProjectRecordRetentionChanged: (Int, Int) -> Unit,
     onCheckForUpdates: () -> Unit,
-    onOpenReleasePage: () -> Unit,
+    onOpenReleasePage: (String) -> Unit,
     onExportDiagnostics: () -> Unit,
     onRequestPermission: () -> Unit,
     onClearWorkRecords: () -> Unit,
@@ -737,7 +737,7 @@ private fun AboutSettingsSection(
     permissionSupportUiState: PermissionSupportUiState,
     updateCheckUiState: UpdateCheckUiState,
     onCheckForUpdates: () -> Unit,
-    onOpenReleasePage: () -> Unit,
+    onOpenReleasePage: (String) -> Unit,
     onExportDiagnostics: () -> Unit,
     onRequestPermission: () -> Unit
 ) {
@@ -783,7 +783,9 @@ private fun AboutSettingsSection(
                     }
                     if (updateCheckUiState.canOpenReleasePage) {
                         Button(
-                            onClick = onOpenReleasePage,
+                            onClick = {
+                                updateCheckUiState.openReleasePageUrl?.let(onOpenReleasePage)
+                            },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("查看新版")

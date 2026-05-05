@@ -30,7 +30,7 @@ class FloatingBallCaptureLaunchControllerTest {
     }
 
     @Test
-    fun `permission flow keeps launch pending until permission result then starts without extra delay`() {
+    fun `permission flow waits briefly after permission result before first capture`() {
         val controller = FloatingBallCaptureLaunchController()
 
         val permissionDecision = controller.requestCapture(hasActiveProjection = false)
@@ -39,7 +39,7 @@ class FloatingBallCaptureLaunchControllerTest {
         assertEquals(FloatingBallCaptureLaunchController.Decision.RequestPermission, permissionDecision)
         assertEquals(
             FloatingBallCaptureLaunchController.Decision.StartCapture(
-                startDelayMs = 0L,
+                startDelayMs = 650L,
                 dropFirstFrame = true
             ),
             grantedDecision
