@@ -134,6 +134,17 @@ fun MainScreen(
         }
     }
 
+    fun selectDestination(destination: MainDestination) {
+        val selection = selectMainDestination(
+            currentDestination = currentDestination,
+            targetDestination = destination
+        )
+        currentDestination = selection.destination
+        if (selection.refreshRecords && !isPreview) {
+            refreshRecordsAsync()
+        }
+    }
+
     fun runRecordsMutation(task: () -> Unit) {
         scope.launch {
             recordsLoading = true
@@ -219,7 +230,7 @@ fun MainScreen(
             ) {
                 NavigationBarItem(
                     selected = currentDestination == MainDestination.HOME,
-                    onClick = { currentDestination = MainDestination.HOME },
+                    onClick = { selectDestination(MainDestination.HOME) },
                     colors = NavigationBarItemDefaults.colors(
                         indicatorColor = tokens.palette.surfaceAccent
                     ),
@@ -228,7 +239,7 @@ fun MainScreen(
                 )
                 NavigationBarItem(
                     selected = currentDestination == MainDestination.RECORDS,
-                    onClick = { currentDestination = MainDestination.RECORDS },
+                    onClick = { selectDestination(MainDestination.RECORDS) },
                     colors = NavigationBarItemDefaults.colors(
                         indicatorColor = tokens.palette.surfaceAccent
                     ),
@@ -237,7 +248,7 @@ fun MainScreen(
                 )
                 NavigationBarItem(
                     selected = currentDestination == MainDestination.SETTINGS,
-                    onClick = { currentDestination = MainDestination.SETTINGS },
+                    onClick = { selectDestination(MainDestination.SETTINGS) },
                     colors = NavigationBarItemDefaults.colors(
                         indicatorColor = tokens.palette.surfaceAccent
                     ),

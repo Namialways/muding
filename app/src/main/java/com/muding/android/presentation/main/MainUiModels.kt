@@ -19,6 +19,22 @@ enum class MainDestination(
     SETTINGS("设置")
 }
 
+data class MainDestinationSelection(
+    val destination: MainDestination,
+    val refreshRecords: Boolean
+)
+
+fun selectMainDestination(
+    currentDestination: MainDestination,
+    targetDestination: MainDestination
+): MainDestinationSelection {
+    return MainDestinationSelection(
+        destination = targetDestination,
+        refreshRecords = targetDestination == MainDestination.RECORDS &&
+            currentDestination != MainDestination.RECORDS
+    )
+}
+
 enum class SettingsSection(
     val title: String,
     val description: String
