@@ -1,12 +1,14 @@
 package com.muding.android.feature.update
 
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 
 class GitHubReleaseUpdateChecker(
-    private val latestReleaseUrl: String = LATEST_RELEASE_API_URL
+    private val latestReleaseUrl: String = LATEST_RELEASE_API_URL,
+    private val supportedAbis: List<String> = Build.SUPPORTED_ABIS.toList()
 ) {
 
     suspend fun check(currentVersionName: String): AppUpdateResult {
@@ -15,7 +17,8 @@ class GitHubReleaseUpdateChecker(
                 val json = fetchLatestReleaseJson()
                 AppUpdateModels.compare(
                     currentVersionName = currentVersionName,
-                    latestRelease = AppUpdateModels.parseLatestRelease(json)
+                    latestRelease = AppUpdateModels.parseLatestRelease(json),
+                    supportedAbis = supportedAbis
                 )
             } catch (e: Exception) {
                 AppUpdateResult.Failed(e.message ?: "检查更新失败")
@@ -41,6 +44,7 @@ class GitHubReleaseUpdateChecker(
     }
 
     companion object {
+        const val PROJECT_PAGE_URL = "https://github.com/Namialways/muding"
         const val LATEST_RELEASE_PAGE_URL = "https://github.com/Namialways/muding/releases/latest"
         private const val LATEST_RELEASE_API_URL = "https://api.github.com/repos/Namialways/muding/releases/latest"
     }

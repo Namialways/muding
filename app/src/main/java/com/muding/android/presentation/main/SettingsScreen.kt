@@ -1,5 +1,6 @@
 ﻿package com.muding.android.presentation.main
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,12 +13,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
@@ -27,6 +31,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -42,12 +47,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.muding.android.domain.usecase.CaptureResultAction
 import com.muding.android.domain.usecase.FloatingBallAppearanceMode
 import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinScaleMode
+import com.muding.android.feature.update.GitHubReleaseAsset
 import com.muding.android.presentation.translation.TranslationSettingsPage
 import kotlin.math.roundToInt
 
@@ -75,6 +82,7 @@ fun SettingsScreen(
     appVersionName: String,
     permissionSupportUiState: PermissionSupportUiState,
     updateCheckUiState: UpdateCheckUiState,
+    updateDownloadUiState: UpdateDownloadUiState?,
     onOpenSection: (SettingsSection) -> Unit,
     onActionChanged: (CaptureResultAction) -> Unit,
     onFloatingBallClickActionChanged: (FloatingBallClickAction) -> Unit,
@@ -91,7 +99,10 @@ fun SettingsScreen(
     onPinHistoryRetentionChanged: (Int, Int) -> Unit,
     onProjectRecordRetentionChanged: (Int, Int) -> Unit,
     onCheckForUpdates: () -> Unit,
+    onDownloadUpdate: (GitHubReleaseAsset) -> Unit,
+    onCancelUpdateDownload: () -> Unit,
     onOpenReleasePage: (String) -> Unit,
+    onOpenProjectPage: () -> Unit,
     onExportDiagnostics: () -> Unit,
     onRequestPermission: () -> Unit,
     onClearWorkRecords: () -> Unit,
@@ -158,12 +169,14 @@ fun SettingsScreen(
         SettingsSection.ABOUT -> AboutSettingsSection(
             modifier = modifier,
             appVersionName = appVersionName,
-            permissionSupportUiState = permissionSupportUiState,
             updateCheckUiState = updateCheckUiState,
+            updateDownloadUiState = updateDownloadUiState,
             onCheckForUpdates = onCheckForUpdates,
+            onDownloadUpdate = onDownloadUpdate,
+            onCancelUpdateDownload = onCancelUpdateDownload,
             onOpenReleasePage = onOpenReleasePage,
-            onExportDiagnostics = onExportDiagnostics,
-            onRequestPermission = onRequestPermission
+            onOpenProjectPage = onOpenProjectPage,
+            onExportDiagnostics = onExportDiagnostics
         )
     }
 }
@@ -734,30 +747,45 @@ private fun StorageAndRecordsSettingsSection(
 private fun AboutSettingsSection(
     modifier: Modifier = Modifier,
     appVersionName: String,
-    permissionSupportUiState: PermissionSupportUiState,
     updateCheckUiState: UpdateCheckUiState,
+    updateDownloadUiState: UpdateDownloadUiState?,
     onCheckForUpdates: () -> Unit,
+    onDownloadUpdate: (GitHubReleaseAsset) -> Unit,
+    onCancelUpdateDownload: () -> Unit,
     onOpenReleasePage: (String) -> Unit,
-    onExportDiagnostics: () -> Unit,
-    onRequestPermission: () -> Unit
+    onOpenProjectPage: () -> Unit,
+    onExportDiagnostics: () -> Unit
 ) {
     val tokens = rememberMainUiTokens()
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = tokens.spacing.pageGutter),
-        verticalArrangement = Arrangement.spacedBy(tokens.spacing.sectionGap),
-        contentPadding = PaddingValues(vertical = 20.dp)
-    ) {
+    var showingPrivacyDetail by remember { mutableStateOf(false) }
+    BackHandler(enabled = showingPrivacyDetail) {
+        showingPrivacyDetail = false
+    }
+    if (showingPrivacyDetail) {
+        AboutPrivacyDetailPage(
+            modifier = modifier,
+            onBack = { showingPrivacyDetail = false }
+        )
+    } else {
+        LazyColumn(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(horizontal = tokens.spacing.pageGutter),
+            verticalArrangement = Arrangement.spacedBy(tokens.spacing.sectionGap),
+            contentPadding = PaddingValues(vertical = 20.dp)
+        ) {
         item {
             SectionHeader(
                 title = SettingsSection.ABOUT.title,
-                description = "查看版本、更新、权限状态和隐私说明。"
+                description = "查看版本、更新、开源信息与隐私说明。"
             )
         }
 
         item {
-            AboutHeroPanel(appVersionName = appVersionName)
+            AboutHeroPanel(
+                appVersionName = appVersionName,
+                onOpenProjectPage = onOpenProjectPage
+            )
         }
 
         item {
@@ -770,6 +798,27 @@ private fun AboutSettingsSection(
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.palette.body
                 )
+                updateCheckUiState.apkSizeLabel?.let { sizeLabel ->
+                    InlineValueRow("安装包大小", sizeLabel)
+                }
+                if (updateCheckUiState.canOpenReleasePage && !updateCheckUiState.canDownloadApk) {
+                    Text(
+                        text = "未找到适合当前设备的 APK，可打开发布页手动查看。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.palette.body
+                    )
+                }
+                updateCheckUiState.apkAsset?.let { asset ->
+                    Button(
+                        onClick = { onDownloadUpdate(asset) },
+                        enabled = updateDownloadUiState == null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("下载并安装")
+                    }
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -782,13 +831,13 @@ private fun AboutSettingsSection(
                         Text(if (updateCheckUiState.checking) "检查中..." else "检查更新")
                     }
                     if (updateCheckUiState.canOpenReleasePage) {
-                        Button(
+                        OutlinedButton(
                             onClick = {
                                 updateCheckUiState.openReleasePageUrl?.let(onOpenReleasePage)
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("查看新版")
+                            Text("发布页")
                         }
                     }
                 }
@@ -797,34 +846,30 @@ private fun AboutSettingsSection(
 
         item {
             SettingGroup(
-                title = "权限状态",
-                description = "悬浮窗用于常驻入口，截图授权会在发起截图时按系统要求弹出。"
+                title = "隐私说明",
+                description = "了解截图、OCR、翻译和诊断日志会如何处理数据。"
             ) {
-                InlineValueRow("悬浮窗权限", permissionSupportUiState.overlayStatusLabel)
-                InlineValueRow("截图授权", permissionSupportUiState.screenshotStatusLabel)
                 Text(
-                    text = permissionSupportUiState.summary,
+                    text = "截图、贴图、OCR 结果和历史记录默认留在本机；只有你主动使用云翻译时，待翻译文本才会发送到已配置的翻译服务。",
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.palette.body
                 )
-                if (permissionSupportUiState.showOverlayPermissionAction) {
-                    OutlinedButton(
-                        onClick = onRequestPermission,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("重新授权悬浮窗")
-                    }
+                OutlinedButton(
+                    onClick = { showingPrivacyDetail = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("查看隐私说明")
                 }
             }
         }
 
         item {
             SettingGroup(
-                title = "隐私与诊断",
-                description = "截图、OCR 与贴图数据默认在本机处理。只有主动使用云翻译时，待翻译文本才会发送到已配置的翻译服务。"
+                title = "诊断日志",
+                description = "导出必要运行信息，便于排查问题。"
             ) {
                 Text(
-                    text = "诊断日志仅包含版本、权限状态和存储统计，便于定位问题，不会导出截图图片或 OCR 原文。",
+                    text = "诊断日志仅包含版本、存储统计和运行状态摘要，不会导出截图图片、贴图图片或 OCR 原文。",
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.palette.body
                 )
@@ -837,11 +882,129 @@ private fun AboutSettingsSection(
             }
         }
     }
+    }
+
+    updateDownloadUiState?.let { state ->
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("正在下载更新") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = state.assetName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = tokens.palette.title
+                    )
+                    val progress = state.progress
+                    if (progress == null) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    } else {
+                        LinearProgressIndicator(
+                            progress = progress,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Text(
+                        text = state.progressLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.palette.body
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                OutlinedButton(onClick = onCancelUpdateDownload) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AboutPrivacyDetailPage(
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit
+) {
+    val tokens = rememberMainUiTokens()
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = tokens.spacing.pageGutter),
+        verticalArrangement = Arrangement.spacedBy(tokens.spacing.sectionGap),
+        contentPadding = PaddingValues(vertical = 20.dp)
+    ) {
+        item {
+            SectionHeader(
+                title = "隐私说明",
+                description = "幕钉优先在本机完成截图、贴图、OCR 与记录管理。"
+            )
+        }
+
+        item {
+            SettingGroup(
+                title = "默认本机处理",
+                description = "截图、贴图、OCR 结果和历史记录默认保存在设备本地。"
+            ) {
+                Text(
+                    text = "应用不会自动上传截图图片、贴图图片或 OCR 原文；这些内容只用于你在本机查看、贴图、复制和管理历史记录。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+            }
+        }
+
+        item {
+            SettingGroup(
+                title = "会联网的场景",
+                description = "联网动作由你主动触发，或用于检查软件更新。"
+            ) {
+                Text(
+                    text = "检查更新和下载新版安装包会访问 GitHub Release。只有主动使用云翻译时，待翻译文本才会发送到已配置的翻译服务；本地翻译模型下载仅用于离线翻译能力。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+            }
+        }
+
+        item {
+            SettingGroup(
+                title = "诊断日志",
+                description = "用于定位问题，不作为隐私数据收集入口。"
+            ) {
+                Text(
+                    text = "诊断日志包含版本、存储统计和运行状态摘要，方便排查崩溃、授权或存储问题；不会包含截图图片、贴图图片或 OCR 原文。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+            }
+        }
+
+        item {
+            SettingGroup(
+                title = "你可以控制",
+                description = "历史记录和外部服务都可以按需关闭或清理。"
+            ) {
+                Text(
+                    text = "你可以在存储与记录中清理历史或限制保留时间；不使用云翻译时，翻译文本不会发送给云端服务；诊断日志也只会在你主动导出时生成。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.palette.body
+                )
+                OutlinedButton(
+                    onClick = onBack,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("返回关于")
+                }
+            }
+        }
+    }
 }
 
 @Composable
 private fun AboutHeroPanel(
-    appVersionName: String
+    appVersionName: String,
+    onOpenProjectPage: () -> Unit
 ) {
     val tokens = rememberMainUiTokens()
     val displayVersion = if (appVersionName.startsWith("v", ignoreCase = true)) {
@@ -856,37 +1019,65 @@ private fun AboutHeroPanel(
         border = BorderStroke(1.dp, tokens.palette.outline),
         tonalElevation = tokens.elevations.flat
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(tokens.spacing.contentPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    text = "幕钉 Muding",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = tokens.palette.title
-                )
-                Text(
-                    text = "轻量截图、贴图、OCR 与翻译工具。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = tokens.palette.body
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "幕钉 Muding",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = tokens.palette.title
+                    )
+                    Text(
+                        text = "轻量截图、贴图、OCR 与翻译工具。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = tokens.palette.body
+                    )
+                }
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp),
+                    color = tokens.palette.surfaceAccent
+                ) {
+                    Text(
+                        text = displayVersion,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = tokens.palette.accent
+                    )
+                }
             }
-            Surface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp),
-                color = tokens.palette.surfaceAccent
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenProjectPage)
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = displayVersion,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                    style = MaterialTheme.typography.labelLarge,
+                    text = "github.com/Namialways/muding",
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
                     color = tokens.palette.accent
+                )
+                Icon(
+                    imageVector = Icons.Default.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = tokens.palette.accent
                 )
             }
         }

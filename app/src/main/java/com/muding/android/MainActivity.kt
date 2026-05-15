@@ -30,6 +30,8 @@ import com.muding.android.domain.usecase.PinHistoryMetadata
 import com.muding.android.feature.floatingball.FloatingBallImageProcessor
 import com.muding.android.feature.pin.creation.EditorLaunchRequest
 import com.muding.android.feature.pin.creation.PinCreationCoordinator
+import com.muding.android.feature.update.AppUpdateDownloader
+import com.muding.android.feature.update.AppUpdateInstaller
 import com.muding.android.feature.update.GitHubReleaseUpdateChecker
 import com.muding.android.presentation.main.MainScreen
 import com.muding.android.presentation.main.MainScreenSnapshot
@@ -43,6 +45,7 @@ import com.muding.android.presentation.source.GalleryPinActivity
 import com.muding.android.presentation.theme.MudingTheme
 import com.muding.android.service.FloatingBallService
 import kotlinx.coroutines.launch
+import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -56,7 +59,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var appMaintenanceCoordinator: AppMaintenanceCoordinator
     private lateinit var floatingBallImageProcessor: FloatingBallImageProcessor
     private lateinit var updateChecker: GitHubReleaseUpdateChecker
+    private lateinit var updateDownloader: AppUpdateDownloader
+    private lateinit var updateInstaller: AppUpdateInstaller
     private lateinit var diagnosticLogExporter: DiagnosticLogExporter
+    private var pendingUpdateInstallPath: String? = null
 
     private var floatingBallSettings by mutableStateOf(defaultFloatingBallSettings())
     private var onboardingGuideProgress by mutableStateOf(defaultOnboardingGuideProgress())
@@ -81,6 +87,8 @@ class MainActivity : ComponentActivity() {
         pinCreationCoordinator = AppGraph.pinCreationCoordinator(this)
         floatingBallImageProcessor = AppGraph.floatingBallImageProcessor(this)
         updateChecker = GitHubReleaseUpdateChecker()
+        updateDownloader = AppUpdateDownloader(this)
+        updateInstaller = AppUpdateInstaller(this)
         diagnosticLogExporter = DiagnosticLogExporter(this)
         appMaintenanceCoordinator = AppMaintenanceCoordinator(
             annotationSessionRepository = annotationSessionRepository,
@@ -221,8 +229,17 @@ class MainActivity : ComponentActivity() {
                     onCheckForUpdates = {
                         updateChecker.check(appVersionName())
                     },
+                    onDownloadUpdate = { asset, onProgress ->
+                        updateDownloader.download(asset, onProgress)
+                    },
+                    onInstallUpdate = { filePath ->
+                        installDownloadedUpdate(filePath)
+                    },
                     onOpenReleasePage = { releaseUrl ->
                         openReleasePage(releaseUrl)
+                    },
+                    onOpenProjectPage = {
+                        openExternalUrl(GitHubReleaseUpdateChecker.PROJECT_PAGE_URL)
                     },
                     onExportDiagnostics = { snapshot, permissionState, updateState ->
                         exportDiagnostics(
@@ -256,6 +273,7 @@ class MainActivity : ComponentActivity() {
         if (permissionHandler.hasOverlayPermission()) {
             startFloatingBallService()
         }
+        resumePendingUpdateInstallIfReady()
     }
 
     private fun pruneRecords() {
@@ -304,33 +322,61 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openReleasePage(releaseUrl: String) {
-        val normalizedUrl = releaseUrl.trim()
+        openExternalUrl(releaseUrl)
+    }
+
+    private fun openExternalUrl(url: String) {
+        val normalizedUrl = url.trim()
         if (normalizedUrl.isBlank()) {
-            Toast.makeText(this, "新版页面地址为空", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "链接为空", Toast.LENGTH_SHORT).show()
             return
         }
-        val pageUri = Uri.parse(normalizedUrl)
-        val browserIntent = Intent(Intent.ACTION_VIEW, pageUri).apply {
-            addCategory(Intent.CATEGORY_BROWSABLE)
-            setSelector(
-                Intent(Intent.ACTION_MAIN).apply {
-                    addCategory(Intent.CATEGORY_APP_BROWSER)
-                }
-            )
-        }
-        val fallbackIntent = Intent(Intent.ACTION_VIEW, pageUri).apply {
+        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(normalizedUrl)).apply {
             addCategory(Intent.CATEGORY_BROWSABLE)
         }
         try {
-            startActivity(browserIntent)
+            startActivity(viewIntent)
         } catch (_: ActivityNotFoundException) {
             try {
-                startActivity(Intent.createChooser(fallbackIntent, "打开新版页面"))
+                startActivity(Intent.createChooser(viewIntent, "打开链接"))
             } catch (_: ActivityNotFoundException) {
-                Toast.makeText(this, "没有可打开新版页面的浏览器", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "没有可打开链接的浏览器", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "打开新版页面失败：${e.message ?: ""}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "打开链接失败：${e.message ?: ""}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun installDownloadedUpdate(filePath: String) {
+        val apkFile = File(filePath)
+        if (!apkFile.exists() || apkFile.length() <= 0L) {
+            Toast.makeText(this, "安装包不可用，请重新下载", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!updateInstaller.canRequestPackageInstalls()) {
+            pendingUpdateInstallPath = filePath
+            Toast.makeText(this, "请允许幕钉安装未知应用，返回后会继续安装", Toast.LENGTH_LONG).show()
+            try {
+                startActivity(updateInstaller.createUnknownSourcesSettingsIntent())
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, "无法打开安装授权页面", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        try {
+            startActivity(updateInstaller.createInstallIntent(apkFile))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "没有可处理 APK 安装的系统组件", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "打开安装包失败：${e.message ?: ""}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun resumePendingUpdateInstallIfReady() {
+        val pendingPath = pendingUpdateInstallPath ?: return
+        if (updateInstaller.canRequestPackageInstalls()) {
+            pendingUpdateInstallPath = null
+            installDownloadedUpdate(pendingPath)
         }
     }
 

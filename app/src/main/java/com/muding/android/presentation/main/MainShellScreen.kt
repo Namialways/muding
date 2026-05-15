@@ -35,9 +35,14 @@ import com.muding.android.domain.usecase.FloatingBallClickAction
 import com.muding.android.domain.usecase.FloatingBallTheme
 import com.muding.android.domain.usecase.PinHistoryRecord
 import com.muding.android.domain.usecase.PinScaleMode
+import com.muding.android.feature.update.AppUpdateDownloadProgress
+import com.muding.android.feature.update.AppUpdateDownloadResult
 import com.muding.android.feature.update.AppUpdateResult
+import com.muding.android.feature.update.GitHubReleaseAsset
 import com.muding.android.feature.onboarding.OnboardingGuideState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -84,7 +89,10 @@ fun MainScreen(
     onEditHistory: (PinHistoryRecord) -> Unit,
     onRefreshRecords: () -> MainScreenSnapshot,
     onCheckForUpdates: suspend () -> AppUpdateResult,
+    onDownloadUpdate: suspend (GitHubReleaseAsset, suspend (AppUpdateDownloadProgress) -> Unit) -> AppUpdateDownloadResult,
+    onInstallUpdate: (String) -> Unit,
     onOpenReleasePage: (String) -> Unit,
+    onOpenProjectPage: () -> Unit,
     onExportDiagnostics: (MainScreenSnapshot, PermissionSupportUiState, UpdateCheckUiState) -> Unit,
     onRequestPermission: () -> Unit,
     onOpenGalleryPin: () -> Unit,
@@ -123,6 +131,8 @@ fun MainScreen(
     var updateCheckUiState by remember(appVersionName) {
         mutableStateOf(UpdateCheckUiState.idle(currentVersionName = appVersionName))
     }
+    var updateDownloadUiState by remember { mutableStateOf<UpdateDownloadUiState?>(null) }
+    var updateDownloadJob by remember { mutableStateOf<Job?>(null) }
     val isPreview = LocalInspectionMode.current
     val tokens = rememberMainUiTokens()
 
@@ -162,6 +172,46 @@ fun MainScreen(
             val result = onCheckForUpdates()
             updateCheckUiState = UpdateCheckUiState.fromResult(result)
         }
+    }
+
+    fun downloadAndInstallUpdate(asset: GitHubReleaseAsset) {
+        if (updateDownloadJob?.isActive == true) {
+            return
+        }
+        updateDownloadUiState = UpdateDownloadUiState(
+            assetName = asset.name,
+            bytesDownloaded = 0L,
+            totalBytes = asset.sizeBytes
+        )
+        updateDownloadJob = scope.launch {
+            val result = try {
+                onDownloadUpdate(asset) { progress ->
+                    updateDownloadUiState = UpdateDownloadUiState(
+                        assetName = asset.name,
+                        bytesDownloaded = progress.bytesDownloaded,
+                        totalBytes = progress.totalBytes
+                    )
+                }
+            } catch (_: CancellationException) {
+                updateDownloadUiState = null
+                updateDownloadJob = null
+                return@launch
+            }
+            updateDownloadUiState = null
+            updateDownloadJob = null
+            when (result) {
+                is AppUpdateDownloadResult.Success -> onInstallUpdate(result.filePath)
+                is AppUpdateDownloadResult.Failed -> {
+                    updateCheckUiState = updateCheckUiState.copy(message = result.message)
+                }
+            }
+        }
+    }
+
+    fun cancelUpdateDownload() {
+        updateDownloadJob?.cancel()
+        updateDownloadJob = null
+        updateDownloadUiState = null
     }
 
     fun applyFloatingBallAppearanceTransition(
@@ -325,6 +375,7 @@ fun MainScreen(
                 appVersionName = appVersionName,
                 permissionSupportUiState = PermissionSupportUiState.from(permissionGranted),
                 updateCheckUiState = updateCheckUiState,
+                updateDownloadUiState = updateDownloadUiState,
                 onOpenSection = { currentSettingsSection = it },
                 onActionChanged = {
                     selectedAction = it
@@ -390,9 +441,12 @@ fun MainScreen(
                     runRecordsMutation { onProjectRecordRetentionChanged(count, days) }
                 },
                 onCheckForUpdates = { checkForUpdates() },
+                onDownloadUpdate = { asset -> downloadAndInstallUpdate(asset) },
+                onCancelUpdateDownload = { cancelUpdateDownload() },
                 onOpenReleasePage = { releaseUrl ->
                     onOpenReleasePage(releaseUrl)
                 },
+                onOpenProjectPage = onOpenProjectPage,
                 onExportDiagnostics = {
                     onExportDiagnostics(
                         snapshot,

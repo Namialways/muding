@@ -1,6 +1,7 @@
 package com.muding.android.presentation.main
 
 import com.muding.android.feature.update.AppUpdateResult
+import com.muding.android.feature.update.GitHubReleaseAsset
 
 data class PermissionSupportUiState(
     val overlayPermissionGranted: Boolean,
@@ -29,7 +30,8 @@ data class PermissionSupportUiState(
 data class UpdateCheckUiState(
     val message: String,
     val checking: Boolean = false,
-    val releaseUrl: String? = null
+    val releaseUrl: String? = null,
+    val apkAsset: GitHubReleaseAsset? = null
 ) {
     val openReleasePageUrl: String?
         get() = releaseUrl
@@ -38,6 +40,15 @@ data class UpdateCheckUiState(
 
     val canOpenReleasePage: Boolean
         get() = !openReleasePageUrl.isNullOrBlank()
+
+    val canDownloadApk: Boolean
+        get() = apkAsset != null
+
+    val apkSizeLabel: String?
+        get() = apkAsset
+            ?.sizeBytes
+            ?.takeIf { it > 0L }
+            ?.let(::formatFileSize)
 
     companion object {
         fun idle(currentVersionName: String): UpdateCheckUiState {
@@ -52,7 +63,8 @@ data class UpdateCheckUiState(
             return when (result) {
                 is AppUpdateResult.Available -> UpdateCheckUiState(
                     message = "发现新版本 ${result.latestVersionName}",
-                    releaseUrl = result.releaseUrl
+                    releaseUrl = result.releaseUrl,
+                    apkAsset = result.apkAsset
                 )
 
                 is AppUpdateResult.UpToDate -> UpdateCheckUiState(
@@ -65,6 +77,26 @@ data class UpdateCheckUiState(
             }
         }
     }
+}
+
+data class UpdateDownloadUiState(
+    val assetName: String,
+    val bytesDownloaded: Long,
+    val totalBytes: Long
+) {
+    val progress: Float?
+        get() = if (totalBytes > 0L) {
+            (bytesDownloaded / totalBytes.toFloat()).coerceIn(0f, 1f)
+        } else {
+            null
+        }
+
+    val progressLabel: String
+        get() = if (totalBytes > 0L) {
+            "${formatFileSize(bytesDownloaded)} / ${formatFileSize(totalBytes)}"
+        } else {
+            formatFileSize(bytesDownloaded)
+        }
 }
 
 fun buildDiagnosticLogContent(

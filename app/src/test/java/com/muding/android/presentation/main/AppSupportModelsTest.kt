@@ -2,6 +2,7 @@ package com.muding.android.presentation.main
 
 import com.muding.android.domain.usecase.RuntimeStorageSnapshot
 import com.muding.android.feature.update.AppUpdateResult
+import com.muding.android.feature.update.GitHubReleaseAsset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,6 +30,27 @@ class AppSupportModelsTest {
         assertEquals("发现新版本 v1.0.2", state.message)
         assertTrue(state.canOpenReleasePage)
         assertEquals("https://github.com/Namialways/muding/releases/tag/v1.0.2", state.openReleasePageUrl)
+    }
+
+    @Test
+    fun `update ui state exposes downloadable apk asset`() {
+        val asset = GitHubReleaseAsset(
+            name = "muding-arm64-v8a.apk",
+            downloadUrl = "https://github.com/download/muding-arm64-v8a.apk",
+            sizeBytes = 54L * 1024L * 1024L
+        )
+
+        val state = UpdateCheckUiState.fromResult(
+            AppUpdateResult.Available(
+                latestVersionName = "v1.0.2",
+                releaseUrl = "https://github.com/Namialways/muding/releases/tag/v1.0.2",
+                apkAsset = asset
+            )
+        )
+
+        assertTrue(state.canDownloadApk)
+        assertEquals(asset, state.apkAsset)
+        assertEquals("54.00 MB", state.apkSizeLabel)
     }
 
     @Test

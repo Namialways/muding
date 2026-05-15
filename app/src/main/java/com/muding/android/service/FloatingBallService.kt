@@ -835,20 +835,28 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     private fun showFloatingMenuOverlay() {
-        if (floatingMenuView != null || floatingMenuDismissView != null) {
+        if (floatingMenuView != null) {
             updateFloatingMenuPosition()
             return
         }
 
-        val dismissParams = createOverlayLayoutParams(
-            width = WindowManager.LayoutParams.MATCH_PARENT,
-            height = WindowManager.LayoutParams.MATCH_PARENT,
-            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-        )
-        val dismissView = View(this).apply {
-            isClickable = true
-            setOnClickListener { setFloatingMenuExpanded(false) }
+        dismissFloatingMenuOverlay()
+
+        val dismissView = if (FloatingMenuOverlayPolicy.shouldCreateFullScreenDismissLayer()) {
+            View(this).apply {
+                isClickable = true
+                setOnClickListener { setFloatingMenuExpanded(false) }
+            }
+        } else {
+            null
+        }
+        val dismissParams = dismissView?.let {
+            createOverlayLayoutParams(
+                width = WindowManager.LayoutParams.MATCH_PARENT,
+                height = WindowManager.LayoutParams.MATCH_PARENT,
+                flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+            )
         }
 
         val menuParams = createOverlayLayoutParams(
@@ -884,8 +892,10 @@ class FloatingBallService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         menuView.alpha = 0f
 
         try {
-            windowManager.addView(dismissView, dismissParams)
-            floatingMenuDismissView = dismissView
+            if (dismissView != null && dismissParams != null) {
+                windowManager.addView(dismissView, dismissParams)
+                floatingMenuDismissView = dismissView
+            }
             windowManager.addView(menuView, menuParams)
             floatingMenuView = menuView
             floatingMenuParams = menuParams
