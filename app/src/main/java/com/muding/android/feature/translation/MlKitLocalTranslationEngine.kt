@@ -1,7 +1,6 @@
 package com.muding.android.feature.translation
 
 import com.google.mlkit.nl.languageid.LanguageIdentification
-import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.Dispatchers
@@ -25,21 +24,40 @@ class MlKitLocalTranslationEngine(
                 type = TranslationFailureType.UNSUPPORTED_TARGET_LANGUAGE,
                 providerLabel = "本地翻译"
             )
-        val sourceMlKitTag = detectSourceLanguage(normalizedText)
-        val sourceAppTag = TranslationLanguageCatalog.options
-            .firstOrNull { it.mlKitTag == sourceMlKitTag }
-            ?.appTag
-            ?: "zh"
-        if (!modelManager.isDownloaded(sourceAppTag) || !modelManager.isDownloaded(targetLanguageTag)) {
-            throw TranslationException(
-                type = TranslationFailureType.LOCAL_MODEL_MISSING,
-                providerLabel = "本地翻译"
+        val sourceLanguageCode = detectSourceLanguageCode(normalizedText)
+        val sourceOption = LocalTranslationLanguageResolver.resolveSourceLanguage(
+            text = normalizedText,
+            detectedLanguageCode = sourceLanguageCode
+        )
+            ?: throw TranslationException(
+                type = TranslationFailureType.UNSUPPORTED_SOURCE_LANGUAGE,
+                providerLabel = "本地翻译",
+                message = LocalTranslationLanguageResolver.unsupportedSourceLanguageMessage(sourceLanguageCode)
             )
-        }
+        val sourceMlKitTag = sourceOption.mlKitTag
+            ?: throw TranslationException(
+                type = TranslationFailureType.UNSUPPORTED_SOURCE_LANGUAGE,
+                providerLabel = "本地翻译",
+                message = LocalTranslationLanguageResolver.unsupportedSourceLanguageMessage(sourceLanguageCode)
+            )
         if (sourceMlKitTag == targetMlKitTag) {
             return TranslationResult(
                 translatedText = normalizedText,
                 providerLabel = "本地翻译"
+            )
+        }
+        val sourceDownloaded = modelManager.isDownloaded(sourceOption.appTag)
+        val targetDownloaded = modelManager.isDownloaded(targetLanguageTag)
+        if (!sourceDownloaded || !targetDownloaded) {
+            throw TranslationException(
+                type = TranslationFailureType.LOCAL_MODEL_MISSING,
+                providerLabel = "本地翻译",
+                message = LocalTranslationLanguageResolver.missingModelMessage(
+                    sourceLanguage = sourceOption,
+                    targetLanguage = targetOption,
+                    sourceDownloaded = sourceDownloaded,
+                    targetDownloaded = targetDownloaded
+                )
             )
         }
         val translator = Translation.getClient(
@@ -63,23 +81,14 @@ class MlKitLocalTranslationEngine(
         }
     }
 
-    private suspend fun detectSourceLanguage(text: String): String {
+    private suspend fun detectSourceLanguageCode(text: String): String {
         val identifier = LanguageIdentification.getClient()
-        val languageCode = try {
+        return try {
             withContext(Dispatchers.IO) {
                 identifier.identifyLanguage(text).awaitTask()
             }
         } finally {
             identifier.close()
-        }
-        return when (languageCode) {
-            "zh", "zh-CN", "zh-TW" -> TranslateLanguage.CHINESE
-            "ja" -> TranslateLanguage.JAPANESE
-            "ko" -> TranslateLanguage.KOREAN
-            "fr" -> TranslateLanguage.FRENCH
-            "de" -> TranslateLanguage.GERMAN
-            "en" -> TranslateLanguage.ENGLISH
-            else -> TranslateLanguage.CHINESE
         }
     }
 }

@@ -22,7 +22,8 @@ object TranslationLanguageCatalog {
         TranslationLanguageOption("ja", "日语", "ja", "jp", "ja"),
         TranslationLanguageOption("ko", "韩语", "ko", "kor", "ko"),
         TranslationLanguageOption("fr", "法语", "fr", "fra", "fr"),
-        TranslationLanguageOption("de", "德语", "de", "de", "de")
+        TranslationLanguageOption("de", "德语", "de", "de", "de"),
+        TranslationLanguageOption("es", "西班牙语", "es", "spa", "es")
     )
 
     fun findByAppTag(tag: String): TranslationLanguageOption {

@@ -81,6 +81,7 @@ class LocalTranslationModelManager(
             "ko" -> TranslateLanguage.KOREAN
             "fr" -> TranslateLanguage.FRENCH
             "de" -> TranslateLanguage.GERMAN
+            "es" -> TranslateLanguage.SPANISH
             else -> null
         }
     }

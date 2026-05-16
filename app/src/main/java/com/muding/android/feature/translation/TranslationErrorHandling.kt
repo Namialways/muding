@@ -8,6 +8,7 @@ import java.net.UnknownHostException
 enum class TranslationFailureType {
     EMPTY_TEXT,
     UNSUPPORTED_TARGET_LANGUAGE,
+    UNSUPPORTED_SOURCE_LANGUAGE,
     LOCAL_MODEL_MISSING,
     CLOUD_PROVIDER_NOT_SELECTED,
     MISSING_CREDENTIALS,
@@ -33,7 +34,14 @@ object TranslationErrorMessages {
         return when (error.type) {
             TranslationFailureType.EMPTY_TEXT -> "没有可翻译的文本"
             TranslationFailureType.UNSUPPORTED_TARGET_LANGUAGE -> "当前目标语言暂不支持翻译"
-            TranslationFailureType.LOCAL_MODEL_MISSING -> "请先在翻译设置中下载对应语言模型"
+            TranslationFailureType.UNSUPPORTED_SOURCE_LANGUAGE -> {
+                error.message ?: "当前识别语言暂不支持本地翻译"
+            }
+
+            TranslationFailureType.LOCAL_MODEL_MISSING -> {
+                error.message ?: "请先在翻译设置中下载对应语言模型"
+            }
+
             TranslationFailureType.CLOUD_PROVIDER_NOT_SELECTED -> "请先在翻译设置中选择云翻译服务商"
             TranslationFailureType.MISSING_CREDENTIALS -> {
                 "请先在翻译设置中配置${error.providerLabel ?: "云翻译"}密钥"

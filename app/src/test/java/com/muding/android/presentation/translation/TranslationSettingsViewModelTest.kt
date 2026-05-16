@@ -122,7 +122,7 @@ class TranslationSettingsViewModelTest {
         }
 
         assertEquals("翻译成", uiState.localTargetLanguageFieldLabel)
-        assertEquals("选择希望翻译结果输出成哪种语言；本地翻译会下载这个语言对应的模型。", uiState.localTargetLanguageHelpText)
+        assertEquals("本地翻译需要源语言和目标语言模型。若提示缺少某种语言，可在这里选择该语言下载，再切回常用目标语言。", uiState.localTargetLanguageHelpText)
         assertEquals("处理中...", uiState.localModelBusyLabel)
     }
 

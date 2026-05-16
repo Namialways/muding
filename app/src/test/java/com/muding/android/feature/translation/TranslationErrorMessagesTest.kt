@@ -32,6 +32,32 @@ class TranslationErrorMessagesTest {
     }
 
     @Test
+    fun `resolve local model missing message can include exact missing language`() {
+        val message = TranslationErrorMessages.resolve(
+            TranslationException(
+                type = TranslationFailureType.LOCAL_MODEL_MISSING,
+                providerLabel = "本地翻译",
+                message = "请先在翻译设置中下载西班牙语模型"
+            )
+        )
+
+        assertEquals("请先在翻译设置中下载西班牙语模型", message)
+    }
+
+    @Test
+    fun `resolve unsupported source language message`() {
+        val message = TranslationErrorMessages.resolve(
+            TranslationException(
+                type = TranslationFailureType.UNSUPPORTED_SOURCE_LANGUAGE,
+                providerLabel = "本地翻译",
+                message = "当前识别语言暂不支持本地翻译"
+            )
+        )
+
+        assertEquals("当前识别语言暂不支持本地翻译", message)
+    }
+
+    @Test
     fun `resolve timeout message`() {
         val message = TranslationErrorMessages.resolve(
             SocketTimeoutException("timeout")
