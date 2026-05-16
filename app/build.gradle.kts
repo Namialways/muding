@@ -13,6 +13,8 @@ val hasReleaseSigning = listOf(
     releaseKeyAlias,
     releaseKeyPassword
 ).all { !it.isNullOrBlank() }
+val ciVersionName = providers.environmentVariable("MUDING_VERSION_NAME").orNull
+val ciVersionCode = providers.environmentVariable("MUDING_VERSION_CODE").orNull?.toIntOrNull()
 
 android {
     namespace = "com.muding.android"
@@ -22,8 +24,8 @@ android {
         applicationId = "com.muding.android"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.1.4"
+        versionCode = ciVersionCode ?: 6
+        versionName = ciVersionName ?: "1.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

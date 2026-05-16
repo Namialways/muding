@@ -2,6 +2,11 @@ name: Android Package
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example 1.1.5 or v1.1.5"
+        required: true
+        type: string
   push:
     tags:
       - "v*"
@@ -31,6 +36,61 @@ jobs:
 
       - name: Make Gradle executable
         run: chmod +x ./gradlew
+
+      - name: Resolve release version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version || '' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+            version_name="${release_tag#v}"
+            create_tag="false"
+          else
+            version_name="${INPUT_VERSION#v}"
+            if [[ -z "$version_name" ]]; then
+              echo "A release version is required when running this workflow manually." >&2
+              exit 1
+            fi
+            release_tag="v${version_name}"
+            create_tag="true"
+          fi
+
+          if [[ ! "$version_name" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+            echo "Release version must use MAJOR.MINOR.PATCH, for example 1.1.5." >&2
+            exit 1
+          fi
+
+          IFS='.' read -r major minor patch <<< "$version_name"
+          version_code=$((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))
+
+          if [[ "$create_tag" == "true" ]] && \
+             git ls-remote --exit-code --tags origin "refs/tags/${release_tag}" >/dev/null 2>&1; then
+            remote_tag_sha="$(git ls-remote --tags origin "refs/tags/${release_tag}^{}" | awk '{print $1}')"
+            if [[ -z "$remote_tag_sha" ]]; then
+              remote_tag_sha="$(git ls-remote --tags origin "refs/tags/${release_tag}" | awk '{print $1}')"
+            fi
+            current_sha="$(git rev-parse HEAD)"
+            if [[ "$remote_tag_sha" == "$current_sha" ]]; then
+              create_tag="false"
+            else
+              echo "Tag ${release_tag} already exists on GitHub and points to another commit." >&2
+              exit 1
+            fi
+          fi
+
+          {
+            echo "MUDING_VERSION_NAME=$version_name"
+            echo "MUDING_VERSION_CODE=$version_code"
+            echo "MUDING_RELEASE_TAG=$release_tag"
+            echo "MUDING_CREATE_TAG=$create_tag"
+          } >> "$GITHUB_ENV"
+
+          echo "Release tag: ${release_tag}"
+          echo "Version name: ${version_name}"
+          echo "Version code: ${version_code}"
 
       - name: Prepare release signing
         shell: bash
@@ -63,6 +123,15 @@ jobs:
       - name: Build release APKs
         run: ./gradlew assembleRelease
 
+      - name: Create release tag
+        if: env.MUDING_CREATE_TAG == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$MUDING_RELEASE_TAG" -m "Release $MUDING_RELEASE_TAG"
+          git push origin "refs/tags/$MUDING_RELEASE_TAG"
+
       - name: Collect release APKs
         shell: bash
         run: |
@@ -85,27 +154,26 @@ jobs:
           if-no-files-found: error
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag_notes=""
-          if [ "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}" 2>/dev/null)" = "tag" ]; then
-            tag_notes="$(git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(contents)')"
+          if [ "$(git cat-file -t "refs/tags/${MUDING_RELEASE_TAG}" 2>/dev/null)" = "tag" ]; then
+            tag_notes="$(git for-each-ref "refs/tags/${MUDING_RELEASE_TAG}" --format='%(contents)')"
           fi
 
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" dist/*.apk --clobber
+          if gh release view "${MUDING_RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${MUDING_RELEASE_TAG}" dist/*.apk --clobber
           elif [ -n "${tag_notes//[[:space:]]/}" ]; then
-            gh release create "${GITHUB_REF_NAME}" dist/*.apk \
-              --title "${GITHUB_REF_NAME}" \
+            gh release create "${MUDING_RELEASE_TAG}" dist/*.apk \
+              --title "${MUDING_RELEASE_TAG}" \
               --notes "$tag_notes" \
               --generate-notes \
               --verify-tag
           else
-            gh release create "${GITHUB_REF_NAME}" dist/*.apk \
-              --title "${GITHUB_REF_NAME}" \
+            gh release create "${MUDING_RELEASE_TAG}" dist/*.apk \
+              --title "${MUDING_RELEASE_TAG}" \
               --generate-notes \
               --verify-tag
           fi

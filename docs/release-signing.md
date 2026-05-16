@@ -36,14 +36,24 @@ Add these in **GitHub repository > Settings > Secrets and variables > Actions > 
 
 ## 4. Create A Release
 
-Push a version tag:
+Recommended: open the **Android Package** workflow in GitHub Actions, click **Run workflow**, and enter the next version such as `1.1.5`. The workflow will:
+
+- build with `versionName = 1.1.5`
+- derive `versionCode` from the version, for example `1.1.5` becomes `1001005`
+- create the `v1.1.5` tag if it does not already exist
+- create or update the GitHub Release
+- upload the signed ABI APKs
+
+You can still use the tag-based release flow if you prefer to create tags locally:
 
 ```bash
 git tag -a v1.0.1 -m "v1.0.1"
 git push github v1.0.1
 ```
 
-The `Android Package` workflow requires signing secrets, builds only signed release APKs, and uploads the GitHub Release assets as:
+When a `v*` tag is pushed, the same `Android Package` workflow derives `versionName` from the tag and builds the release from that tagged commit.
+
+The workflow requires signing secrets, builds only signed release APKs, and uploads the GitHub Release assets as:
 
 - `muding-arm64-v8a.apk`: recommended for most modern Android phones
 - `muding-armeabi-v7a.apk`: compatibility build for older 32-bit Android devices
